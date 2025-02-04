@@ -1,6 +1,6 @@
 {
   "name": "nestjs-temporal-core",
-  "version": "1.0.1-beta.0",
+  "version": "1.0.1-beta.1",
   "description": "NestJS integration for Temporal.io with worker and client support",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
