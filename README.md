@@ -11,6 +11,10 @@ A NestJS integration for [Temporal.io](https://temporal.io/) that provides seaml
 - 🛡️ Type-safe workflow execution
 - 📡 Simplified client operations
 
+## Example Repository
+
+Check out our [example repository](https://github.com/harsh-simform/nestjs-temporal-core-example) to see a complete working implementation.
+
 ## Installation
 
 ```bash
