@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { DiscoveryService } from '@nestjs/core';
 import { NativeConnection, Worker } from '@temporalio/worker';
-import { TEMPORAL_WORKER_MODULE_OPTIONS, ERRORS } from '../constants';
+import { TEMPORAL_WORKER_MODULE_OPTIONS, ERRORS, DEFAULT_NAMESPACE } from '../constants';
 import { TemporalWorkerOptions } from '../interfaces';
 import { TemporalMetadataAccessor } from './temporal-metadata.accessor';
 
@@ -61,19 +61,11 @@ export class WorkerManager implements OnModuleInit, OnModuleDestroy, OnApplicati
      */
     onApplicationBootstrap() {
         // Skip if autoStart is explicitly disabled or if worker was not created
-        if (this.options.autoStart?.enabled === false || !this.worker) {
+        if (this.options.autoStart === false || !this.worker) {
             return;
         }
 
-        const delayMs = this.options.autoStart?.delayMs || 0;
-
-        if (delayMs > 0) {
-            this.logger.log(`Worker will start in ${delayMs}ms`);
-        }
-
-        this.timerId = setTimeout(() => {
-            this.startWorker();
-        }, delayMs);
+        this.startWorker();
     }
 
     /**
@@ -156,7 +148,18 @@ export class WorkerManager implements OnModuleInit, OnModuleDestroy, OnApplicati
         const activities = await this.discoverActivities();
 
         // Convert ConnectionOptions to NativeConnectionOptions
-        const connectionOptions = this.prepareConnectionOptions(this.options.connection);
+        const connectionOptions: any = {
+            address: this.options.connection?.address,
+            tls: this.options.connection?.tls,
+        };
+
+        // Add API key to metadata if provided
+        if (this.options.connection?.apiKey) {
+            connectionOptions.metadata = {
+                ...(this.options.connection.metadata || {}),
+                authorization: `Bearer ${this.options.connection.apiKey}`,
+            };
+        }
 
         // Connect to Temporal server
         this.logger.debug(`Connecting to Temporal server at ${connectionOptions.address}`);
@@ -167,108 +170,48 @@ export class WorkerManager implements OnModuleInit, OnModuleDestroy, OnApplicati
             taskQueue: this.options.taskQueue,
             activities,
             workflowsPath: this.options.workflowsPath,
-            // Apply default worker configuration options
-            maxConcurrentActivityTaskExecutions:
-                this.options.maxConcurrentActivityTaskExecutions ?? 100,
-            maxConcurrentLocalActivityExecutions:
-                this.options.maxConcurrentLocalActivityExecutions ?? 100,
-            maxConcurrentWorkflowTaskExecutions:
-                this.options.maxConcurrentWorkflowTaskExecutions ?? 40,
-            reuseV8Context: this.options.reuseV8Context ?? true,
-            // Apply additional options if provided
-            ...(this.options.maxActivitiesPerSecond && {
-                maxActivitiesPerSecond: this.options.maxActivitiesPerSecond,
-            }),
-            ...(this.options.maxTaskQueueActivitiesPerSecond && {
-                maxTaskQueueActivitiesPerSecond: this.options.maxTaskQueueActivitiesPerSecond,
-            }),
-            ...(this.options.workflowThreadPoolSize && {
-                workflowThreadPoolSize: this.options.workflowThreadPoolSize,
-            }),
-            ...(this.options.useVersioning && { useVersioning: this.options.useVersioning }),
-            ...(this.options.buildId && { buildId: this.options.buildId }),
-            ...(this.options.debugMode && { debugMode: this.options.debugMode }),
-            ...(this.options.dataConverter && { dataConverter: this.options.dataConverter }),
+            // Apply sensible defaults
+            maxConcurrentActivityTaskExecutions: 100,
+            maxConcurrentWorkflowTaskExecutions: 40,
+            // Enable V8 context reuse for better performance
+            reuseV8Context: true,
         };
 
         // Create the worker
         this.worker = await Worker.create({
             connection: this.connection,
-            namespace: this.options.namespace || 'default',
+            namespace: this.options.namespace || DEFAULT_NAMESPACE,
             ...workerOptions,
         });
 
         this.logger.log(
-            `Worker created for queue: ${this.options.taskQueue} in namespace: ${this.options.namespace || 'default'}`,
+            `Worker created for queue: ${this.options.taskQueue} in namespace: ${this.options.namespace || DEFAULT_NAMESPACE}`,
         );
     }
 
     /**
-     * Transform ConnectionOptions into NativeConnectionOptions
-     * This handles the differences between our interface and Temporal's expected format
-     * @param options Our connection options
-     * @returns Temporal-compatible NativeConnectionOptions
-     */
-    private prepareConnectionOptions(options: any): any {
-        const nativeOptions: any = {
-            address: options.address,
-        };
-
-        // Handle TLS options
-        if (options.tls) {
-            nativeOptions.tls = options.tls;
-        }
-
-        // Handle metadata and API key
-        if (options.metadata || options.apiKey) {
-            nativeOptions.metadata = { ...(options.metadata || {}) };
-
-            // Add API key to metadata if provided
-            if (options.apiKey) {
-                nativeOptions.metadata.authorization = `Bearer ${options.apiKey}`;
-            }
-        }
-
-        // Handle proxy configuration - fix the incompatible format
-        if (options.proxy) {
-            nativeOptions.proxy = {
-                type: 'http-connect', // Add required 'type' property
-                targetHost: options.proxy.targetHost,
-                ...(options.proxy.basicAuth && { basicAuth: options.proxy.basicAuth }),
-            };
-        }
-
-        // Handle connection timeout
-        if (options.connectionTimeout) {
-            nativeOptions.connectionTimeout = options.connectionTimeout;
-        }
-
-        return nativeOptions;
-    }
-
-    /**
-     * Discover and register activity implementations from providers
+     * Discover and register activity implementations
      */
     private async discoverActivities(): Promise<Record<string, (...args: unknown[]) => unknown>> {
         const activities: Record<string, (...args: unknown[]) => unknown> = {};
         const providers = this.discoveryService.getProviders();
 
-        // If specific activity classes are provided, filter providers by those classes
+        // Filter providers to find activities
         const activityProviders = providers.filter((wrapper) => {
             const { instance, metatype } = wrapper;
             const targetClass = instance?.constructor || metatype;
 
-            // If no activity classes are specified, include all classes marked with @Activity()
-            if (!this.options.activityClasses?.length) {
-                return targetClass && this.metadataAccessor.isActivity(targetClass);
+            // If specific activity classes are specified, only include those
+            if (this.options.activityClasses?.length) {
+                return (
+                    targetClass &&
+                    this.options.activityClasses.includes(targetClass) &&
+                    this.metadataAccessor.isActivity(targetClass)
+                );
             }
 
-            // Otherwise, only include specified activity classes
-            return (
-                targetClass &&
-                this.options.activityClasses.includes(targetClass) &&
-                this.metadataAccessor.isActivity(targetClass)
-            );
+            // Otherwise, include all classes marked with @Activity()
+            return targetClass && this.metadataAccessor.isActivity(targetClass);
         });
 
         this.logger.log(`Found ${activityProviders.length} activity providers`);
@@ -282,7 +225,7 @@ export class WorkerManager implements OnModuleInit, OnModuleDestroy, OnApplicati
             const className = instance.constructor.name;
             this.logger.debug(`Processing activity class: ${className}`);
 
-            // Extract all activity methods using our metadata accessor
+            // Extract all activity methods using metadata accessor
             const activityMethods = this.metadataAccessor.extractActivityMethods(instance);
 
             // Register each activity method
@@ -303,5 +246,12 @@ export class WorkerManager implements OnModuleInit, OnModuleDestroy, OnApplicati
      */
     getWorker(): Worker | null {
         return this.worker;
+    }
+
+    /**
+     * Check if worker is running
+     */
+    isWorkerRunning(): boolean {
+        return this.isRunning;
     }
 }

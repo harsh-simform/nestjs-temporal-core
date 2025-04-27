@@ -17,7 +17,7 @@ import { ActivityOptions } from '../interfaces/activity.interface';
  *   // Activity methods go here
  * }
  *
- * @Activity({ name: 'PaymentActivities', description: 'Payment processing activities' })
+ * @Activity({ name: 'PaymentActivities' })
  * export class PaymentService {
  *   // Activity methods go here
  * }

@@ -52,7 +52,7 @@ export class TemporalClientService implements OnModuleInit {
     }
 
     /**
-     * Start a workflow execution
+     * Start a workflow execution with simplified options
      *
      * @param workflowType Type of workflow to start
      * @param args Arguments to pass to the workflow
@@ -75,36 +75,16 @@ export class TemporalClientService implements OnModuleInit {
             taskQueue,
             workflowId = `${workflowType}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
             signal,
-            // Extract properties that might not be directly compatible
-            workflowIdReusePolicy,
-            workflowIdConflictPolicy,
-            searchAttributes,
-            typedSearchAttributes,
             ...restOptions
         } = options;
 
         try {
-            // Convert our options format to the SDK's format
+            // Create workflow options in Temporal SDK format
             const startOptions: any = {
                 taskQueue,
                 workflowId,
                 ...restOptions,
             };
-
-            // Add workflowIdReusePolicy if provided
-            if (workflowIdReusePolicy) {
-                startOptions.workflowIdReusePolicy = workflowIdReusePolicy;
-            }
-
-            // Add workflowIdConflictPolicy if provided
-            if (workflowIdConflictPolicy) {
-                startOptions.workflowIdConflictPolicy = workflowIdConflictPolicy;
-            }
-
-            // Add searchAttributes if provided (handle both types)
-            if (searchAttributes || typedSearchAttributes) {
-                startOptions.searchAttributes = searchAttributes || typedSearchAttributes;
-            }
 
             const handle = await this.workflowClient!.start(workflowType, {
                 args,
@@ -125,25 +105,6 @@ export class TemporalClientService implements OnModuleInit {
         } catch (error) {
             this.logger.error(`Failed to start workflow '${workflowType}': ${error.message}`);
             throw new Error(`Failed to start workflow '${workflowType}': ${error.message}`);
-        }
-    }
-
-    /**
-     * Count workflows matching a query
-     *
-     * @param query Query string in SQL-like syntax to filter workflows
-     * @returns Count of matching workflows
-     */
-    async countWorkflows(query: string): Promise<number> {
-        this.ensureClientInitialized();
-
-        try {
-            // The correct way to call count API according to Temporal SDK
-            const result = await this.workflowClient!.count(query);
-            return result.count;
-        } catch (error) {
-            this.logger.error(`Failed to count workflows with query '${query}': ${error.message}`);
-            throw new Error(`Failed to count workflows with query '${query}': ${error.message}`);
         }
     }
 
@@ -190,38 +151,6 @@ export class TemporalClientService implements OnModuleInit {
             );
             throw new Error(
                 `Failed to query '${queryName}' on workflow ${workflowId}: ${error.message}`,
-            );
-        }
-    }
-
-    /**
-     * Update a running workflow
-     *
-     * @param workflowId ID of the workflow to update
-     * @param updateName Name of the update to execute
-     * @param args Arguments to pass to the update
-     * @returns Update result
-     */
-    async updateWorkflow<T>(workflowId: string, updateName: string, args: any[] = []): Promise<T> {
-        this.ensureClientInitialized();
-
-        try {
-            const handle = await this.workflowClient!.getHandle(workflowId);
-
-            // Check if the update method exists on the handle
-            if (typeof (handle as any).update !== 'function') {
-                throw new Error(
-                    ERRORS.INCOMPATIBLE_SDK_VERSION + ': Updates require Temporal SDK v1.8.0+',
-                );
-            }
-
-            return await (handle as any).update(updateName, ...args);
-        } catch (error) {
-            this.logger.error(
-                `Failed to update '${updateName}' on workflow ${workflowId}: ${error.message}`,
-            );
-            throw new Error(
-                `Failed to update '${updateName}' on workflow ${workflowId}: ${error.message}`,
             );
         }
     }

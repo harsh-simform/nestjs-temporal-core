@@ -10,8 +10,7 @@ import { ActivityMethodOptions } from '../interfaces/activity.interface';
  * Decorator that marks a method as a Temporal Activity Method
  *
  * Activity methods are the implementation of individual activities that can be
- * executed by a workflow. They can be asynchronous and can communicate with
- * external systems.
+ * executed by a workflow.
  *
  * @param options Optional configuration or activity name string
  *
@@ -33,21 +32,11 @@ import { ActivityMethodOptions } from '../interfaces/activity.interface';
  *
  *   @ActivityMethod({
  *     name: 'sendInvoice',
- *     timeout: {
- *       startToClose: '30s',
- *       heartbeat: '5s'
- *     },
- *     retry: {
- *       maximumAttempts: 3,
- *       initialInterval: '1s'
- *     }
+ *     timeout: '30s',
+ *     maxRetries: 3
  *   })
  *   async sendInvoice(orderId: string): Promise<void> {
- *     // Implementation with heartbeats
- *     const context = Context.current();
- *     context.heartbeat('Starting to send invoice');
- *     // Processing...
- *     context.heartbeat('Invoice sent');
+ *     // Implementation
  *   }
  * }
  * ```

@@ -1,57 +1,5 @@
-/**
- * Interfaces for the Temporal Client module
- */
 import { ModuleMetadata, Type } from '@nestjs/common';
-import { RetryPolicy, SearchAttributes } from '@temporalio/common';
-import { Duration } from '@temporalio/common';
 import { ConnectionOptions } from './base.interface';
-
-/**
- * WorkflowId conflict policies for starting workflows
- */
-export const WorkflowIdConflictPolicy = {
-    /**
-     * Do not start a new Workflow. Instead raise an error.
-     */
-    FAIL: 'FAIL',
-
-    /**
-     * Do not start a new Workflow. Instead return a Workflow Handle for the already Running Workflow.
-     */
-    USE_EXISTING: 'USE_EXISTING',
-
-    /**
-     * Start a new Workflow, terminating the current workflow if one is already running.
-     */
-    TERMINATE_EXISTING: 'TERMINATE_EXISTING',
-};
-
-export type WorkflowIdConflictPolicy =
-    (typeof WorkflowIdConflictPolicy)[keyof typeof WorkflowIdConflictPolicy];
-
-/**
- * WorkflowId reuse policies for starting workflows
- */
-export const WorkflowIdReusePolicy = {
-    /**
-     * The Workflow can be started if the previous Workflow is in a Closed state.
-     * @default
-     */
-    ALLOW_DUPLICATE: 'ALLOW_DUPLICATE',
-
-    /**
-     * The Workflow can be started if the previous Workflow is in a Closed state that is not Completed.
-     */
-    ALLOW_DUPLICATE_FAILED_ONLY: 'ALLOW_DUPLICATE_FAILED_ONLY',
-
-    /**
-     * The Workflow cannot be started.
-     */
-    REJECT_DUPLICATE: 'REJECT_DUPLICATE',
-};
-
-export type WorkflowIdReusePolicy =
-    (typeof WorkflowIdReusePolicy)[keyof typeof WorkflowIdReusePolicy];
 
 /**
  * Client module configuration options
@@ -74,41 +22,6 @@ export interface TemporalClientOptions {
      * @default true
      */
     allowConnectionFailure?: boolean;
-
-    /**
-     * Auto-reconnect configuration
-     */
-    reconnect?: {
-        /**
-         * Whether to attempt reconnection if connection fails
-         * @default true
-         */
-        enabled?: boolean;
-
-        /**
-         * Maximum number of reconnect attempts
-         * @default 10
-         */
-        maxAttempts?: number;
-
-        /**
-         * Initial delay between reconnect attempts in ms
-         * @default 1000
-         */
-        initialDelayMs?: number;
-
-        /**
-         * Maximum delay between reconnect attempts in ms
-         * @default 10000
-         */
-        maxDelayMs?: number;
-
-        /**
-         * Backoff coefficient for reconnect attempts
-         * @default 1.5
-         */
-        backoffCoefficient?: number;
-    };
 }
 
 /**
@@ -157,6 +70,7 @@ export interface StartWorkflowOptions {
 
     /**
      * Custom workflow ID (optional)
+     * A unique ID will be generated if not provided
      */
     workflowId?: string;
 
@@ -176,64 +90,27 @@ export interface StartWorkflowOptions {
     };
 
     /**
-     * Cron schedule for recurring workflows (optional)
-     */
-    cronSchedule?: string;
-
-    /**
      * Retry policy for failed workflows
      */
-    retry?: RetryPolicy;
+    retry?: {
+        /**
+         * Maximum number of retry attempts
+         */
+        maximumAttempts?: number;
 
-    /**
-     * Delay before starting the workflow (optional)
-     */
-    startDelay?: Duration;
-
-    /**
-     * Maximum workflow execution time
-     */
-    workflowExecutionTimeout?: Duration;
-
-    /**
-     * Maximum workflow task execution time
-     */
-    workflowTaskTimeout?: Duration;
-
-    /**
-     * Maximum workflow run time
-     */
-    workflowRunTimeout?: Duration;
-
-    /**
-     * Policy for workflow ID reuse
-     */
-    workflowIdReusePolicy?: WorkflowIdReusePolicy;
-
-    /**
-     * Policy for workflow ID conflicts
-     */
-    workflowIdConflictPolicy?: WorkflowIdConflictPolicy;
+        /**
+         * Initial interval between retries in ms or formatted string (e.g. '1s')
+         */
+        initialInterval?: string | number;
+    };
 
     /**
      * Search attributes for the workflow
-     * @deprecated Use typedSearchAttributes instead
      */
-    searchAttributes?: SearchAttributes;
+    searchAttributes?: Record<string, unknown>;
 
     /**
-     * Typed search attributes for the workflow
-     * This is a newer feature that may not be available in all SDK versions
+     * Additional workflow options passed directly to Temporal SDK
      */
-    typedSearchAttributes?: Record<string, unknown>;
-
-    /**
-     * Whether to follow workflow runs
-     */
-    followRuns?: boolean;
-
-    /**
-     * Memo data for the workflow
-     */
-    memo?: Record<string, unknown>;
+    [key: string]: any;
 }

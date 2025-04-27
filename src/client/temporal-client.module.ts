@@ -51,9 +51,6 @@ export class TemporalClientModule {
                         authorization: `Bearer ${options.connection.apiKey}`,
                     },
                 }),
-                ...(options.connection.connectionTimeout && {
-                    connectionTimeout: options.connection.connectionTimeout,
-                }),
             });
 
             const namespace = options.namespace || DEFAULT_NAMESPACE;

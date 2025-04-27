@@ -5,16 +5,6 @@ import {
     TEMPORAL_ACTIVITY_METHOD,
     TEMPORAL_ACTIVITY_METHOD_NAME,
     TEMPORAL_ACTIVITY_METHOD_OPTIONS,
-    TEMPORAL_QUERY_METHOD,
-    TEMPORAL_QUERY_NAME,
-    TEMPORAL_SIGNAL_METHOD,
-    TEMPORAL_SIGNAL_NAME,
-    TEMPORAL_UPDATE_METHOD,
-    TEMPORAL_UPDATE_NAME,
-    TEMPORAL_WORKFLOW,
-    TEMPORAL_WORKFLOW_METHOD,
-    TEMPORAL_WORKFLOW_METHOD_NAME,
-    TEMPORAL_WORKFLOW_OPTIONS,
 } from '../constants';
 
 /**
@@ -76,116 +66,6 @@ export class TemporalMetadataAccessor {
             return undefined;
         }
         return Reflect.getMetadata(TEMPORAL_ACTIVITY_METHOD_OPTIONS, target);
-    }
-
-    /**
-     * Check if target is marked as a Temporal Workflow
-     * @param target Class to check
-     */
-    isWorkflow(target: Function): boolean {
-        if (!target) {
-            return false;
-        }
-        return !!Reflect.getMetadata(TEMPORAL_WORKFLOW, target);
-    }
-
-    /**
-     * Get workflow options from a decorated class
-     * @param target Class to check
-     */
-    getWorkflowOptions(target: Function): Record<string, any> | undefined {
-        if (!target) {
-            return undefined;
-        }
-        return Reflect.getMetadata(TEMPORAL_WORKFLOW_OPTIONS, target);
-    }
-
-    /**
-     * Check if target is marked as a Temporal Workflow Method
-     * @param target Method to check
-     */
-    isWorkflowMethod(target: Function): boolean {
-        if (!target) {
-            return false;
-        }
-        return !!Reflect.getMetadata(TEMPORAL_WORKFLOW_METHOD, target);
-    }
-
-    /**
-     * Get the name of the Workflow Method
-     * @param target Method to check
-     */
-    getWorkflowMethodName(target: Function): string | undefined {
-        if (!target) {
-            return undefined;
-        }
-        return Reflect.getMetadata(TEMPORAL_WORKFLOW_METHOD_NAME, target);
-    }
-
-    /**
-     * Check if target is marked as a Temporal Query Method
-     * @param target Method to check
-     */
-    isQueryMethod(target: Function): boolean {
-        if (!target) {
-            return false;
-        }
-        return !!Reflect.getMetadata(TEMPORAL_QUERY_METHOD, target);
-    }
-
-    /**
-     * Get the name of the Query Method
-     * @param target Method to check
-     */
-    getQueryMethodName(target: Function): string | undefined {
-        if (!target) {
-            return undefined;
-        }
-        return Reflect.getMetadata(TEMPORAL_QUERY_NAME, target);
-    }
-
-    /**
-     * Check if target is marked as a Temporal Signal Method
-     * @param target Method to check
-     */
-    isSignalMethod(target: Function): boolean {
-        if (!target) {
-            return false;
-        }
-        return !!Reflect.getMetadata(TEMPORAL_SIGNAL_METHOD, target);
-    }
-
-    /**
-     * Get the name of the Signal Method
-     * @param target Method to check
-     */
-    getSignalMethodName(target: Function): string | undefined {
-        if (!target) {
-            return undefined;
-        }
-        return Reflect.getMetadata(TEMPORAL_SIGNAL_NAME, target);
-    }
-
-    /**
-     * Check if target is marked as a Temporal Update Method
-     * @param target Method to check
-     */
-    isUpdateMethod(target: Function): boolean {
-        if (!target) {
-            return false;
-        }
-        return !!Reflect.getMetadata(TEMPORAL_UPDATE_METHOD, target);
-    }
-
-    /**
-     * Get the name of the Update Method
-     * @param target Method to check
-     */
-    getUpdateMethodName(target: Function): string | undefined {
-        if (!target) {
-            return undefined;
-        }
-        return Reflect.getMetadata(TEMPORAL_UPDATE_NAME, target);
     }
 
     /**

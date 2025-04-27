@@ -30,7 +30,7 @@ export class TemporalWorkerModule {
      *       namespace: 'default',
      *       taskQueue: 'my-task-queue',
      *       workflowsPath: './dist/workflows',
-     *       activityClasses: [EmailActivities, PaymentActivities]
+     *       activityClasses: [EmailActivities]
      *     })
      *   ]
      * })
@@ -118,14 +118,11 @@ export class TemporalWorkerModule {
      */
     private static createAsyncProviders(options: TemporalWorkerAsyncOptions): Provider[] {
         if (options.useFactory) {
-            const factory = options.useFactory;
-            const inject = options.inject || [];
-
             return [
                 {
                     provide: TEMPORAL_WORKER_MODULE_OPTIONS,
-                    useFactory: factory,
-                    inject,
+                    useFactory: options.useFactory,
+                    inject: options.inject || [],
                 },
             ];
         }

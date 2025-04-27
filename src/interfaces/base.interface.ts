@@ -1,46 +1,5 @@
 /**
- * Client certificate pair for TLS
- */
-export interface ClientCertPair {
-    /**
-     * Certificate file content as Buffer
-     */
-    crt: Buffer;
-
-    /**
-     * Key file content as Buffer
-     */
-    key: Buffer;
-
-    /**
-     * Certificate authority (optional)
-     */
-    ca?: Buffer;
-}
-
-/**
- * TLS configuration options
- */
-export interface TlsOptions {
-    /**
-     * Client certificate pair for TLS authentication
-     */
-    clientCertPair: ClientCertPair;
-
-    /**
-     * Server name for SNI (optional)
-     */
-    serverName?: string;
-
-    /**
-     * Whether to verify the server certificate
-     * @default true
-     */
-    verifyServer?: boolean;
-}
-
-/**
- * Basic connection configuration for Temporal server
+ * Base connection configuration for Temporal server
  */
 export interface ConnectionOptions {
     /**
@@ -52,15 +11,26 @@ export interface ConnectionOptions {
 
     /**
      * TLS configuration (optional)
-     * If provided, connection will use TLS
+     * If true, use TLS with default settings
+     * If object, use detailed TLS configuration
      */
-    tls?: TlsOptions | boolean;
+    tls?:
+        | boolean
+        | {
+              /**
+               * Server name for SNI (optional)
+               */
+              serverName?: string;
 
-    /**
-     * Connection timeout in milliseconds
-     * @default 5000
-     */
-    connectionTimeout?: number;
+              /**
+               * Certificate and key files as Buffer (for client auth)
+               */
+              clientCertPair?: {
+                  crt: Buffer;
+                  key: Buffer;
+                  ca?: Buffer;
+              };
+          };
 
     /**
      * API key for Temporal Cloud (if applicable)
@@ -68,26 +38,7 @@ export interface ConnectionOptions {
     apiKey?: string;
 
     /**
-     * Optional HTTP headers to send with each request to the server
+     * Optional HTTP headers to send with each request
      */
     metadata?: Record<string, string>;
-
-    /**
-     * HTTP CONNECT proxy configuration for connecting through firewalls
-     */
-    proxy?: {
-        /**
-         * Target host for the proxy
-         * Format: "host:port"
-         */
-        targetHost: string;
-
-        /**
-         * Basic authentication for the proxy (if required)
-         */
-        basicAuth?: {
-            username: string;
-            password: string;
-        };
-    };
 }
