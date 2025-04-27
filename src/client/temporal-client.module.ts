@@ -214,7 +214,7 @@ export class TemporalClientModule {
         const enhancedClient = client as Client & OnApplicationShutdown;
 
         enhancedClient.onApplicationShutdown = async (signal?: string) => {
-            this.logger.log(`Closing Temporal client connection (signal: ${signal || 'unknown'})`);
+            this.logger.log(`Closing Temporal client connection (signal: ${signal})`);
 
             if (client?.connection) {
                 try {

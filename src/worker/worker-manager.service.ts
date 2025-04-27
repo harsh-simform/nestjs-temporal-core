@@ -249,8 +249,8 @@ export class WorkerManager implements OnModuleInit, OnModuleDestroy, OnApplicati
     /**
      * Discover and register activity implementations from providers
      */
-    private async discoverActivities() {
-        const activities: Record<string, (...args: any[]) => any> = {};
+    private async discoverActivities(): Promise<Record<string, (...args: unknown[]) => unknown>> {
+        const activities: Record<string, (...args: unknown[]) => unknown> = {};
         const providers = this.discoveryService.getProviders();
 
         // If specific activity classes are provided, filter providers by those classes
@@ -287,7 +287,7 @@ export class WorkerManager implements OnModuleInit, OnModuleDestroy, OnApplicati
 
             // Register each activity method
             for (const [activityName, method] of activityMethods.entries()) {
-                activities[activityName] = method as (...args: any[]) => any;
+                activities[activityName] = method as (...args: unknown[]) => unknown;
                 this.logger.debug(`Registered activity method: ${className}.${activityName}`);
             }
         }

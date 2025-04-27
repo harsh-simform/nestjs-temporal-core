@@ -31,14 +31,6 @@ export {
     TemporalWorkerOptions,
     TemporalWorkerAsyncOptions,
     TemporalWorkerOptionsFactory,
-    // Schedule interfaces
-    TemporalScheduleOptions,
-    TemporalScheduleAsyncOptions,
-    TemporalScheduleOptionsFactory,
-    ListSchedulesOptions,
-    ScheduleSpec,
-    ScheduleAction,
-    BackfillOptions,
     // Activity interfaces
     ActivityOptions,
     ActivityMethodOptions,
