@@ -13,16 +13,6 @@ A comprehensive NestJS integration for [Temporal.io](https://temporal.io/) that 
 - **[⚙️ Configuration](./docs/configuration.md)** - Complete configuration reference and examples
 - **[📖 API Reference](./docs/api-reference.md)** - Detailed API documentation for all services and decorators
 - **[🍳 Examples & Recipes](./docs/examples.md)** - Practical examples and common patterns
-- **[🏗️ Best Practices](./docs/best-practices.md)** - Production guidelines and optimization tips
-- **[🔄 Migration Guide](./docs/migration.md)** - Upgrading from previous versions
-- **[🔧 Troubleshooting](./docs/troubleshooting.md)** - Common issues and solutions
-
-### Advanced Topics
-- **[🏢 Enterprise Features](./docs/enterprise.md)** - Advanced features for production deployments
-- **[📊 Monitoring & Health](./docs/monitoring.md)** - Health checks, metrics, and observability
-- **[🔐 Security](./docs/security.md)** - TLS, authentication, and security best practices
-- **[🧪 Testing](./docs/testing.md)** - Testing workflows and activities
-- **[🐳 Deployment](./docs/deployment.md)** - Docker, Kubernetes, and cloud deployment guides
 
 ## Overview
 
