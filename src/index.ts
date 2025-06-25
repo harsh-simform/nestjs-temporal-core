@@ -3,17 +3,11 @@ import 'reflect-metadata';
  * NestJS Temporal Core - Complete Temporal.io Integration for NestJS
  *
  * Streamlined and simplified Temporal integration with:
- * - Auto-discovery of workflow controllers and activities
+ * - Auto-discovery of activities and scheduled workflows
  * - Declarative scheduling with @Cron and @Interval decorators
  * - Comprehensive client and worker management
  * - Production-ready health monitoring and error handling
  */
-
-// ==========================================
-// Main Module and Service (to be created)
-// ==========================================
-// export { TemporalModule } from './temporal.module';
-// export { TemporalService } from './temporal.service';
 
 // ==========================================
 // Client Components
@@ -55,8 +49,6 @@ export {
     // Metadata keys
     TEMPORAL_ACTIVITY,
     TEMPORAL_ACTIVITY_METHOD,
-    TEMPORAL_WORKFLOW_CONTROLLER,
-    TEMPORAL_WORKFLOW_METHOD,
     TEMPORAL_SIGNAL_METHOD,
     TEMPORAL_QUERY_METHOD,
     TEMPORAL_SCHEDULED_WORKFLOW,

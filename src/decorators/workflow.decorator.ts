@@ -1,108 +1,6 @@
 import { SetMetadata } from '@nestjs/common';
-import {
-    TEMPORAL_QUERY_METHOD,
-    TEMPORAL_SIGNAL_METHOD,
-    TEMPORAL_WORKFLOW_CONTROLLER,
-    TEMPORAL_WORKFLOW_METHOD,
-} from '../constants';
-import {
-    QueryOptions,
-    SignalOptions,
-    WorkflowControllerOptions,
-    WorkflowMethodOptions,
-} from '../interfaces';
-
-/**
- * Marks a class as a Temporal Workflow Controller
- * Similar to @Controller() but for workflows
- *
- * @param options Optional controller configuration
- *
- * @example
- * ```typescript
- * @WorkflowController({ taskQueue: 'orders' })
- * export class OrderWorkflowController {
- *   @WorkflowMethod()
- *   async processOrder(orderId: string) {
- *     // workflow logic
- *   }
- * }
- * ```
- */
-export const WorkflowController = (options: WorkflowControllerOptions = {}): ClassDecorator => {
-    return (target: any) => {
-        Reflect.defineMetadata(TEMPORAL_WORKFLOW_CONTROLLER, options, target);
-        SetMetadata(TEMPORAL_WORKFLOW_CONTROLLER, options)(target);
-        return target;
-    };
-};
-
-/**
- * Decorator that marks a method as a Temporal Workflow Method
- *
- * Workflow methods are the entry points to workflow execution.
- *
- * @param options Optional configuration or workflow name string
- *
- * @example
- * ```typescript
- * @WorkflowController({ taskQueue: 'orders' })
- * export class OrderWorkflowController {
- *   @WorkflowMethod()
- *   async processOrder(orderId: string): Promise<string> {
- *     // Workflow implementation
- *     return 'completed';
- *   }
- *
- *   @WorkflowMethod('cancelOrder')
- *   async cancelOrder(orderId: string): Promise<string> {
- *     // Workflow implementation
- *     return 'cancelled';
- *   }
- *
- *   @WorkflowMethod({
- *     name: 'processOrderWithRetry',
- *     timeout: '30m',
- *     retry: {
- *       maximumAttempts: 3,
- *       initialInterval: '10s'
- *     }
- *   })
- *   async processOrderWithRetry(orderId: string): Promise<string> {
- *     // Workflow implementation with retry policy
- *     return 'completed';
- *   }
- * }
- * ```
- */
-export const WorkflowMethod = (options?: string | WorkflowMethodOptions): MethodDecorator => {
-    return (_target: unknown, propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
-        // Handle both string (name) and options object
-        let methodName: string;
-        let methodOptions: WorkflowMethodOptions = {};
-
-        if (typeof options === 'string') {
-            methodName = options;
-            methodOptions = { name: options };
-        } else if (options && typeof options === 'object') {
-            methodName = options.name || propertyKey.toString();
-            methodOptions = options;
-        } else {
-            methodName = propertyKey.toString();
-        }
-
-        // Store metadata
-        const metadata = {
-            name: methodName,
-            ...methodOptions,
-        };
-
-        Reflect.defineMetadata(TEMPORAL_WORKFLOW_METHOD, metadata, descriptor.value);
-        SetMetadata(TEMPORAL_WORKFLOW_METHOD, metadata)(descriptor.value);
-
-        return descriptor;
-    };
-};
+import { TEMPORAL_QUERY_METHOD, TEMPORAL_SIGNAL_METHOD } from '../constants';
+import { QueryOptions, SignalOptions } from '../interfaces';
 
 /**
  * Marks a method as a Temporal Signal handler
@@ -112,17 +10,14 @@ export const WorkflowMethod = (options?: string | WorkflowMethodOptions): Method
  *
  * @example
  * ```typescript
- * @WorkflowController({ taskQueue: 'orders' })
- * export class OrderController {
- *   @Signal('addItem')
- *   async addItem(item: any) {
- *     // handle signal
- *   }
+ * @Signal('addItem')
+ * async addItem(item: any) {
+ *   // handle signal
+ * }
  *
- *   @Signal()  // Uses method name as signal name
- *   async cancel() {
- *     // handle cancel signal
- *   }
+ * @Signal()  // Uses method name as signal name
+ * async cancel() {
+ *   // handle cancel signal
  * }
  * ```
  */
@@ -161,17 +56,14 @@ export const Signal = (nameOrOptions?: string | SignalOptions): MethodDecorator 
  *
  * @example
  * ```typescript
- * @WorkflowController({ taskQueue: 'orders' })
- * export class OrderController {
- *   @Query('getStatus')
- *   getOrderStatus(): string {
- *     return this.status;
- *   }
+ * @Query('getStatus')
+ * getOrderStatus(): string {
+ *   return this.status;
+ * }
  *
- *   @Query()  // Uses method name as query name
- *   getProgress(): number {
- *     return this.progress;
- *   }
+ * @Query()  // Uses method name as query name
+ * getProgress(): number {
+ *   return this.progress;
  * }
  * ```
  */

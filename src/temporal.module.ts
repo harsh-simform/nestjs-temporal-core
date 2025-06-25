@@ -13,7 +13,7 @@ import { TemporalDiscoveryService, TemporalScheduleManagerService } from './disc
  * Provides comprehensive Temporal functionality including:
  * - Client operations (workflows, signals, queries)
  * - Worker management (activities, workflow execution)
- * - Auto-discovery (workflow controllers, scheduled workflows)
+ * - Auto-discovery (activities, scheduled workflows)
  * - Schedule management (cron, interval-based scheduling)
  *
  * @example
@@ -33,7 +33,7 @@ import { TemporalDiscoveryService, TemporalScheduleManagerService } from './disc
  *       }
  *     })
  *   ],
- *   controllers: [OrderWorkflowController], // Auto-discovered
+ *   providers: [EmailActivities, PaymentActivities], // Activities auto-discovered
  * })
  * export class AppModule {}
  * ```

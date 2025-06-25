@@ -79,22 +79,8 @@ export interface TemporalAsyncOptions extends Pick<ModuleMetadata, 'imports'> {
 }
 
 // ==========================================
-// Workflow Related
+// Signal and Query Related
 // ==========================================
-
-export interface WorkflowControllerOptions {
-    taskQueue?: string;
-}
-
-export interface WorkflowMethodOptions {
-    name?: string;
-    timeout?: string | number;
-    retry?: {
-        maximumAttempts?: number;
-        initialInterval?: string | number;
-    };
-    searchAttributes?: Record<string, unknown>;
-}
 
 export interface SignalOptions {
     name?: string;
@@ -174,27 +160,9 @@ export interface IntervalOptions extends Omit<ScheduledOptions, 'cron' | 'interv
 // Discovery & Method Handlers
 // ==========================================
 
-export type WorkflowMethodHandler = (...args: any[]) => any;
 export type SignalMethodHandler = (...args: any[]) => void | Promise<void>;
 export type QueryMethodHandler = (...args: any[]) => any;
 export type ActivityMethodHandler = (...args: any[]) => any | Promise<any>;
-
-export interface WorkflowControllerInfo {
-    instance: any;
-    metatype: any;
-    taskQueue?: string;
-    methods: WorkflowMethodInfo[];
-    signals: SignalMethodInfo[];
-    queries: QueryMethodInfo[];
-    scheduledMethods: ScheduledMethodInfo[];
-}
-
-export interface WorkflowMethodInfo {
-    methodName: string;
-    workflowName: string;
-    options: any;
-    handler: WorkflowMethodHandler;
-}
 
 export interface SignalMethodInfo {
     methodName: string;
@@ -215,8 +183,8 @@ export interface ScheduledMethodInfo {
     workflowName: string;
     scheduleOptions: any;
     workflowOptions: any;
-    handler: WorkflowMethodHandler;
-    controllerInfo: WorkflowControllerInfo;
+    handler: any;
+    controllerInfo: any;
 }
 
 export interface ActivityMethodMetadata {

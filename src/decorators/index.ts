@@ -3,7 +3,7 @@
  *
  * Consolidated export of all Temporal decorators organized by domain:
  * - Activity decorators: @Activity, @ActivityMethod
- * - Workflow decorators: @WorkflowController, @WorkflowMethod, @Signal, @Query
+ * - Signal and Query decorators: @Signal, @Query
  * - Scheduling decorators: @Scheduled, @Cron, @Interval
  * - Parameter decorators: @WorkflowParam, @WorkflowContext, @WorkflowId, @RunId, @TaskQueue
  */
@@ -14,9 +14,9 @@
 export { Activity, ActivityMethod } from './activity.decorator';
 
 // ==========================================
-// Workflow Decorators
+// Signal and Query Decorators
 // ==========================================
-export { WorkflowController, WorkflowMethod, Signal, Query } from './workflow.decorator';
+export { Signal, Query } from './workflow.decorator';
 
 // ==========================================
 // Scheduling Decorators

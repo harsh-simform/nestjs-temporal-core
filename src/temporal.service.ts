@@ -7,7 +7,6 @@ import {
     StartWorkflowOptions,
     SystemStatus,
     WorkerStatus,
-    WorkflowMethodInfo,
 } from './interfaces';
 import { TemporalClientService, TemporalScheduleService } from './client';
 import { TemporalDiscoveryService, TemporalScheduleManagerService } from './discovery';
@@ -20,7 +19,7 @@ import { TemporalWorkerManagerService } from './worker';
  * - Client operations (start workflows, send signals, execute queries)
  * - Schedule management (create, pause, resume, trigger schedules)
  * - Worker management (status, health checks, restart)
- * - Discovery services (workflow controllers, activity methods)
+ * - Discovery services (scheduled workflows, activities)
  *
  * @example
  * ```typescript
@@ -29,7 +28,7 @@ import { TemporalWorkerManagerService } from './worker';
  *   constructor(private readonly temporal: TemporalService) {}
  *
  *   async processOrder(orderId: string) {
- *     // Start workflow with auto-discovery
+ *     // Start workflow directly with client
  *     const { workflowId, result } = await this.temporal.startWorkflow(
  *       'processOrder',
  *       [orderId],
@@ -101,11 +100,11 @@ export class TemporalService implements OnModuleInit {
     }
 
     // ==========================================
-    // Enhanced Workflow Operations
+    // Workflow Operations (Direct Client Access)
     // ==========================================
 
     /**
-     * Start workflow with enhanced discovery and validation
+     * Start workflow with basic options
      *
      * @param workflowType Name of the workflow type to start
      * @param args Arguments to pass to the workflow
@@ -114,7 +113,7 @@ export class TemporalService implements OnModuleInit {
      *
      * @example
      * ```typescript
-     * // Start discovered workflow with validation
+     * // Start workflow directly
      * const { workflowId, result } = await temporalService.startWorkflow(
      *   'processOrder',
      *   [orderId, customerId],
@@ -129,14 +128,14 @@ export class TemporalService implements OnModuleInit {
     async startWorkflow<T, A extends any[]>(
         workflowType: string,
         args: A,
-        options: Partial<StartWorkflowOptions> = {},
+        options: StartWorkflowOptions,
     ): Promise<{
         result: Promise<T>;
         workflowId: string;
         firstExecutionRunId: string;
         handle: any;
     }> {
-        const enhancedOptions = await this.enhanceWorkflowOptions(workflowType, options);
+        const enhancedOptions = this.enhanceWorkflowOptions(options);
 
         this.logger.debug(
             `Starting workflow: ${workflowType} with options: ${JSON.stringify(enhancedOptions)}`,
@@ -233,20 +232,6 @@ export class TemporalService implements OnModuleInit {
     // ==========================================
 
     /**
-     * Get all available workflow types from discovered controllers
-     */
-    getAvailableWorkflows(): string[] {
-        return this.discoveryService.getWorkflowNames();
-    }
-
-    /**
-     * Get detailed information about a specific workflow
-     */
-    getWorkflowInfo(workflowName: string): WorkflowMethodInfo | undefined {
-        return this.discoveryService.getWorkflowMethod(workflowName);
-    }
-
-    /**
      * Get all managed schedule IDs
      */
     getManagedSchedules(): string[] {
@@ -258,13 +243,6 @@ export class TemporalService implements OnModuleInit {
      */
     getScheduleInfo(scheduleId: string): ScheduledMethodInfo | undefined {
         return this.discoveryService.getScheduledWorkflow(scheduleId);
-    }
-
-    /**
-     * Check if a workflow type is available
-     */
-    hasWorkflow(workflowName: string): boolean {
-        return this.discoveryService.hasWorkflow(workflowName);
     }
 
     /**
@@ -367,7 +345,7 @@ export class TemporalService implements OnModuleInit {
         components: {
             client: { status: string; healthy: boolean };
             worker: { status: string; available: boolean };
-            discovery: { status: string; controllers: number };
+            discovery: { status: string; scheduled: number };
             schedules: { status: string; active: number; errors: number };
         };
     }> {
@@ -386,7 +364,7 @@ export class TemporalService implements OnModuleInit {
             },
             discovery: {
                 status: discoveryHealth.status,
-                controllers: discoveryHealth.discoveredItems.controllers,
+                scheduled: discoveryHealth.discoveredItems.scheduled,
             },
             schedules: {
                 status: scheduleHealth.status,
@@ -414,40 +392,54 @@ export class TemporalService implements OnModuleInit {
     }
 
     // ==========================================
+    // Deprecated Methods (for backward compatibility)
+    // ==========================================
+
+    /**
+     * @deprecated Workflow discovery is no longer supported
+     */
+    getAvailableWorkflows(): string[] {
+        this.logger.warn(
+            'getAvailableWorkflows() is deprecated - workflow discovery is no longer supported',
+        );
+        return [];
+    }
+
+    /**
+     * @deprecated Workflow info is no longer supported
+     */
+    getWorkflowInfo(workflowName: string): any {
+        this.logger.warn('getWorkflowInfo() is deprecated - workflow info is no longer supported');
+        return undefined;
+    }
+
+    /**
+     * @deprecated Workflow existence check is no longer supported
+     */
+    hasWorkflow(workflowName: string): boolean {
+        this.logger.warn(
+            'hasWorkflow() is deprecated - workflow existence check is no longer supported',
+        );
+        return false;
+    }
+
+    // ==========================================
     // Private Helper Methods
     // ==========================================
 
     /**
-     * Enhance workflow options with discovered configuration
+     * Enhance workflow options with basic defaults
      */
-    private async enhanceWorkflowOptions(
-        workflowType: string,
-        options: Partial<StartWorkflowOptions>,
-    ): Promise<StartWorkflowOptions> {
-        const workflowInfo = this.discoveryService.getWorkflowMethod(workflowType);
+    private enhanceWorkflowOptions(options: StartWorkflowOptions): StartWorkflowOptions {
+        // Extract taskQueue and apply default if not provided
+        const { taskQueue, ...restOptions } = options;
 
-        if (workflowInfo) {
-            // Find the controller for this workflow to get default task queue
-            const controllers = this.discoveryService.getWorkflowControllers();
-            const controller = controllers.find((c) =>
-                c.methods.some((m) => m.workflowName === workflowType),
-            );
+        const enhancedOptions: StartWorkflowOptions = {
+            taskQueue: taskQueue || DEFAULT_TASK_QUEUE,
+            ...restOptions,
+        };
 
-            // Merge discovered options with provided options
-            const enhancedOptions: StartWorkflowOptions = {
-                taskQueue: options.taskQueue || controller?.taskQueue || DEFAULT_TASK_QUEUE,
-                ...workflowInfo.options,
-                ...options, // User options take precedence
-            };
-
-            return enhancedOptions;
-        }
-
-        // Fallback for non-discovered workflows
-        return {
-            taskQueue: DEFAULT_TASK_QUEUE,
-            ...options,
-        } as StartWorkflowOptions;
+        return enhancedOptions;
     }
 
     /**
@@ -476,9 +468,9 @@ export class TemporalService implements OnModuleInit {
         const stats = this.getDiscoveryStats();
         const scheduleStats = this.getScheduleStats();
 
-        this.logger.log('Streamlined Temporal service initialized');
+        this.logger.log('Temporal service initialized');
         this.logger.log(
-            `Discovered: ${stats.controllers} controllers, ${stats.methods} workflows, ${stats.scheduled} scheduled`,
+            `Discovered: ${stats.scheduled} scheduled workflows, ${stats.signals} signals, ${stats.queries} queries`,
         );
         this.logger.log(`Schedules: ${scheduleStats.total} total, ${scheduleStats.active} active`);
 
