@@ -1,16 +1,10 @@
-import {
-    DynamicModule,
-    Global,
-    Logger,
-    Module,
-    OnApplicationShutdown,
-    Provider,
-} from '@nestjs/common';
+import { DynamicModule, Global, Module, OnApplicationShutdown, Provider } from '@nestjs/common';
 import { Client, Connection } from '@temporalio/client';
 import { TemporalAsyncOptions, TemporalOptions, TemporalOptionsFactory } from '../interfaces';
 import { DEFAULT_NAMESPACE, ERRORS, TEMPORAL_CLIENT, TEMPORAL_MODULE_OPTIONS } from '../constants';
 import { TemporalClientService } from './temporal-client.service';
 import { TemporalScheduleService } from './temporal-schedule.service';
+import { ConditionalLogger } from '../utils/conditional-logger';
 
 /**
  * Streamlined Temporal Client Module
@@ -19,7 +13,12 @@ import { TemporalScheduleService } from './temporal-schedule.service';
 @Global()
 @Module({})
 export class TemporalClientModule {
-    private static readonly logger = new Logger(TemporalClientModule.name);
+    private static createModuleLogger(options?: any): ConditionalLogger {
+        return new ConditionalLogger(TemporalClientModule.name, {
+            enableLogger: options?.enableLogger,
+            logLevel: options?.logLevel,
+        });
+    }
 
     // ==========================================
     // Synchronous Registration
@@ -94,7 +93,8 @@ export class TemporalClientModule {
     private static createClientProvider(options: any): Provider {
         return {
             provide: TEMPORAL_CLIENT,
-            useFactory: async () => this.createClientInstance(options),
+            useFactory: async () =>
+                this.createClientInstance(options, this.createModuleLogger(options)),
         };
     }
 
@@ -106,7 +106,10 @@ export class TemporalClientModule {
             provide: TEMPORAL_CLIENT,
             useFactory: async (temporalOptions: TemporalOptions) => {
                 const clientOptions = this.extractClientOptions(temporalOptions);
-                return this.createClientInstance(clientOptions);
+                return this.createClientInstance(
+                    clientOptions,
+                    this.createModuleLogger(clientOptions),
+                );
             },
             inject: [TEMPORAL_MODULE_OPTIONS],
         };
@@ -162,11 +165,14 @@ export class TemporalClientModule {
     /**
      * Create and configure Temporal client instance
      */
-    private static async createClientInstance(options: any): Promise<Client | null> {
+    private static async createClientInstance(
+        options: any,
+        logger: ConditionalLogger,
+    ): Promise<Client | null> {
         let connection: Connection | null = null;
 
         try {
-            this.logger.log(`Connecting to Temporal server at ${options.connection.address}`);
+            logger.log(`Connecting to Temporal server at ${options.connection.address}`);
 
             // Create connection with proper configuration
             const connectionConfig: any = {
@@ -186,28 +192,25 @@ export class TemporalClientModule {
             connection = await Connection.connect(connectionConfig);
 
             const namespace = options.connection.namespace || DEFAULT_NAMESPACE;
-            this.logger.log(`Connected to Temporal server, using namespace "${namespace}"`);
+            logger.log(`Connected to Temporal server, using namespace "${namespace}"`);
 
             // Create client with shutdown capabilities
             const client = new Client({ connection, namespace });
-            return this.enhanceClientWithShutdown(client);
+            return this.enhanceClientWithShutdown(client, logger);
         } catch (error) {
             // Cleanup connection on error
             if (connection) {
                 await connection.close().catch((closeError) => {
-                    this.logger.error(
-                        'Failed to close connection during error cleanup',
-                        closeError,
-                    );
+                    logger.error('Failed to close connection during error cleanup', closeError);
                 });
             }
 
             const errorMsg = `${ERRORS.CLIENT_INITIALIZATION}: ${error.message}`;
-            this.logger.error(errorMsg, error.stack);
+            logger.error(errorMsg, error.stack);
 
             // Allow graceful failure if configured
             if (options.allowConnectionFailure !== false) {
-                this.logger.warn('Continuing application startup without Temporal client');
+                logger.warn('Continuing application startup without Temporal client');
                 return null;
             }
 
@@ -218,19 +221,22 @@ export class TemporalClientModule {
     /**
      * Enhance client with application shutdown capabilities
      */
-    private static enhanceClientWithShutdown(client: Client): Client & OnApplicationShutdown {
+    private static enhanceClientWithShutdown(
+        client: Client,
+        logger: ConditionalLogger,
+    ): Client & OnApplicationShutdown {
         const enhancedClient = client as Client & OnApplicationShutdown;
 
         enhancedClient.onApplicationShutdown = async (signal?: string) => {
-            this.logger.log(`Closing Temporal client connection (signal: ${signal})`);
+            logger.log(`Closing Temporal client connection (signal: ${signal})`);
 
             try {
                 if (client?.connection) {
                     await client.connection.close();
-                    this.logger.log('Temporal connection closed successfully');
+                    logger.log('Temporal connection closed successfully');
                 }
             } catch (error) {
-                this.logger.error('Failed to close Temporal connection', error);
+                logger.error('Failed to close Temporal connection', error);
             }
         };
 
@@ -254,6 +260,8 @@ export class TemporalClientModule {
                 metadata: options.connection.metadata,
             },
             allowConnectionFailure: true, // Default to graceful failure
+            enableLogger: options.enableLogger,
+            logLevel: options.logLevel,
         };
     }
 

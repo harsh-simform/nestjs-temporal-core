@@ -1,7 +1,8 @@
-import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { Client, WorkflowClient, WorkflowHandle } from '@temporalio/client';
-import { ERRORS, TEMPORAL_CLIENT } from '../constants';
+import { ERRORS, TEMPORAL_CLIENT, TEMPORAL_MODULE_OPTIONS } from '../constants';
 import { StartWorkflowOptions } from '../interfaces';
+import { ConditionalLogger } from '../utils/conditional-logger';
 
 /**
  * Streamlined Temporal Client Service
@@ -9,14 +10,20 @@ import { StartWorkflowOptions } from '../interfaces';
  */
 @Injectable()
 export class TemporalClientService implements OnModuleInit {
-    private readonly logger = new Logger(TemporalClientService.name);
+    private readonly logger: ConditionalLogger;
     private readonly workflowClient: WorkflowClient | null;
 
     constructor(
         @Inject(TEMPORAL_CLIENT)
         private readonly client: Client | null,
+        @Inject(TEMPORAL_MODULE_OPTIONS)
+        private readonly options: any,
     ) {
         this.workflowClient = this.client?.workflow || null;
+        this.logger = new ConditionalLogger(TemporalClientService.name, {
+            enableLogger: options.enableLogger,
+            logLevel: options.logLevel,
+        });
     }
 
     async onModuleInit() {
@@ -54,15 +61,17 @@ export class TemporalClientService implements OnModuleInit {
         } = options;
 
         try {
-            const startOptions: any = {
+            const startOptions = {
                 taskQueue,
                 workflowId,
                 ...restOptions,
             };
 
             const handle = await this.workflowClient!.start(workflowType, {
+                taskQueue: startOptions.taskQueue,
+                workflowId: startOptions.workflowId,
                 args,
-                ...startOptions,
+                ...restOptions,
             });
 
             // Send initial signal if provided

@@ -1,6 +1,13 @@
-import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { TemporalDiscoveryService } from '../discovery/temporal-discovery.service';
-import { SchedulesModuleOptions, ScheduledMethodInfo, ScheduleInfo } from '../interfaces';
+import {
+    SchedulesModuleOptions,
+    ScheduledMethodInfo,
+    ScheduleInfo,
+    ScheduledOptions,
+} from '../interfaces';
+import { SCHEDULES_MODULE_OPTIONS } from '../constants';
+import { ConditionalLogger } from '../utils/conditional-logger';
 
 /**
  * Temporal Schedules Service
@@ -8,14 +15,19 @@ import { SchedulesModuleOptions, ScheduledMethodInfo, ScheduleInfo } from '../in
  */
 @Injectable()
 export class TemporalSchedulesService implements OnModuleInit {
-    private readonly logger = new Logger(TemporalSchedulesService.name);
+    private readonly logger: ConditionalLogger;
     private readonly managedSchedules = new Map<string, ScheduleInfo>();
 
     constructor(
-        @Inject('SCHEDULES_MODULE_OPTIONS')
+        @Inject(SCHEDULES_MODULE_OPTIONS)
         private readonly options: SchedulesModuleOptions,
         private readonly discoveryService: TemporalDiscoveryService,
-    ) {}
+    ) {
+        this.logger = new ConditionalLogger(TemporalSchedulesService.name, {
+            enableLogger: options.enableLogger,
+            logLevel: options.logLevel,
+        });
+    }
 
     async onModuleInit() {
         await this.initializeSchedules();
@@ -82,7 +94,7 @@ export class TemporalSchedulesService implements OnModuleInit {
     /**
      * Calculate next run time for a schedule
      */
-    private calculateNextRun(scheduleOptions: any): Date | undefined {
+    private calculateNextRun(scheduleOptions: ScheduledOptions): Date | undefined {
         // In a real implementation, this would calculate the next run time
         // based on cron expression or interval
         if (scheduleOptions.cron) {

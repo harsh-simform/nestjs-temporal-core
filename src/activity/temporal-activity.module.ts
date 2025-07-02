@@ -2,6 +2,7 @@ import { DynamicModule, Module } from '@nestjs/common';
 import { DiscoveryModule } from '@nestjs/core';
 import { TemporalActivityService } from './temporal-activity.service';
 import { ActivityModuleOptions } from '../interfaces';
+import { ACTIVITY_MODULE_OPTIONS } from '../constants';
 
 /**
  * Standalone Activity Module for NestJS
@@ -46,7 +47,7 @@ export class TemporalActivityModule {
             imports: [DiscoveryModule],
             providers: [
                 {
-                    provide: 'ACTIVITY_MODULE_OPTIONS',
+                    provide: ACTIVITY_MODULE_OPTIONS,
                     useValue: options,
                 },
                 TemporalActivityService,
@@ -70,7 +71,7 @@ export class TemporalActivityModule {
             imports: [DiscoveryModule, ...(options.imports || [])],
             providers: [
                 {
-                    provide: 'ACTIVITY_MODULE_OPTIONS',
+                    provide: ACTIVITY_MODULE_OPTIONS,
                     useFactory: options.useFactory,
                     inject: options.inject || [],
                 },

@@ -276,6 +276,8 @@ export class TemporalWorkerModule {
             autoStart: options.worker?.autoStart !== false,
             allowWorkerFailure: options.allowConnectionFailure !== false,
             workerOptions: options.worker?.workerOptions || {},
+            enableLogger: options.enableLogger,
+            logLevel: options.logLevel,
         };
     }
 }

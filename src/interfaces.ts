@@ -31,7 +31,7 @@ export interface ConnectionOptions {
     metadata?: Record<string, string>;
 }
 
-export interface TemporalOptions {
+export interface TemporalOptions extends LoggerConfig {
     connection: {
         address: string;
         namespace?: string;
@@ -60,6 +60,13 @@ export interface WorkerCreateOptions {
     identity?: string;
     buildId?: string;
     [key: string]: any;
+}
+
+export interface RetryPolicyConfig {
+    maximumAttempts: number;
+    initialInterval: string;
+    maximumInterval: string;
+    backoffCoefficient: number;
 }
 
 // ==========================================
@@ -97,11 +104,6 @@ export interface StartWorkflowOptions {
         name: string;
         args?: any[];
     };
-    retry?: {
-        maximumAttempts?: number;
-        initialInterval?: string | number;
-    };
-    searchAttributes?: Record<string, unknown>;
     [key: string]: any;
 }
 
@@ -123,8 +125,8 @@ export interface ActivityOptions {
 
 export interface ActivityMethodOptions {
     name?: string;
-    timeout?: string | number;
-    maxRetries?: number;
+    timeout?: string | number; // TODO: Implement timeout handling in worker
+    maxRetries?: number; // TODO: Implement retry logic in activity execution
 }
 
 export interface ActivityMetadata {
@@ -257,10 +259,23 @@ export interface WorkflowParameterMetadata {
 }
 
 // ==========================================
+// Logger Configuration
+// ==========================================
+
+export type LogLevel = 'error' | 'warn' | 'info' | 'debug' | 'verbose';
+
+export interface LoggerConfig {
+    /** Enable/disable logging for the module */
+    enableLogger?: boolean;
+    /** Log level (error, warn, info, debug, verbose) */
+    logLevel?: LogLevel;
+}
+
+// ==========================================
 // Activity Module Interfaces
 // ==========================================
 
-export interface ActivityModuleOptions {
+export interface ActivityModuleOptions extends LoggerConfig {
     /** Specific activity classes to register (optional - will auto-discover if not provided) */
     activityClasses?: Array<Type<any>>;
     /** Timeout for activities */
@@ -285,7 +300,7 @@ export interface ActivityInfo {
 // Schedules Module Interfaces
 // ==========================================
 
-export interface SchedulesModuleOptions {
+export interface SchedulesModuleOptions extends LoggerConfig {
     /** Auto-start schedules on module initialization */
     autoStart?: boolean;
     /** Default timezone for schedules */
@@ -301,7 +316,7 @@ export interface ScheduleInfo {
     intervalExpression?: string;
     description?: string;
     timezone: string;
-    overlapPolicy: string;
+    overlapPolicy: 'ALLOW_ALL' | 'SKIP' | 'BUFFER_ONE' | 'BUFFER_ALL' | 'CANCEL_OTHER';
     isActive: boolean;
     autoStart: boolean;
     taskQueue?: string;

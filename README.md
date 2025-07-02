@@ -24,6 +24,7 @@ NestJS Temporal Core brings Temporal's durable execution to NestJS with familiar
 - **🏥 Health Monitoring** - Comprehensive status monitoring and health checks
 - **🔧 Production Ready** - TLS, connection management, graceful shutdowns
 - **📊 Modular Architecture** - Individual modules for specific needs
+- **📝 Configurable Logging** - Fine-grained control over log levels and output
 - **🔐 Enterprise Ready** - Temporal Cloud support with TLS and API keys
 
 ## 📦 Installation
@@ -339,6 +340,143 @@ const productionConfig = {
     workerOptions: WORKER_PRESETS.PRODUCTION_BALANCED
   }
 };
+```
+
+## 📝 Logger Configuration
+
+Control logging behavior across all Temporal modules with configurable logger settings:
+
+### Basic Logger Setup
+
+```typescript
+// Enable/disable logging and set log levels
+TemporalModule.register({
+  connection: {
+    address: 'localhost:7233',
+    namespace: 'default'
+  },
+  taskQueue: 'main-queue',
+  // Logger configuration
+  enableLogger: true,        // Enable/disable all logging
+  logLevel: 'info',         // Set log level: 'error' | 'warn' | 'info' | 'debug' | 'verbose'
+  worker: {
+    workflowsPath: './dist/workflows',
+    activityClasses: [EmailActivities]
+  }
+})
+```
+
+### Environment-Based Logger Configuration
+
+```typescript
+// Different log levels for different environments
+const loggerConfig = {
+  development: {
+    enableLogger: true,
+    logLevel: 'debug' as const  // Show all logs in development
+  },
+  production: {
+    enableLogger: true,
+    logLevel: 'warn' as const   // Only warnings and errors in production
+  },
+  testing: {
+    enableLogger: false         // Disable logging during tests
+  }
+};
+
+TemporalModule.register({
+  connection: { address: 'localhost:7233' },
+  taskQueue: 'main-queue',
+  ...loggerConfig[process.env.NODE_ENV || 'development'],
+  worker: {
+    workflowsPath: './dist/workflows'
+  }
+})
+```
+
+### Individual Module Logger Configuration
+
+Configure logging for specific modules:
+
+```typescript
+// Activity Module with custom logging
+TemporalActivityModule.forRoot({
+  activityClasses: [EmailActivities],
+  enableLogger: true,
+  logLevel: 'debug'
+})
+
+// Schedules Module with minimal logging
+TemporalSchedulesModule.forRoot({
+  autoStart: true,
+  enableLogger: true,
+  logLevel: 'error'  // Only show errors
+})
+
+// Client Module with no logging
+TemporalClientModule.forRoot({
+  connection: { address: 'localhost:7233' },
+  enableLogger: false
+})
+```
+
+### Log Level Hierarchy
+
+The logger follows a hierarchical structure where each level includes all levels above it:
+
+- **`error`**: Only critical errors
+- **`warn`**: Errors + warnings
+- **`info`**: Errors + warnings + informational messages (default)
+- **`debug`**: Errors + warnings + info + debug information
+- **`verbose`**: All messages including verbose details
+
+### Async Configuration with Logger
+
+```typescript
+TemporalModule.registerAsync({
+  imports: [ConfigModule],
+  useFactory: (config: ConfigService) => ({
+    connection: {
+      address: config.get('TEMPORAL_ADDRESS'),
+      namespace: config.get('TEMPORAL_NAMESPACE')
+    },
+    taskQueue: config.get('TEMPORAL_TASK_QUEUE'),
+    // Dynamic logger configuration
+    enableLogger: config.get('TEMPORAL_LOGGING_ENABLED', 'true') === 'true',
+    logLevel: config.get('TEMPORAL_LOG_LEVEL', 'info'),
+    worker: {
+      workflowsPath: './dist/workflows'
+    }
+  }),
+  inject: [ConfigService]
+})
+```
+
+### Logger Examples
+
+```typescript
+// Silent mode - no logs
+{
+  enableLogger: false
+}
+
+// Error only - for production monitoring
+{
+  enableLogger: true,
+  logLevel: 'error'
+}
+
+// Development mode - detailed logging
+{
+  enableLogger: true,
+  logLevel: 'debug'
+}
+
+// Verbose mode - maximum detail for troubleshooting
+{
+  enableLogger: true,
+  logLevel: 'verbose'
+}
 ```
 
 ## 📊 Health Monitoring

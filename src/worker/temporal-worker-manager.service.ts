@@ -1,7 +1,6 @@
 import {
     Inject,
     Injectable,
-    Logger,
     OnApplicationBootstrap,
     OnModuleDestroy,
     OnModuleInit,
@@ -11,6 +10,7 @@ import { NativeConnection, Worker } from '@temporalio/worker';
 import { TemporalMetadataAccessor } from './temporal-metadata.accessor';
 import { DEFAULT_NAMESPACE, ERRORS, TEMPORAL_MODULE_OPTIONS, WORKER_PRESETS } from '../constants';
 import { ActivityMethodHandler, WorkerCreateOptions, WorkerStatus } from '../interfaces';
+import { ConditionalLogger } from '../utils/conditional-logger';
 
 /**
  * Streamlined Temporal Worker Manager Service
@@ -20,7 +20,7 @@ import { ActivityMethodHandler, WorkerCreateOptions, WorkerStatus } from '../int
 export class TemporalWorkerManagerService
     implements OnModuleInit, OnModuleDestroy, OnApplicationBootstrap
 {
-    private readonly logger = new Logger(TemporalWorkerManagerService.name);
+    private readonly logger: ConditionalLogger;
 
     // Worker state
     private worker: Worker | null = null;
@@ -36,7 +36,12 @@ export class TemporalWorkerManagerService
         private readonly options: any,
         private readonly discoveryService: DiscoveryService,
         private readonly metadataAccessor: TemporalMetadataAccessor,
-    ) {}
+    ) {
+        this.logger = new ConditionalLogger(TemporalWorkerManagerService.name, {
+            enableLogger: options.enableLogger,
+            logLevel: options.logLevel,
+        });
+    }
 
     // ==========================================
     // Lifecycle Methods
@@ -61,7 +66,7 @@ export class TemporalWorkerManagerService
     }
 
     async onApplicationBootstrap() {
-        if (this.options.autoStart === false || !this.worker) {
+        if (this.options.worker?.autoStart === false || !this.worker) {
             this.logger.debug('Worker auto-start disabled or worker not initialized');
             return;
         }
@@ -96,8 +101,8 @@ export class TemporalWorkerManagerService
             throw new Error(ERRORS.MISSING_TASK_QUEUE);
         }
 
-        const hasWorkflowsPath = Boolean(this.options.workflowsPath);
-        const hasWorkflowBundle = Boolean(this.options.workflowBundle);
+        const hasWorkflowsPath = Boolean(this.options.worker?.workflowsPath);
+        const hasWorkflowBundle = Boolean(this.options.worker?.workflowBundle);
 
         if (!hasWorkflowsPath && !hasWorkflowBundle) {
             throw new Error('Either workflowsPath or workflowBundle must be provided');
@@ -168,17 +173,17 @@ export class TemporalWorkerManagerService
         };
 
         // Add workflow configuration
-        if (this.options.workflowBundle) {
-            baseOptions.workflowBundle = this.options.workflowBundle;
-        } else if (this.options.workflowsPath) {
-            baseOptions.workflowsPath = this.options.workflowsPath;
+        if (this.options.worker?.workflowBundle) {
+            baseOptions.workflowBundle = this.options.worker.workflowBundle;
+        } else if (this.options.worker?.workflowsPath) {
+            baseOptions.workflowsPath = this.options.worker.workflowsPath;
         }
 
         // Apply environment-specific defaults
         const defaultOptions = this.getEnvironmentDefaults();
 
         // Merge with user-provided options
-        const userOptions = this.options.workerOptions || {};
+        const userOptions = this.options.worker?.workerOptions || {};
 
         return {
             ...baseOptions,
@@ -226,9 +231,9 @@ export class TemporalWorkerManagerService
             if (!targetClass) return false;
 
             // Filter by specific activity classes if provided
-            if (this.options.activityClasses?.length) {
+            if (this.options.worker?.activityClasses?.length) {
                 return (
-                    this.options.activityClasses.includes(targetClass) &&
+                    this.options.worker.activityClasses.includes(targetClass) &&
                     this.metadataAccessor.isActivity(targetClass)
                 );
             }

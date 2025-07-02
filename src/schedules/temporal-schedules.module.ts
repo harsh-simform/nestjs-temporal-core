@@ -3,6 +3,7 @@ import { DiscoveryModule } from '@nestjs/core';
 import { TemporalSchedulesService } from './temporal-schedules.service';
 import { TemporalDiscoveryService } from '../discovery/temporal-discovery.service';
 import { SchedulesModuleOptions } from '../interfaces';
+import { SCHEDULES_MODULE_OPTIONS } from '../constants';
 
 /**
  * Standalone Schedules Module for NestJS
@@ -48,7 +49,7 @@ export class TemporalSchedulesModule {
             imports: [DiscoveryModule],
             providers: [
                 {
-                    provide: 'SCHEDULES_MODULE_OPTIONS',
+                    provide: SCHEDULES_MODULE_OPTIONS,
                     useValue: options,
                 },
                 TemporalDiscoveryService,
@@ -73,7 +74,7 @@ export class TemporalSchedulesModule {
             imports: [DiscoveryModule, ...(options.imports || [])],
             providers: [
                 {
-                    provide: 'SCHEDULES_MODULE_OPTIONS',
+                    provide: SCHEDULES_MODULE_OPTIONS,
                     useFactory: options.useFactory,
                     inject: options.inject || [],
                 },
