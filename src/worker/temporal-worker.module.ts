@@ -171,22 +171,25 @@ export class TemporalWorkerModule {
      * Create providers for async module configuration
      */
     private static createAsyncProviders(options: TemporalAsyncOptions): Provider[] {
-        if (options.useFactory) {
-            return [
-                {
-                    provide: TEMPORAL_MODULE_OPTIONS,
-                    useFactory: async (...args: any[]) => {
-                        const temporalOptions = await options.useFactory!(...args);
-                        this.validateWorkerOptions(temporalOptions);
-                        return this.extractWorkerOptions(temporalOptions);
-                    },
-                    inject: options.inject || [],
-                },
-            ];
-        }
+        const providers: Provider[] = [];
 
-        if (options.useClass) {
-            return [
+        if (options.useFactory) {
+            providers.push({
+                provide: TEMPORAL_MODULE_OPTIONS,
+                useFactory: async (...args: any[]) => {
+                    const temporalOptions = await options.useFactory!(...args);
+                    this.validateWorkerOptions(temporalOptions);
+                    return this.extractWorkerOptions(temporalOptions);
+                },
+                inject: options.inject || [],
+            });
+
+            // Add activity providers if specified
+            if (options.useFactory.toString().includes('activityClasses')) {
+                // We'll handle this dynamically in the worker manager
+            }
+        } else if (options.useClass) {
+            providers.push(
                 {
                     provide: TEMPORAL_MODULE_OPTIONS,
                     useFactory: async (optionsFactory: TemporalOptionsFactory) => {
@@ -200,24 +203,22 @@ export class TemporalWorkerModule {
                     provide: options.useClass,
                     useClass: options.useClass,
                 },
-            ];
-        }
-
-        if (options.useExisting) {
-            return [
-                {
-                    provide: TEMPORAL_MODULE_OPTIONS,
-                    useFactory: async (optionsFactory: TemporalOptionsFactory) => {
-                        const temporalOptions = await optionsFactory.createTemporalOptions();
-                        this.validateWorkerOptions(temporalOptions);
-                        return this.extractWorkerOptions(temporalOptions);
-                    },
-                    inject: [options.useExisting],
+            );
+        } else if (options.useExisting) {
+            providers.push({
+                provide: TEMPORAL_MODULE_OPTIONS,
+                useFactory: async (optionsFactory: TemporalOptionsFactory) => {
+                    const temporalOptions = await optionsFactory.createTemporalOptions();
+                    this.validateWorkerOptions(temporalOptions);
+                    return this.extractWorkerOptions(temporalOptions);
                 },
-            ];
+                inject: [options.useExisting],
+            });
+        } else {
+            throw new Error(ERRORS.INVALID_OPTIONS);
         }
 
-        throw new Error(ERRORS.INVALID_OPTIONS);
+        return providers;
     }
 
     // ==========================================
@@ -240,20 +241,22 @@ export class TemporalWorkerModule {
             throw new Error('Task queue is required for worker');
         }
 
-        if (!options.worker) {
-            throw new Error('Worker configuration is required');
-        }
+        // Worker configuration is optional - can be empty if only running activities
+        if (options.worker) {
+            // Validate workflow configuration only if worker config is provided
+            const hasWorkflowsPath = Boolean(options.worker.workflowsPath);
+            const hasWorkflowBundle = Boolean(options.worker.workflowBundle);
 
-        // Validate workflow configuration
-        const hasWorkflowsPath = Boolean(options.worker.workflowsPath);
-        const hasWorkflowBundle = Boolean(options.worker.workflowBundle);
+            if (hasWorkflowsPath && hasWorkflowBundle) {
+                throw new Error('Worker cannot have both workflowsPath and workflowBundle');
+            }
 
-        if (!hasWorkflowsPath && !hasWorkflowBundle) {
-            throw new Error('Worker requires either workflowsPath or workflowBundle');
-        }
-
-        if (hasWorkflowsPath && hasWorkflowBundle) {
-            throw new Error('Worker cannot have both workflowsPath and workflowBundle');
+            // If worker config is provided, require at least one workflow source
+            if (!hasWorkflowsPath && !hasWorkflowBundle) {
+                throw new Error(
+                    'Worker requires either workflowsPath or workflowBundle when worker config is provided',
+                );
+            }
         }
     }
 

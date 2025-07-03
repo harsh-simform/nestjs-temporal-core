@@ -4,7 +4,7 @@ import { TemporalAsyncOptions, TemporalOptions, TemporalOptionsFactory } from '.
 import { DEFAULT_NAMESPACE, ERRORS, TEMPORAL_CLIENT, TEMPORAL_MODULE_OPTIONS } from '../constants';
 import { TemporalClientService } from './temporal-client.service';
 import { TemporalScheduleService } from './temporal-schedule.service';
-import { ConditionalLogger } from '../utils/conditional-logger';
+import { TemporalLogger } from '../utils/logger';
 
 /**
  * Streamlined Temporal Client Module
@@ -13,8 +13,8 @@ import { ConditionalLogger } from '../utils/conditional-logger';
 @Global()
 @Module({})
 export class TemporalClientModule {
-    private static createModuleLogger(options?: any): ConditionalLogger {
-        return new ConditionalLogger(TemporalClientModule.name, {
+    private static createModuleLogger(options?: any): TemporalLogger {
+        return new TemporalLogger(TemporalClientModule.name, {
             enableLogger: options?.enableLogger,
             logLevel: options?.logLevel,
         });
@@ -167,7 +167,7 @@ export class TemporalClientModule {
      */
     private static async createClientInstance(
         options: any,
-        logger: ConditionalLogger,
+        logger: TemporalLogger,
     ): Promise<Client | null> {
         let connection: Connection | null = null;
 
@@ -223,7 +223,7 @@ export class TemporalClientModule {
      */
     private static enhanceClientWithShutdown(
         client: Client,
-        logger: ConditionalLogger,
+        logger: TemporalLogger,
     ): Client & OnApplicationShutdown {
         const enhancedClient = client as Client & OnApplicationShutdown;
 

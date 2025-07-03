@@ -7,7 +7,7 @@ import {
     ScheduledOptions,
 } from '../interfaces';
 import { SCHEDULES_MODULE_OPTIONS } from '../constants';
-import { ConditionalLogger } from '../utils/conditional-logger';
+import { TemporalLogger } from '../utils/logger';
 
 /**
  * Temporal Schedules Service
@@ -15,7 +15,7 @@ import { ConditionalLogger } from '../utils/conditional-logger';
  */
 @Injectable()
 export class TemporalSchedulesService implements OnModuleInit {
-    private readonly logger: ConditionalLogger;
+    private readonly logger: TemporalLogger;
     private readonly managedSchedules = new Map<string, ScheduleInfo>();
 
     constructor(
@@ -23,7 +23,7 @@ export class TemporalSchedulesService implements OnModuleInit {
         private readonly options: SchedulesModuleOptions,
         private readonly discoveryService: TemporalDiscoveryService,
     ) {
-        this.logger = new ConditionalLogger(TemporalSchedulesService.name, {
+        this.logger = new TemporalLogger(TemporalSchedulesService.name, {
             enableLogger: options.enableLogger,
             logLevel: options.logLevel,
         });

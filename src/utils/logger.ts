@@ -2,10 +2,10 @@ import { Logger } from '@nestjs/common';
 import { LogLevel, LoggerConfig } from '../interfaces';
 
 /**
- * Conditional Logger utility
+ * TemporalLogger utility
  * Provides logging functionality that respects logger configuration
  */
-export class ConditionalLogger {
+export class TemporalLogger {
     private readonly nestLogger: Logger;
     private readonly config: LoggerConfig;
 

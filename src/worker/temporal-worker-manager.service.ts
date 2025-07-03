@@ -10,7 +10,7 @@ import { NativeConnection, Worker } from '@temporalio/worker';
 import { TemporalMetadataAccessor } from './temporal-metadata.accessor';
 import { DEFAULT_NAMESPACE, ERRORS, TEMPORAL_MODULE_OPTIONS, WORKER_PRESETS } from '../constants';
 import { ActivityMethodHandler, WorkerCreateOptions, WorkerStatus } from '../interfaces';
-import { ConditionalLogger } from '../utils/conditional-logger';
+import { TemporalLogger } from '../utils/logger';
 
 /**
  * Streamlined Temporal Worker Manager Service
@@ -20,7 +20,7 @@ import { ConditionalLogger } from '../utils/conditional-logger';
 export class TemporalWorkerManagerService
     implements OnModuleInit, OnModuleDestroy, OnApplicationBootstrap
 {
-    private readonly logger: ConditionalLogger;
+    private readonly logger: TemporalLogger;
 
     // Worker state
     private worker: Worker | null = null;
@@ -37,7 +37,7 @@ export class TemporalWorkerManagerService
         private readonly discoveryService: DiscoveryService,
         private readonly metadataAccessor: TemporalMetadataAccessor,
     ) {
-        this.logger = new ConditionalLogger(TemporalWorkerManagerService.name, {
+        this.logger = new TemporalLogger(TemporalWorkerManagerService.name, {
             enableLogger: options.enableLogger,
             logLevel: options.logLevel,
         });
@@ -54,8 +54,8 @@ export class TemporalWorkerManagerService
             this.isInitialized = true;
             this.logger.log('Temporal worker initialization completed');
         } catch (error) {
-            this.lastError = error.message;
-            this.logger.error('Error during worker initialization', error.stack);
+            this.lastError = error?.message || 'Unknown initialization error';
+            this.logger.error('Error during worker initialization', error?.stack || error);
 
             if (this.options.allowWorkerFailure !== false) {
                 this.logger.warn('Continuing application startup without Temporal worker');
@@ -66,12 +66,23 @@ export class TemporalWorkerManagerService
     }
 
     async onApplicationBootstrap() {
-        if (this.options.worker?.autoStart === false || !this.worker) {
+        if (this.options.autoStart === false || !this.worker) {
             this.logger.debug('Worker auto-start disabled or worker not initialized');
             return;
         }
 
-        await this.startWorker();
+        // Don't block application startup if worker fails to start
+        try {
+            await this.startWorker();
+        } catch (error) {
+            this.logger.error(
+                'Failed to start worker during application bootstrap',
+                error?.stack || error,
+            );
+            if (this.options.allowWorkerFailure === false) {
+                throw error;
+            }
+        }
     }
 
     async onModuleDestroy() {
@@ -101,21 +112,20 @@ export class TemporalWorkerManagerService
             throw new Error(ERRORS.MISSING_TASK_QUEUE);
         }
 
-        const hasWorkflowsPath = Boolean(this.options.worker?.workflowsPath);
-        const hasWorkflowBundle = Boolean(this.options.worker?.workflowBundle);
+        const hasWorkflowsPath = Boolean(this.options.workflowsPath);
+        const hasWorkflowBundle = Boolean(this.options.workflowBundle);
 
-        if (!hasWorkflowsPath && !hasWorkflowBundle) {
-            throw new Error('Either workflowsPath or workflowBundle must be provided');
-        }
-
+        // Allow worker to run with only activities (no workflows)
         if (hasWorkflowsPath && hasWorkflowBundle) {
             throw new Error('Cannot specify both workflowsPath and workflowBundle');
         }
 
         if (hasWorkflowBundle) {
             this.logger.debug('Using pre-bundled workflows (recommended for production)');
-        } else {
+        } else if (hasWorkflowsPath) {
             this.logger.debug('Using workflows from filesystem path (recommended for development)');
+        } else {
+            this.logger.debug('Worker configured for activities only (no workflows)');
         }
     }
 
@@ -173,17 +183,17 @@ export class TemporalWorkerManagerService
         };
 
         // Add workflow configuration
-        if (this.options.worker?.workflowBundle) {
-            baseOptions.workflowBundle = this.options.worker.workflowBundle;
-        } else if (this.options.worker?.workflowsPath) {
-            baseOptions.workflowsPath = this.options.worker.workflowsPath;
+        if (this.options.workflowBundle) {
+            baseOptions.workflowBundle = this.options.workflowBundle;
+        } else if (this.options.workflowsPath) {
+            baseOptions.workflowsPath = this.options.workflowsPath;
         }
 
         // Apply environment-specific defaults
         const defaultOptions = this.getEnvironmentDefaults();
 
         // Merge with user-provided options
-        const userOptions = this.options.worker?.workerOptions || {};
+        const userOptions = this.options.workerOptions || {};
 
         return {
             ...baseOptions,
@@ -290,7 +300,11 @@ export class TemporalWorkerManagerService
         const config = {
             taskQueue: this.options.taskQueue,
             namespace: this.options.connection?.namespace || DEFAULT_NAMESPACE,
-            workflowSource: this.options.workflowBundle ? 'bundle' : 'filesystem',
+            workflowSource: this.options.workflowBundle
+                ? 'bundle'
+                : this.options.workflowsPath
+                  ? 'filesystem'
+                  : 'none',
             activitiesCount: Object.keys(this.activities).length,
             autoStart: this.options.autoStart !== false,
             environment: process.env.NODE_ENV || 'development',
@@ -338,8 +352,8 @@ export class TemporalWorkerManagerService
             await this.worker.run();
         } catch (error) {
             this.isRunning = false;
-            this.lastError = error.message;
-            this.logger.error('Error running worker', error.stack);
+            this.lastError = error?.message || 'Unknown worker error';
+            this.logger.error('Error running worker', error?.stack || error);
             throw error;
         }
     }
@@ -383,14 +397,20 @@ export class TemporalWorkerManagerService
     async restartWorker(): Promise<void> {
         this.logger.log('Restarting worker...');
 
-        if (this.isRunning) {
-            await this.shutdown();
-        }
+        try {
+            if (this.isRunning) {
+                await this.shutdown();
+            }
 
-        await this.initializeWorker();
+            await this.initializeWorker();
 
-        if (this.options.autoStart !== false) {
-            await this.startWorker();
+            if (this.options.autoStart !== false) {
+                await this.startWorker();
+            }
+        } catch (error) {
+            this.lastError = error?.message || 'Unknown restart error';
+            this.logger.error('Error during worker restart', error?.stack || error);
+            throw error;
         }
     }
 
@@ -435,7 +455,7 @@ export class TemporalWorkerManagerService
         return {
             isInitialized: this.isInitialized,
             isRunning: this.isRunning,
-            isHealthy: this.isInitialized && !this.lastError,
+            isHealthy: this.isInitialized && !this.lastError && this.connection !== null,
             taskQueue: this.options.taskQueue,
             namespace: this.options.connection?.namespace || DEFAULT_NAMESPACE,
             workflowSource: this.options.workflowBundle

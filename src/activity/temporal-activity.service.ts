@@ -3,7 +3,7 @@ import { DiscoveryService } from '@nestjs/core';
 import { TemporalMetadataAccessor } from '../worker/temporal-metadata.accessor';
 import { ActivityModuleOptions, ActivityInfo, ActivityMethodHandler } from '../interfaces';
 import { ACTIVITY_MODULE_OPTIONS } from '../constants';
-import { ConditionalLogger } from '../utils/conditional-logger';
+import { TemporalLogger } from '../utils/logger';
 
 /**
  * Temporal Activity Service
@@ -11,7 +11,7 @@ import { ConditionalLogger } from '../utils/conditional-logger';
  */
 @Injectable()
 export class TemporalActivityService implements OnModuleInit {
-    private readonly logger: ConditionalLogger;
+    private readonly logger: TemporalLogger;
     private readonly discoveredActivities = new Map<string, ActivityInfo>();
     private readonly activityHandlers = new Map<string, ActivityMethodHandler>();
 
@@ -21,7 +21,7 @@ export class TemporalActivityService implements OnModuleInit {
         private readonly discoveryService: DiscoveryService,
         private readonly metadataAccessor: TemporalMetadataAccessor,
     ) {
-        this.logger = new ConditionalLogger(TemporalActivityService.name, {
+        this.logger = new TemporalLogger(TemporalActivityService.name, {
             enableLogger: options.enableLogger,
             logLevel: options.logLevel,
         });
