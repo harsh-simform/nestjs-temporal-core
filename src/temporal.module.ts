@@ -6,6 +6,7 @@ import { ERRORS, TEMPORAL_MODULE_OPTIONS } from './constants';
 import { TemporalClientModule } from './client';
 import { TemporalWorkerModule } from './worker';
 import { TemporalDiscoveryService, TemporalScheduleManagerService } from './discovery';
+import { TemporalLoggerManager } from './utils/logger';
 
 @Module({})
 export class TemporalModule {
@@ -29,6 +30,18 @@ export class TemporalModule {
                 provide: TEMPORAL_MODULE_OPTIONS,
                 useValue: options,
             },
+            {
+                provide: TemporalLoggerManager,
+                useFactory: () => {
+                    const manager = TemporalLoggerManager.getInstance();
+                    manager.configure({
+                        enableLogger: options.enableLogger,
+                        logLevel: options.logLevel,
+                        appName: 'NestJS-Temporal-Core',
+                    });
+                    return manager;
+                },
+            },
             TemporalDiscoveryService,
             TemporalScheduleManagerService,
             TemporalService,
@@ -38,7 +51,7 @@ export class TemporalModule {
             module: TemporalModule,
             imports: [DiscoveryModule, ...imports],
             providers,
-            exports: [TemporalService, TEMPORAL_MODULE_OPTIONS],
+            exports: [TemporalService, TemporalLoggerManager, TEMPORAL_MODULE_OPTIONS],
             global: options.isGlobal,
         };
     }
@@ -115,13 +128,31 @@ export class TemporalModule {
         );
 
         // Add remaining providers
-        providers.push(TemporalDiscoveryService, TemporalScheduleManagerService, TemporalService);
+        providers.push(
+            {
+                provide: TemporalLoggerManager,
+                useFactory: async (...args: unknown[]) => {
+                    const temporalOptions = await this.createOptionsFromFactory(options, args);
+                    const manager = TemporalLoggerManager.getInstance();
+                    manager.configure({
+                        enableLogger: temporalOptions.enableLogger,
+                        logLevel: temporalOptions.logLevel,
+                        appName: 'NestJS-Temporal-Core',
+                    });
+                    return manager;
+                },
+                inject: options.inject,
+            },
+            TemporalDiscoveryService,
+            TemporalScheduleManagerService,
+            TemporalService,
+        );
 
         return {
             module: TemporalModule,
             imports: [...(options.imports || []), ...imports],
             providers,
-            exports: [TemporalService, TEMPORAL_MODULE_OPTIONS],
+            exports: [TemporalService, TemporalLoggerManager, TEMPORAL_MODULE_OPTIONS],
             global: options.isGlobal,
         };
     }

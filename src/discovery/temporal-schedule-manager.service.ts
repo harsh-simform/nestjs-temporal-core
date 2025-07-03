@@ -1,8 +1,9 @@
-import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { Duration } from '@temporalio/common';
 import { ScheduledMethodInfo, ScheduleStats, ScheduleStatus } from '../interfaces';
 import { TemporalDiscoveryService } from './temporal-discovery.service';
 import { TemporalScheduleService } from '../client';
+import { createLogger } from '../utils/logger';
 
 /**
  * Streamlined Schedule Manager Service
@@ -10,7 +11,7 @@ import { TemporalScheduleService } from '../client';
  */
 @Injectable()
 export class TemporalScheduleManagerService implements OnApplicationBootstrap, OnModuleDestroy {
-    private readonly logger = new Logger(TemporalScheduleManagerService.name);
+    private readonly logger = createLogger(TemporalScheduleManagerService.name);
 
     // Track managed schedules and their status
     private readonly managedSchedules = new Map<string, ScheduleStatus>();

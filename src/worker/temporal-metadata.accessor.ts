@@ -1,6 +1,7 @@
-import { Injectable, Logger, Type } from '@nestjs/common';
+import { Injectable, Type } from '@nestjs/common';
 import { TEMPORAL_ACTIVITY, TEMPORAL_ACTIVITY_METHOD } from '../constants';
 import { ActivityMetadata, ActivityMethodHandler, ActivityMethodMetadata } from '../interfaces';
+import { createLogger } from '../utils/logger';
 
 /**
  * Streamlined Temporal Metadata Accessor
@@ -8,7 +9,7 @@ import { ActivityMetadata, ActivityMethodHandler, ActivityMethodMetadata } from 
  */
 @Injectable()
 export class TemporalMetadataAccessor {
-    private readonly logger = new Logger(TemporalMetadataAccessor.name);
+    private readonly logger = createLogger(TemporalMetadataAccessor.name);
 
     // Efficient caching to avoid repeated reflection calls
     private readonly activityClassCache = new WeakMap<Type<unknown>, ActivityMetadata | null>();

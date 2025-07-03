@@ -12,7 +12,7 @@ import {
 import { TemporalClientService, TemporalScheduleService } from './client';
 import { TemporalDiscoveryService, TemporalScheduleManagerService } from './discovery';
 import { TemporalWorkerManagerService } from './worker';
-import { TemporalLogger } from './utils/logger';
+import { createLogger, TemporalLogger } from './utils/logger';
 
 /**
  * Streamlined unified service for interacting with Temporal
@@ -59,10 +59,7 @@ export class TemporalService implements OnModuleInit {
         private readonly options: TemporalOptions,
         @Optional() private readonly workerManager?: TemporalWorkerManagerService,
     ) {
-        this.logger = new TemporalLogger(TemporalService.name, {
-            enableLogger: this.options.enableLogger,
-            logLevel: this.options.logLevel,
-        });
+        this.logger = createLogger(TemporalService.name);
     }
 
     async onModuleInit() {

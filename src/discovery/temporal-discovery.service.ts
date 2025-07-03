@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import { DiscoveryService, MetadataScanner } from '@nestjs/core';
 import { InstanceWrapper } from '@nestjs/core/injector/instance-wrapper';
 import {
@@ -15,6 +15,7 @@ import {
     SignalMethodHandler,
     SignalMethodInfo,
 } from '../interfaces';
+import { createLogger } from '../utils/logger';
 
 /**
  * Streamlined Discovery Service
@@ -22,7 +23,7 @@ import {
  */
 @Injectable()
 export class TemporalDiscoveryService implements OnModuleInit {
-    private readonly logger = new Logger(TemporalDiscoveryService.name);
+    private readonly logger = createLogger(TemporalDiscoveryService.name);
 
     // Efficient storage for discovered components
     private readonly scheduledWorkflows = new Map<string, ScheduledMethodInfo>();

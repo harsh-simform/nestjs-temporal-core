@@ -1,8 +1,8 @@
 import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { Client, WorkflowClient, WorkflowHandle } from '@temporalio/client';
 import { ERRORS, TEMPORAL_CLIENT, TEMPORAL_MODULE_OPTIONS } from '../constants';
-import { StartWorkflowOptions, LogLevel } from '../interfaces';
-import { TemporalLogger } from '../utils/logger';
+import { StartWorkflowOptions } from '../interfaces';
+import { createLogger, TemporalLogger } from '../utils/logger';
 
 /**
  * Streamlined Temporal Client Service
@@ -20,10 +20,7 @@ export class TemporalClientService implements OnModuleInit {
         private readonly options: Record<string, unknown>,
     ) {
         this.workflowClient = this.client?.workflow || null;
-        this.logger = new TemporalLogger(TemporalClientService.name, {
-            enableLogger: options.enableLogger as boolean | undefined,
-            logLevel: options.logLevel as LogLevel | undefined,
-        });
+        this.logger = createLogger(TemporalClientService.name);
     }
 
     async onModuleInit() {

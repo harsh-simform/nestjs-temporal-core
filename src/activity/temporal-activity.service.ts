@@ -8,7 +8,7 @@ import {
     ActivityMethodOptions,
 } from '../interfaces';
 import { ACTIVITY_MODULE_OPTIONS } from '../constants';
-import { TemporalLogger } from '../utils/logger';
+import { createLogger, TemporalLogger } from '../utils/logger';
 
 /**
  * Temporal Activity Service
@@ -26,10 +26,7 @@ export class TemporalActivityService implements OnModuleInit {
         private readonly discoveryService: DiscoveryService,
         private readonly metadataAccessor: TemporalMetadataAccessor,
     ) {
-        this.logger = new TemporalLogger(TemporalActivityService.name, {
-            enableLogger: options.enableLogger,
-            logLevel: options.logLevel,
-        });
+        this.logger = createLogger(TemporalActivityService.name);
     }
 
     async onModuleInit() {

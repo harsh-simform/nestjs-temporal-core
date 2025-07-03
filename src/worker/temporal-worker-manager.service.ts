@@ -10,7 +10,7 @@ import { NativeConnection, Worker } from '@temporalio/worker';
 import { TemporalMetadataAccessor } from './temporal-metadata.accessor';
 import { DEFAULT_NAMESPACE, ERRORS, TEMPORAL_MODULE_OPTIONS, WORKER_PRESETS } from '../constants';
 import { ActivityMethodHandler, WorkerCreateOptions, WorkerStatus, LogLevel } from '../interfaces';
-import { TemporalLogger } from '../utils/logger';
+import { createLogger, TemporalLogger } from '../utils/logger';
 
 // Worker-specific options interface to properly type the injected options
 interface WorkerModuleOptions {
@@ -55,10 +55,7 @@ export class TemporalWorkerManagerService
         private readonly discoveryService: DiscoveryService,
         private readonly metadataAccessor: TemporalMetadataAccessor,
     ) {
-        this.logger = new TemporalLogger(TemporalWorkerManagerService.name, {
-            enableLogger: options?.enableLogger,
-            logLevel: options?.logLevel,
-        });
+        this.logger = createLogger(TemporalWorkerManagerService.name);
     }
 
     async onModuleInit() {

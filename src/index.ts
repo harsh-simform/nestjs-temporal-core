@@ -39,6 +39,11 @@ export { TemporalSchedulesModule, TemporalSchedulesService } from './schedules';
 export { TemporalDiscoveryService, TemporalScheduleManagerService } from './discovery';
 
 // ==========================================
+// Logging Utilities
+// ==========================================
+export * from './utils';
+
+// ==========================================
 // All Decorators
 // ==========================================
 export * from './decorators';

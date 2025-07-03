@@ -2,7 +2,7 @@ import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { Client, ScheduleClient, ScheduleHandle, ScheduleOverlapPolicy } from '@temporalio/client';
 import { Duration } from '@temporalio/common';
 import { ERRORS, TEMPORAL_CLIENT, TEMPORAL_MODULE_OPTIONS } from '../constants';
-import { TemporalLogger } from '../utils/logger';
+import { createLogger, TemporalLogger } from '../utils/logger';
 import { TemporalOptions } from '../interfaces';
 
 /**
@@ -20,10 +20,7 @@ export class TemporalScheduleService implements OnModuleInit {
         @Inject(TEMPORAL_MODULE_OPTIONS)
         private readonly options: TemporalOptions,
     ) {
-        this.logger = new TemporalLogger(TemporalScheduleService.name, {
-            enableLogger: this.options.enableLogger,
-            logLevel: this.options.logLevel,
-        });
+        this.logger = createLogger(TemporalScheduleService.name);
     }
 
     async onModuleInit(): Promise<void> {

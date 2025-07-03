@@ -4,7 +4,7 @@ import { TemporalAsyncOptions, TemporalOptions, TemporalOptionsFactory } from '.
 import { DEFAULT_NAMESPACE, ERRORS, TEMPORAL_CLIENT, TEMPORAL_MODULE_OPTIONS } from '../constants';
 import { TemporalClientService } from './temporal-client.service';
 import { TemporalScheduleService } from './temporal-schedule.service';
-import { TemporalLogger } from '../utils/logger';
+import { createLogger, TemporalLogger } from '../utils/logger';
 
 interface ClientConnectionOptions {
     address: string;
@@ -21,17 +21,8 @@ interface ClientConnectionOptions {
 @Global()
 @Module({})
 export class TemporalClientModule {
-    private static createModuleLogger(options?: Record<string, unknown>): TemporalLogger {
-        return new TemporalLogger(TemporalClientModule.name, {
-            enableLogger: options?.enableLogger as boolean | undefined,
-            logLevel: options?.logLevel as
-                | 'error'
-                | 'warn'
-                | 'info'
-                | 'debug'
-                | 'verbose'
-                | undefined,
-        });
+    private static createModuleLogger(_options?: Record<string, unknown>): TemporalLogger {
+        return createLogger(TemporalClientModule.name);
     }
 
     // ==========================================

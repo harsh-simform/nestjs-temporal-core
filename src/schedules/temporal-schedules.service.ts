@@ -7,7 +7,7 @@ import {
     ScheduledOptions,
 } from '../interfaces';
 import { SCHEDULES_MODULE_OPTIONS } from '../constants';
-import { TemporalLogger } from '../utils/logger';
+import { createLogger, TemporalLogger } from '../utils/logger';
 
 /**
  * Temporal Schedules Service
@@ -23,10 +23,7 @@ export class TemporalSchedulesService implements OnModuleInit {
         private readonly options: SchedulesModuleOptions,
         private readonly discoveryService: TemporalDiscoveryService,
     ) {
-        this.logger = new TemporalLogger(TemporalSchedulesService.name, {
-            enableLogger: options.enableLogger,
-            logLevel: options.logLevel,
-        });
+        this.logger = createLogger(TemporalSchedulesService.name);
     }
 
     async onModuleInit() {
