@@ -1,4 +1,5 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+import { Duration } from '@temporalio/common';
 import { ScheduledMethodInfo, ScheduleStats, ScheduleStatus } from '../interfaces';
 import { TemporalDiscoveryService } from './temporal-discovery.service';
 import { TemporalScheduleService } from '../client';
@@ -106,7 +107,10 @@ export class TemporalScheduleManagerService implements OnApplicationBootstrap, O
         }
 
         // Determine task queue
-        const taskQueue = this.resolveTaskQueue(scheduleOptions, controllerInfo);
+        const taskQueue = this.resolveTaskQueue(
+            scheduleOptions as unknown as Record<string, unknown>,
+            controllerInfo as unknown as Record<string, unknown>,
+        );
 
         // Create the appropriate schedule type
         if (scheduleOptions.cron) {
@@ -136,7 +140,7 @@ export class TemporalScheduleManagerService implements OnApplicationBootstrap, O
         await this.scheduleService.createCronSchedule(
             scheduleOptions.scheduleId,
             workflowName,
-            scheduleOptions.cron,
+            scheduleOptions.cron!,
             taskQueue,
             [], // Arguments can be enhanced in future versions
             {
@@ -164,7 +168,7 @@ export class TemporalScheduleManagerService implements OnApplicationBootstrap, O
         await this.scheduleService.createIntervalSchedule(
             scheduleOptions.scheduleId,
             workflowName,
-            scheduleOptions.interval,
+            scheduleOptions.interval! as Duration,
             taskQueue,
             [], // Arguments can be enhanced in future versions
             {
@@ -344,8 +348,15 @@ export class TemporalScheduleManagerService implements OnApplicationBootstrap, O
     /**
      * Resolve the task queue for a schedule
      */
-    private resolveTaskQueue(scheduleOptions: any, controllerInfo: any): string {
-        return scheduleOptions.taskQueue || controllerInfo.taskQueue || 'default';
+    private resolveTaskQueue(
+        scheduleOptions: Record<string, unknown>,
+        controllerInfo: Record<string, unknown>,
+    ): string {
+        return (
+            (scheduleOptions.taskQueue as string) ||
+            (controllerInfo.taskQueue as string) ||
+            'default'
+        );
     }
 
     /**

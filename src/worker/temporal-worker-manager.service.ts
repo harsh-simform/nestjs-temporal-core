@@ -9,13 +9,30 @@ import { DiscoveryService } from '@nestjs/core';
 import { NativeConnection, Worker } from '@temporalio/worker';
 import { TemporalMetadataAccessor } from './temporal-metadata.accessor';
 import { DEFAULT_NAMESPACE, ERRORS, TEMPORAL_MODULE_OPTIONS, WORKER_PRESETS } from '../constants';
-import { ActivityMethodHandler, WorkerCreateOptions, WorkerStatus } from '../interfaces';
+import { ActivityMethodHandler, WorkerCreateOptions, WorkerStatus, LogLevel } from '../interfaces';
 import { TemporalLogger } from '../utils/logger';
 
-/**
- * Streamlined Temporal Worker Manager Service
- * Creates and manages Temporal workers with comprehensive lifecycle management
- */
+// Worker-specific options interface to properly type the injected options
+interface WorkerModuleOptions {
+    connection?: {
+        address?: string;
+        namespace?: string;
+        tls?: boolean | object;
+        apiKey?: string;
+        metadata?: Record<string, string>;
+    };
+    taskQueue?: string;
+    workflowsPath?: string;
+    workflowBundle?: unknown;
+    activityClasses?: Array<unknown>;
+    autoStart?: boolean;
+    autoRestart?: boolean;
+    allowWorkerFailure?: boolean;
+    workerOptions?: WorkerCreateOptions;
+    enableLogger?: boolean;
+    logLevel?: LogLevel;
+}
+
 @Injectable()
 export class TemporalWorkerManagerService
     implements OnModuleInit, OnModuleDestroy, OnApplicationBootstrap
@@ -30,22 +47,19 @@ export class TemporalWorkerManagerService
     private startedAt?: Date;
     private lastError?: string;
     private activities: Record<string, ActivityMethodHandler> = {};
+    private workerPromise: Promise<void> | null = null;
 
     constructor(
         @Inject(TEMPORAL_MODULE_OPTIONS)
-        private readonly options: any,
+        private readonly options: WorkerModuleOptions,
         private readonly discoveryService: DiscoveryService,
         private readonly metadataAccessor: TemporalMetadataAccessor,
     ) {
         this.logger = new TemporalLogger(TemporalWorkerManagerService.name, {
-            enableLogger: options.enableLogger,
-            logLevel: options.logLevel,
+            enableLogger: options?.enableLogger,
+            logLevel: options?.logLevel,
         });
     }
-
-    // ==========================================
-    // Lifecycle Methods
-    // ==========================================
 
     async onModuleInit() {
         try {
@@ -57,7 +71,7 @@ export class TemporalWorkerManagerService
             this.lastError = error?.message || 'Unknown initialization error';
             this.logger.error('Error during worker initialization', error?.stack || error);
 
-            if (this.options.allowWorkerFailure !== false) {
+            if (this.options?.allowWorkerFailure !== false) {
                 this.logger.warn('Continuing application startup without Temporal worker');
             } else {
                 throw error;
@@ -66,23 +80,13 @@ export class TemporalWorkerManagerService
     }
 
     async onApplicationBootstrap() {
-        if (this.options.autoStart === false || !this.worker) {
+        if (this.options?.autoStart === false || !this.worker) {
             this.logger.debug('Worker auto-start disabled or worker not initialized');
             return;
         }
 
-        // Don't block application startup if worker fails to start
-        try {
-            await this.startWorker();
-        } catch (error) {
-            this.logger.error(
-                'Failed to start worker during application bootstrap',
-                error?.stack || error,
-            );
-            if (this.options.allowWorkerFailure === false) {
-                throw error;
-            }
-        }
+        // Start worker in background - DO NOT BLOCK APPLICATION STARTUP
+        this.startWorkerInBackground();
     }
 
     async onModuleDestroy() {
@@ -90,11 +94,54 @@ export class TemporalWorkerManagerService
     }
 
     // ==========================================
-    // Worker Initialization
+    // Worker Lifecycle (NON-BLOCKING)
     // ==========================================
 
     /**
-     * Initialize the worker with comprehensive setup
+     * Start worker in background without blocking application startup
+     */
+    private startWorkerInBackground(): void {
+        if (!this.worker || this.isRunning) {
+            return;
+        }
+
+        this.logger.log(`Starting worker for task queue: ${this.options?.taskQueue} in background`);
+
+        this.workerPromise = this.runWorkerLoop().catch((error) => {
+            this.isRunning = false;
+            this.lastError = error?.message || 'Unknown worker error';
+            this.logger.error('Worker crashed', error?.stack || error);
+
+            // Optionally restart worker after delay
+            if (this.options?.autoRestart !== false) {
+                setTimeout(() => {
+                    this.logger.log('Attempting to restart worker...');
+                    this.startWorkerInBackground();
+                }, 5000);
+            }
+        });
+    }
+
+    /**
+     * Worker run loop (blocking, but runs in background)
+     */
+    private async runWorkerLoop(): Promise<void> {
+        if (!this.worker) {
+            throw new Error(ERRORS.WORKER_NOT_INITIALIZED);
+        }
+
+        this.isRunning = true;
+        this.startedAt = new Date();
+        this.lastError = undefined;
+
+        this.logger.log('Worker started successfully');
+
+        // This blocks, but it's running in background
+        await this.worker.run();
+    }
+
+    /**
+     * Initialize worker but don't start it yet
      */
     private async initializeWorker(): Promise<void> {
         this.validateConfiguration();
@@ -104,18 +151,18 @@ export class TemporalWorkerManagerService
         this.logWorkerConfiguration();
     }
 
-    /**
-     * Validate worker configuration before initialization
-     */
     private validateConfiguration(): void {
-        if (!this.options.taskQueue) {
+        const taskQueue = this.options?.taskQueue as string;
+        if (!taskQueue) {
             throw new Error(ERRORS.MISSING_TASK_QUEUE);
         }
 
-        const hasWorkflowsPath = Boolean(this.options.workflowsPath);
-        const hasWorkflowBundle = Boolean(this.options.workflowBundle);
+        const workflowsPath = this.options?.workflowsPath as string | undefined;
+        const workflowBundle = this.options?.workflowBundle as unknown;
 
-        // Allow worker to run with only activities (no workflows)
+        const hasWorkflowsPath = Boolean(workflowsPath);
+        const hasWorkflowBundle = Boolean(workflowBundle);
+
         if (hasWorkflowsPath && hasWorkflowBundle) {
             throw new Error('Cannot specify both workflowsPath and workflowBundle');
         }
@@ -129,19 +176,17 @@ export class TemporalWorkerManagerService
         }
     }
 
-    /**
-     * Create connection to Temporal server
-     */
     private async createConnection(): Promise<void> {
-        const connectionOptions: any = {
-            address: this.options.connection?.address || 'localhost:7233',
-            tls: this.options.connection?.tls,
+        const connection = this.options?.connection;
+        const connectionOptions: Record<string, unknown> = {
+            address: connection?.address || 'localhost:7233',
+            tls: connection?.tls,
         };
 
-        if (this.options.connection?.apiKey) {
+        if (connection?.apiKey) {
             connectionOptions.metadata = {
-                ...(this.options.connection.metadata || {}),
-                authorization: `Bearer ${this.options.connection.apiKey}`,
+                ...(connection?.metadata || {}),
+                authorization: `Bearer ${connection.apiKey}`,
             };
         }
 
@@ -150,9 +195,6 @@ export class TemporalWorkerManagerService
         this.logger.debug('Temporal connection established');
     }
 
-    /**
-     * Create the Temporal worker instance
-     */
     private async createWorker(): Promise<void> {
         if (!this.connection) {
             throw new Error('Connection not established');
@@ -160,40 +202,38 @@ export class TemporalWorkerManagerService
 
         const workerOptions = this.buildWorkerOptions();
 
+        const connection = this.options?.connection;
+        const namespace = connection?.namespace || DEFAULT_NAMESPACE;
+
         this.worker = await Worker.create({
             connection: this.connection,
-            namespace: this.options.connection?.namespace || DEFAULT_NAMESPACE,
+            namespace,
+            taskQueue: this.options?.taskQueue as string,
             ...workerOptions,
         });
 
         this.logger.log(
-            `Worker created for queue: ${this.options.taskQueue} in namespace: ${
-                this.options.connection?.namespace || DEFAULT_NAMESPACE
-            }`,
+            `Worker created for queue: ${this.options?.taskQueue} in namespace: ${namespace}`,
         );
     }
 
-    /**
-     * Build comprehensive worker options from configuration
-     */
-    private buildWorkerOptions(): any {
-        const baseOptions: any = {
-            taskQueue: this.options.taskQueue,
+    private buildWorkerOptions(): Record<string, unknown> {
+        const baseOptions: Record<string, unknown> = {
+            taskQueue: this.options?.taskQueue,
             activities: this.activities,
         };
 
-        // Add workflow configuration
-        if (this.options.workflowBundle) {
-            baseOptions.workflowBundle = this.options.workflowBundle;
-        } else if (this.options.workflowsPath) {
-            baseOptions.workflowsPath = this.options.workflowsPath;
+        const workflowBundle = this.options?.workflowBundle;
+        const workflowsPath = this.options?.workflowsPath as string | undefined;
+
+        if (workflowBundle) {
+            baseOptions.workflowBundle = workflowBundle;
+        } else if (workflowsPath) {
+            baseOptions.workflowsPath = workflowsPath;
         }
 
-        // Apply environment-specific defaults
         const defaultOptions = this.getEnvironmentDefaults();
-
-        // Merge with user-provided options
-        const userOptions = this.options.workerOptions || {};
+        const userOptions = (this.options?.workerOptions as Record<string, unknown>) || {};
 
         return {
             ...baseOptions,
@@ -202,9 +242,6 @@ export class TemporalWorkerManagerService
         };
     }
 
-    /**
-     * Get environment-specific default worker options
-     */
     private getEnvironmentDefaults(): WorkerCreateOptions {
         const env = process.env.NODE_ENV || 'development';
 
@@ -223,13 +260,6 @@ export class TemporalWorkerManagerService
         }
     }
 
-    // ==========================================
-    // Activity Discovery
-    // ==========================================
-
-    /**
-     * Discover and register activity implementations
-     */
     private async discoverActivities(): Promise<Record<string, ActivityMethodHandler>> {
         const activities: Record<string, ActivityMethodHandler> = {};
         const providers = this.discoveryService.getProviders();
@@ -240,15 +270,14 @@ export class TemporalWorkerManagerService
 
             if (!targetClass) return false;
 
-            // Filter by specific activity classes if provided
-            if (this.options.worker?.activityClasses?.length) {
+            const activityClasses = this.options?.activityClasses;
+            if (activityClasses?.length) {
                 return (
-                    this.options.worker.activityClasses.includes(targetClass) &&
+                    activityClasses.includes(targetClass) &&
                     this.metadataAccessor.isActivity(targetClass)
                 );
             }
 
-            // Otherwise, include all classes marked with @Activity()
             return this.metadataAccessor.isActivity(targetClass);
         });
 
@@ -262,7 +291,6 @@ export class TemporalWorkerManagerService
                 const className = instance.constructor.name;
                 this.logger.debug(`Processing activity class: ${className}`);
 
-                // Validate the activity class
                 const validation = this.metadataAccessor.validateActivityClass(
                     instance.constructor,
                 );
@@ -282,7 +310,7 @@ export class TemporalWorkerManagerService
             } catch (error) {
                 this.logger.error(
                     `Failed to process activity class ${instance.constructor.name}:`,
-                    error.stack,
+                    error?.stack || error,
                 );
             }
         }
@@ -293,84 +321,38 @@ export class TemporalWorkerManagerService
         return activities;
     }
 
-    /**
-     * Log comprehensive worker configuration
-     */
     private logWorkerConfiguration(): void {
+        const connection = this.options?.connection;
+        const workflowBundle = this.options?.workflowBundle;
+        const workflowsPath = this.options?.workflowsPath;
+
         const config = {
-            taskQueue: this.options.taskQueue,
-            namespace: this.options.connection?.namespace || DEFAULT_NAMESPACE,
-            workflowSource: this.options.workflowBundle
-                ? 'bundle'
-                : this.options.workflowsPath
-                  ? 'filesystem'
-                  : 'none',
+            taskQueue: this.options?.taskQueue,
+            namespace: connection?.namespace || DEFAULT_NAMESPACE,
+            workflowSource: workflowBundle ? 'bundle' : workflowsPath ? 'filesystem' : 'none',
             activitiesCount: Object.keys(this.activities).length,
-            autoStart: this.options.autoStart !== false,
+            autoStart: this.options?.autoStart !== false,
             environment: process.env.NODE_ENV || 'development',
         };
 
         this.logger.log('Worker configuration summary:');
-        this.logger.log(JSON.stringify(config, null, 2));
-
-        if (this.options.workerOptions) {
-            const additionalOptions = Object.keys(this.options.workerOptions).filter(
-                (key) =>
-                    !['taskQueue', 'activities', 'workflowsPath', 'workflowBundle'].includes(key),
-            );
-
-            if (additionalOptions.length > 0) {
-                this.logger.debug(`Additional worker options: ${additionalOptions.join(', ')}`);
-            }
-        }
+        this.logger.debug(JSON.stringify(config, null, 2));
     }
 
     // ==========================================
-    // Worker Management
+    // Public API
     // ==========================================
 
-    /**
-     * Start the worker with enhanced error handling
-     */
-    async startWorker(): Promise<void> {
-        if (!this.worker) {
-            throw new Error(ERRORS.WORKER_NOT_INITIALIZED);
-        }
-
-        if (this.isRunning) {
-            this.logger.warn('Worker is already running');
-            return;
-        }
-
-        try {
-            this.logger.log(`Starting worker for task queue: ${this.options.taskQueue}`);
-            this.isRunning = true;
-            this.startedAt = new Date();
-            this.lastError = undefined;
-
-            // Start the worker (this will block until shutdown)
-            await this.worker.run();
-        } catch (error) {
-            this.isRunning = false;
-            this.lastError = error?.message || 'Unknown worker error';
-            this.logger.error('Error running worker', error?.stack || error);
-            throw error;
-        }
-    }
-
-    /**
-     * Shutdown the worker and clean up resources
-     */
     async shutdown(): Promise<void> {
         this.logger.log('Shutting down Temporal worker...');
 
-        if (this.worker) {
+        if (this.worker && this.isRunning) {
             try {
                 await this.worker.shutdown();
                 this.isRunning = false;
                 this.logger.log('Worker shut down successfully');
             } catch (error) {
-                this.logger.error('Error during worker shutdown', error.stack);
+                this.logger.error('Error during worker shutdown', error?.stack);
             } finally {
                 this.worker = null;
             }
@@ -381,7 +363,7 @@ export class TemporalWorkerManagerService
                 await this.connection.close();
                 this.logger.log('Connection closed successfully');
             } catch (error) {
-                this.logger.error('Error during connection close', error.stack);
+                this.logger.error('Error during connection close', error?.stack);
             } finally {
                 this.connection = null;
             }
@@ -391,78 +373,35 @@ export class TemporalWorkerManagerService
         this.startedAt = undefined;
     }
 
-    /**
-     * Restart the worker (useful for configuration changes)
-     */
-    async restartWorker(): Promise<void> {
-        this.logger.log('Restarting worker...');
-
-        try {
-            if (this.isRunning) {
-                await this.shutdown();
-            }
-
-            await this.initializeWorker();
-
-            if (this.options.autoStart !== false) {
-                await this.startWorker();
-            }
-        } catch (error) {
-            this.lastError = error?.message || 'Unknown restart error';
-            this.logger.error('Error during worker restart', error?.stack || error);
-            throw error;
-        }
-    }
-
-    // ==========================================
-    // Public API Methods
-    // ==========================================
-
-    /**
-     * Get the worker instance
-     */
     getWorker(): Worker | null {
         return this.worker;
     }
 
-    /**
-     * Get the connection instance
-     */
     getConnection(): NativeConnection | null {
         return this.connection;
     }
 
-    /**
-     * Check if worker is running
-     */
     isWorkerRunning(): boolean {
         return this.isRunning;
     }
 
-    /**
-     * Check if worker is initialized
-     */
     isWorkerInitialized(): boolean {
         return this.isInitialized;
     }
 
-    /**
-     * Get comprehensive worker status for monitoring
-     */
     getWorkerStatus(): WorkerStatus {
         const uptime = this.startedAt ? Date.now() - this.startedAt.getTime() : undefined;
+        const connection = this.options?.connection;
+        const workflowBundle = this.options?.workflowBundle;
+        const workflowsPath = this.options?.workflowsPath;
 
         return {
             isInitialized: this.isInitialized,
             isRunning: this.isRunning,
             isHealthy: this.isInitialized && !this.lastError && this.connection !== null,
-            taskQueue: this.options.taskQueue,
-            namespace: this.options.connection?.namespace || DEFAULT_NAMESPACE,
-            workflowSource: this.options.workflowBundle
-                ? 'bundle'
-                : this.options.workflowsPath
-                  ? 'filesystem'
-                  : 'none',
+            taskQueue: (this.options?.taskQueue as string) || 'unknown',
+            namespace: connection?.namespace || DEFAULT_NAMESPACE,
+            workflowSource: workflowBundle ? 'bundle' : workflowsPath ? 'filesystem' : 'none',
             activitiesCount: Object.keys(this.activities).length,
             lastError: this.lastError,
             startedAt: this.startedAt,
@@ -470,53 +409,33 @@ export class TemporalWorkerManagerService
         };
     }
 
-    /**
-     * Get list of registered activities
-     */
     getRegisteredActivities(): string[] {
         return Object.keys(this.activities);
     }
 
-    /**
-     * Get detailed activity information
-     */
-    getActivityInfo(): Array<{
-        name: string;
-        className: string;
-        methodName: string;
-    }> {
-        const activityInfo: Array<{
-            name: string;
-            className: string;
-            methodName: string;
-        }> = [];
+    async restartWorker(): Promise<void> {
+        this.logger.log('Restarting Temporal worker...');
 
-        const providers = this.discoveryService.getProviders();
+        // First shutdown the existing worker
+        await this.shutdown();
 
-        for (const wrapper of providers) {
-            const { instance } = wrapper;
-            if (!instance || !this.metadataAccessor.isActivity(instance.constructor)) {
-                continue;
+        // Re-initialize the worker
+        try {
+            await this.initializeWorker();
+            this.isInitialized = true;
+            this.logger.log('Worker restarted successfully');
+
+            // Start the worker if auto-start is enabled
+            if (this.options?.autoStart !== false) {
+                this.startWorkerInBackground();
             }
-
-            const className = instance.constructor.name;
-            const methodNames = this.metadataAccessor.getActivityMethodNames(instance.constructor);
-
-            for (const methodName of methodNames) {
-                activityInfo.push({
-                    name: methodName,
-                    className,
-                    methodName,
-                });
-            }
+        } catch (error) {
+            this.lastError = (error as Error)?.message || 'Unknown restart error';
+            this.logger.error('Error during worker restart', (error as Error)?.stack || error);
+            throw error;
         }
-
-        return activityInfo;
     }
 
-    /**
-     * Health check method for monitoring
-     */
     async healthCheck(): Promise<{
         status: 'healthy' | 'unhealthy' | 'degraded';
         details: WorkerStatus;

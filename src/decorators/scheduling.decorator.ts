@@ -172,6 +172,7 @@ function isValidIntervalExpression(interval: string): boolean {
     }
 
     // Match patterns like: 1s, 5m, 2h, 1d, 30s, etc.
-    const intervalPattern = /^\d+[smhd]$/;
+    // Also support ms (milliseconds) for very short intervals
+    const intervalPattern = /^\d+(ms|[smhd])$/;
     return intervalPattern.test(interval.trim());
 }

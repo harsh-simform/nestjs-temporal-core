@@ -1,7 +1,7 @@
 import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { Client, WorkflowClient, WorkflowHandle } from '@temporalio/client';
 import { ERRORS, TEMPORAL_CLIENT, TEMPORAL_MODULE_OPTIONS } from '../constants';
-import { StartWorkflowOptions } from '../interfaces';
+import { StartWorkflowOptions, LogLevel } from '../interfaces';
 import { TemporalLogger } from '../utils/logger';
 
 /**
@@ -17,12 +17,12 @@ export class TemporalClientService implements OnModuleInit {
         @Inject(TEMPORAL_CLIENT)
         private readonly client: Client | null,
         @Inject(TEMPORAL_MODULE_OPTIONS)
-        private readonly options: any,
+        private readonly options: Record<string, unknown>,
     ) {
         this.workflowClient = this.client?.workflow || null;
         this.logger = new TemporalLogger(TemporalClientService.name, {
-            enableLogger: options.enableLogger,
-            logLevel: options.logLevel,
+            enableLogger: options.enableLogger as boolean | undefined,
+            logLevel: options.logLevel as LogLevel | undefined,
         });
     }
 
@@ -41,7 +41,7 @@ export class TemporalClientService implements OnModuleInit {
     /**
      * Start a workflow execution
      */
-    async startWorkflow<T, A extends any[]>(
+    async startWorkflow<T, A extends unknown[]>(
         workflowType: string,
         args: A,
         options: StartWorkflowOptions,
@@ -88,7 +88,7 @@ export class TemporalClientService implements OnModuleInit {
                 handle,
             };
         } catch (error) {
-            const errorMsg = `Failed to start workflow '${workflowType}': ${error.message}`;
+            const errorMsg = `Failed to start workflow '${workflowType}': ${(error as Error).message}`;
             this.logger.error(errorMsg);
             throw new Error(errorMsg);
         }
@@ -97,7 +97,11 @@ export class TemporalClientService implements OnModuleInit {
     /**
      * Send a signal to a running workflow
      */
-    async signalWorkflow(workflowId: string, signalName: string, args: any[] = []): Promise<void> {
+    async signalWorkflow(
+        workflowId: string,
+        signalName: string,
+        args: unknown[] = [],
+    ): Promise<void> {
         this.ensureClientInitialized();
 
         try {
@@ -105,7 +109,7 @@ export class TemporalClientService implements OnModuleInit {
             await handle.signal(signalName, ...args);
             this.logger.debug(`Sent signal '${signalName}' to workflow ${workflowId}`);
         } catch (error) {
-            const errorMsg = `Failed to send signal '${signalName}' to workflow ${workflowId}: ${error.message}`;
+            const errorMsg = `Failed to send signal '${signalName}' to workflow ${workflowId}: ${(error as Error).message}`;
             this.logger.error(errorMsg);
             throw new Error(errorMsg);
         }
@@ -114,7 +118,11 @@ export class TemporalClientService implements OnModuleInit {
     /**
      * Query a workflow's state
      */
-    async queryWorkflow<T>(workflowId: string, queryName: string, args: any[] = []): Promise<T> {
+    async queryWorkflow<T>(
+        workflowId: string,
+        queryName: string,
+        args: unknown[] = [],
+    ): Promise<T> {
         this.ensureClientInitialized();
 
         try {
@@ -123,7 +131,7 @@ export class TemporalClientService implements OnModuleInit {
             this.logger.debug(`Queried '${queryName}' on workflow ${workflowId}`);
             return result as T;
         } catch (error) {
-            const errorMsg = `Failed to query '${queryName}' on workflow ${workflowId}: ${error.message}`;
+            const errorMsg = `Failed to query '${queryName}' on workflow ${workflowId}: ${(error as Error).message}`;
             this.logger.error(errorMsg);
             throw new Error(errorMsg);
         }

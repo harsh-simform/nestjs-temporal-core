@@ -3,94 +3,90 @@ import { TEMPORAL_ACTIVITY, TEMPORAL_ACTIVITY_METHOD } from '../constants';
 import { ActivityMethodOptions, ActivityOptions } from '../interfaces';
 
 /**
- * Decorator that marks a class as a Temporal Activity
+ * Activity decorator for marking classes as Temporal activities
  *
- * Activities are the basic unit of work in Temporal. They can be retried independently
- * from the Workflow and are executed outside of the Workflow context.
- *
- * @param options Optional activity configuration
- *
- * @example
- * ```typescript
- * @Activity()
- * export class EmailActivities {
- *   // Activity methods go here
- * }
- *
- * @Activity({ name: 'PaymentActivities' })
- * export class PaymentService {
- *   // Activity methods go here
- * }
- * ```
+ * @param options Activity configuration options
  */
-export const Activity = (options: ActivityOptions = {}): ClassDecorator => {
-    return (target: any) => {
-        Reflect.defineMetadata(TEMPORAL_ACTIVITY, options, target);
-        SetMetadata(TEMPORAL_ACTIVITY, options)(target);
-        return target;
+export const Activity = (options?: ActivityOptions): ClassDecorator => {
+    return (target: unknown) => {
+        const metadata = {
+            ...options,
+            className: (target as { name: string }).name,
+        };
+
+        SetMetadata(TEMPORAL_ACTIVITY, metadata)(target as Function);
+        Reflect.defineMetadata(TEMPORAL_ACTIVITY, metadata, target as object);
+
+        return target as never;
     };
 };
 
 /**
- * Decorator that marks a method as a Temporal Activity Method
+ * Activity method decorator for marking methods as Temporal activity methods
  *
- * Activity methods are the implementation of individual activities that can be
- * executed by a workflow.
- *
- * @param options Optional configuration or activity name string
- *
- * @example
- * ```typescript
- * @Activity()
- * export class EmailActivities {
- *   @ActivityMethod()
- *   async sendWelcomeEmail(to: string): Promise<boolean> {
- *     // Implementation
- *     return true;
- *   }
- *
- *   @ActivityMethod('processPayment')
- *   async processPayment(orderId: string, amount: number): Promise<string> {
- *     // Implementation
- *     return 'payment-id';
- *   }
- *
- *   @ActivityMethod({
- *     name: 'sendInvoice',
- *     timeout: '30s',
- *     maxRetries: 3
- *   })
- *   async sendInvoice(orderId: string): Promise<void> {
- *     // Implementation
- *   }
- * }
- * ```
+ * @param nameOrOptions Activity name or configuration options
  */
-export const ActivityMethod = (options?: string | ActivityMethodOptions): MethodDecorator => {
-    return (_target: unknown, propertyKey: string | symbol, descriptor: PropertyDescriptor) => {
-        // Handle both string (name) and options object
-        let methodName: string;
+export const ActivityMethod = (nameOrOptions?: string | ActivityMethodOptions): MethodDecorator => {
+    return (
+        target: object,
+        propertyKey: string | symbol,
+        descriptor?: PropertyDescriptor,
+    ): PropertyDescriptor | void => {
+        let activityName: string;
         let methodOptions: ActivityMethodOptions = {};
 
-        if (typeof options === 'string') {
-            methodName = options;
-            methodOptions = { name: options };
-        } else if (options && typeof options === 'object') {
-            methodName = options.name || propertyKey.toString();
-            methodOptions = options;
+        if (typeof nameOrOptions === 'string') {
+            activityName = nameOrOptions;
+            methodOptions = { name: nameOrOptions };
+        } else if (nameOrOptions?.name) {
+            activityName = nameOrOptions.name;
+            methodOptions = nameOrOptions;
         } else {
-            methodName = propertyKey.toString();
+            activityName = propertyKey.toString();
+            methodOptions = { name: activityName };
         }
 
-        // Store metadata on the method
         const metadata = {
-            name: methodName,
+            name: activityName,
+            methodName: propertyKey.toString(),
             ...methodOptions,
         };
 
-        Reflect.defineMetadata(TEMPORAL_ACTIVITY_METHOD, metadata, descriptor.value);
-        SetMetadata(TEMPORAL_ACTIVITY_METHOD, metadata)(descriptor.value);
-
-        return descriptor;
+        if (descriptor?.value) {
+            SetMetadata(TEMPORAL_ACTIVITY_METHOD, metadata)(descriptor.value as Function);
+            Reflect.defineMetadata(TEMPORAL_ACTIVITY_METHOD, metadata, descriptor.value as object);
+            return descriptor;
+        } else {
+            // Handle property-style decorators
+            Reflect.defineMetadata(TEMPORAL_ACTIVITY_METHOD, metadata, target, propertyKey);
+        }
     };
 };
+
+/**
+ * Utility function to check if a class is marked as an Activity
+ */
+export function isActivity(target: object): boolean {
+    return Reflect.hasMetadata(TEMPORAL_ACTIVITY, target);
+}
+
+/**
+ * Utility function to get activity metadata from a class
+ */
+export function getActivityMetadata(target: object): ActivityOptions | undefined {
+    return Reflect.getMetadata(TEMPORAL_ACTIVITY, target);
+}
+
+/**
+ * Utility function to check if a method is marked as an Activity method
+ */
+export function isActivityMethod(target: object): boolean {
+    return Reflect.hasMetadata(TEMPORAL_ACTIVITY_METHOD, target);
+}
+
+/**
+ * Utility function to get activity method metadata from a method
+ */
+export function getActivityMethodMetadata(target: object): ActivityMethodOptions | undefined {
+    return Reflect.getMetadata(TEMPORAL_ACTIVITY_METHOD, target);
+}

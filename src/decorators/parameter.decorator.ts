@@ -33,21 +33,28 @@ import { WorkflowParameterMetadata } from '../interfaces';
  * ```
  */
 export const WorkflowParam = createParamDecorator(
-    (index: number | undefined, ctx: ExecutionContext) => {
+    (_index: number | undefined, _ctx: ExecutionContext) => {
         // In a real implementation, this would extract from the workflow execution context
         // For now, we store metadata about the parameter extraction requirements
-        return (target: any, propertyKey: string | symbol, parameterIndex: number) => {
-            const existingParams =
-                Reflect.getMetadata(WORKFLOW_PARAMS_METADATA, target, propertyKey) || [];
-            existingParams[parameterIndex] = {
-                type: 'param',
-                index: index !== undefined ? index : parameterIndex,
-                extractAll: index === undefined,
-            };
-            Reflect.defineMetadata(WORKFLOW_PARAMS_METADATA, existingParams, target, propertyKey);
-        };
+        return undefined; // The actual parameter extraction would be implemented in runtime
     },
 );
+
+// Internal decorator implementation for metadata storage
+export function WorkflowParamDecorator(index?: number): ParameterDecorator {
+    return (target: object, propertyKey: string | symbol | undefined, parameterIndex: number) => {
+        if (!propertyKey) return;
+
+        const existingParams: WorkflowParameterMetadata[] =
+            Reflect.getMetadata(WORKFLOW_PARAMS_METADATA, target, propertyKey) || [];
+        existingParams[parameterIndex] = {
+            type: 'param',
+            index: index !== undefined ? index : parameterIndex,
+            extractAll: index === undefined,
+        };
+        Reflect.defineMetadata(WORKFLOW_PARAMS_METADATA, existingParams, target, propertyKey);
+    };
+}
 
 /**
  * Extracts workflow execution context
@@ -77,7 +84,7 @@ export const WorkflowParam = createParamDecorator(
  * ```
  */
 export const WorkflowContext = (): ParameterDecorator => {
-    return (target: any, propertyKey: string | symbol | undefined, parameterIndex: number) => {
+    return (target: object, propertyKey: string | symbol | undefined, parameterIndex: number) => {
         if (!propertyKey) return;
 
         const existingParams =
@@ -107,7 +114,7 @@ export const WorkflowContext = (): ParameterDecorator => {
  * ```
  */
 export const WorkflowId = (): ParameterDecorator => {
-    return (target: any, propertyKey: string | symbol | undefined, parameterIndex: number) => {
+    return (target: object, propertyKey: string | symbol | undefined, parameterIndex: number) => {
         if (!propertyKey) return;
 
         const existingParams =
@@ -137,7 +144,7 @@ export const WorkflowId = (): ParameterDecorator => {
  * ```
  */
 export const RunId = (): ParameterDecorator => {
-    return (target: any, propertyKey: string | symbol | undefined, parameterIndex: number) => {
+    return (target: object, propertyKey: string | symbol | undefined, parameterIndex: number) => {
         if (!propertyKey) return;
 
         const existingParams =
@@ -167,7 +174,7 @@ export const RunId = (): ParameterDecorator => {
  * ```
  */
 export const TaskQueue = (): ParameterDecorator => {
-    return (target: any, propertyKey: string | symbol | undefined, parameterIndex: number) => {
+    return (target: object, propertyKey: string | symbol | undefined, parameterIndex: number) => {
         if (!propertyKey) return;
 
         const existingParams =
@@ -184,7 +191,7 @@ export const TaskQueue = (): ParameterDecorator => {
  * Used internally by the framework to understand how to inject parameters
  */
 export function getParameterMetadata(
-    target: any,
+    target: object,
     propertyKey: string | symbol,
 ): WorkflowParameterMetadata[] {
     return Reflect.getMetadata(WORKFLOW_PARAMS_METADATA, target, propertyKey) || [];

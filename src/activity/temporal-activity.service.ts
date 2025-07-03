@@ -1,7 +1,12 @@
-import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, OnModuleInit, Type } from '@nestjs/common';
 import { DiscoveryService } from '@nestjs/core';
 import { TemporalMetadataAccessor } from '../worker/temporal-metadata.accessor';
-import { ActivityModuleOptions, ActivityInfo, ActivityMethodHandler } from '../interfaces';
+import {
+    ActivityModuleOptions,
+    ActivityInfo,
+    ActivityMethodHandler,
+    ActivityMethodOptions,
+} from '../interfaces';
 import { ACTIVITY_MODULE_OPTIONS } from '../constants';
 import { TemporalLogger } from '../utils/logger';
 
@@ -78,10 +83,10 @@ export class TemporalActivityService implements OnModuleInit {
      * Process a single activity class
      */
     private async processActivityClass(
-        instance: any,
-        targetClass: any,
+        instance: object,
+        targetClass: unknown,
     ): Promise<ActivityInfo | null> {
-        const className = targetClass.name;
+        const className = (targetClass as { name: string }).name;
         this.logger.debug(`Processing activity class: ${className}`);
 
         // Validate the activity class
@@ -98,7 +103,7 @@ export class TemporalActivityService implements OnModuleInit {
         const methodInfos: Array<{
             name: string;
             methodName: string;
-            options: any;
+            options: ActivityMethodOptions;
         }> = [];
 
         // Register activity handlers
@@ -107,7 +112,7 @@ export class TemporalActivityService implements OnModuleInit {
 
             // Find method info
             const methodName = Object.getOwnPropertyNames(Object.getPrototypeOf(instance)).find(
-                (name) => instance[name] === handler,
+                (name) => (instance as Record<string, unknown>)[name] === handler,
             );
 
             if (methodName) {
@@ -115,7 +120,9 @@ export class TemporalActivityService implements OnModuleInit {
                 methodInfos.push({
                     name: activityName,
                     methodName,
-                    options: this.metadataAccessor.getActivityMethodOptions(method),
+                    options: this.metadataAccessor.getActivityMethodOptions(
+                        method,
+                    ) as ActivityMethodOptions,
                 });
             }
 
@@ -125,7 +132,7 @@ export class TemporalActivityService implements OnModuleInit {
         return {
             className,
             instance,
-            targetClass,
+            targetClass: targetClass as Type<unknown>,
             methods: methodInfos,
             totalMethods: methodInfos.length,
         };

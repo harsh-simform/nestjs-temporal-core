@@ -1,4 +1,4 @@
-import { DynamicModule, Module } from '@nestjs/common';
+import { DynamicModule, Module, Type } from '@nestjs/common';
 import { DiscoveryModule } from '@nestjs/core';
 import { TemporalSchedulesService } from './temporal-schedules.service';
 import { TemporalDiscoveryService } from '../discovery/temporal-discovery.service';
@@ -64,9 +64,11 @@ export class TemporalSchedulesModule {
      * Configure schedules module with asynchronous options
      */
     static forRootAsync(options: {
-        imports?: any[];
-        useFactory: (...args: any[]) => Promise<SchedulesModuleOptions> | SchedulesModuleOptions;
-        inject?: any[];
+        imports?: (Type<unknown> | DynamicModule)[];
+        useFactory: (
+            ...args: unknown[]
+        ) => Promise<SchedulesModuleOptions> | SchedulesModuleOptions;
+        inject?: string[];
         global?: boolean;
     }): DynamicModule {
         return {

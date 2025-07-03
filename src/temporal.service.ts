@@ -1,5 +1,5 @@
-import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
-import { DEFAULT_TASK_QUEUE } from './constants';
+import { Injectable, OnModuleInit, Optional, Inject } from '@nestjs/common';
+import { DEFAULT_TASK_QUEUE, TEMPORAL_MODULE_OPTIONS } from './constants';
 import {
     DiscoveryStats,
     ScheduledMethodInfo,
@@ -7,10 +7,12 @@ import {
     StartWorkflowOptions,
     SystemStatus,
     WorkerStatus,
+    TemporalOptions,
 } from './interfaces';
 import { TemporalClientService, TemporalScheduleService } from './client';
 import { TemporalDiscoveryService, TemporalScheduleManagerService } from './discovery';
 import { TemporalWorkerManagerService } from './worker';
+import { TemporalLogger } from './utils/logger';
 
 /**
  * Streamlined unified service for interacting with Temporal
@@ -46,15 +48,22 @@ import { TemporalWorkerManagerService } from './worker';
  */
 @Injectable()
 export class TemporalService implements OnModuleInit {
-    private readonly logger = new Logger(TemporalService.name);
+    private readonly logger: TemporalLogger;
 
     constructor(
         private readonly clientService: TemporalClientService,
         private readonly scheduleService: TemporalScheduleService,
         private readonly discoveryService: TemporalDiscoveryService,
         private readonly scheduleManager: TemporalScheduleManagerService,
+        @Inject(TEMPORAL_MODULE_OPTIONS)
+        private readonly options: TemporalOptions,
         @Optional() private readonly workerManager?: TemporalWorkerManagerService,
-    ) {}
+    ) {
+        this.logger = new TemporalLogger(TemporalService.name, {
+            enableLogger: this.options.enableLogger,
+            logLevel: this.options.logLevel,
+        });
+    }
 
     async onModuleInit() {
         await this.logInitializationSummary();
@@ -125,7 +134,7 @@ export class TemporalService implements OnModuleInit {
      * );
      * ```
      */
-    async startWorkflow<T, A extends any[]>(
+    async startWorkflow<T, A extends unknown[]>(
         workflowType: string,
         args: A,
         options: StartWorkflowOptions,
@@ -133,7 +142,7 @@ export class TemporalService implements OnModuleInit {
         result: Promise<T>;
         workflowId: string;
         firstExecutionRunId: string;
-        handle: any;
+        handle: unknown;
     }> {
         const enhancedOptions = this.enhanceWorkflowOptions(options);
 
@@ -147,7 +156,11 @@ export class TemporalService implements OnModuleInit {
     /**
      * Send signal to workflow with validation
      */
-    async signalWorkflow(workflowId: string, signalName: string, args: any[] = []): Promise<void> {
+    async signalWorkflow(
+        workflowId: string,
+        signalName: string,
+        args: unknown[] = [],
+    ): Promise<void> {
         this.validateWorkflowExists(workflowId);
         await this.clientService.signalWorkflow(workflowId, signalName, args);
         this.logger.debug(`Sent signal '${signalName}' to workflow ${workflowId}`);
@@ -156,7 +169,11 @@ export class TemporalService implements OnModuleInit {
     /**
      * Query workflow state with validation
      */
-    async queryWorkflow<T>(workflowId: string, queryName: string, args: any[] = []): Promise<T> {
+    async queryWorkflow<T>(
+        workflowId: string,
+        queryName: string,
+        args: unknown[] = [],
+    ): Promise<T> {
         this.validateWorkflowExists(workflowId);
         const result = await this.clientService.queryWorkflow<T>(workflowId, queryName, args);
         this.logger.debug(`Queried '${queryName}' on workflow ${workflowId}`);
@@ -287,7 +304,7 @@ export class TemporalService implements OnModuleInit {
      */
     async getWorkerHealth(): Promise<{
         status: 'healthy' | 'unhealthy' | 'degraded' | 'not_available';
-        details?: any;
+        details?: unknown;
     }> {
         if (!this.workerManager) {
             return { status: 'not_available' };
@@ -408,7 +425,7 @@ export class TemporalService implements OnModuleInit {
     /**
      * @deprecated Workflow info is no longer supported
      */
-    getWorkflowInfo(workflowName: string): any {
+    getWorkflowInfo(_workflowName: string): unknown {
         this.logger.warn('getWorkflowInfo() is deprecated - workflow info is no longer supported');
         return undefined;
     }
@@ -416,7 +433,7 @@ export class TemporalService implements OnModuleInit {
     /**
      * @deprecated Workflow existence check is no longer supported
      */
-    hasWorkflow(workflowName: string): boolean {
+    hasWorkflow(_workflowName: string): boolean {
         this.logger.warn(
             'hasWorkflow() is deprecated - workflow existence check is no longer supported',
         );

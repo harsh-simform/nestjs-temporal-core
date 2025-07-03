@@ -137,8 +137,8 @@ export class TemporalWorkerModule {
         connection: TemporalOptions['connection'];
         taskQueue: string;
         workflowsPath?: string;
-        workflowBundle?: any;
-        activityClasses?: Array<Type<any>>;
+        workflowBundle?: unknown;
+        activityClasses?: Array<Type<unknown>>;
         isGlobal?: boolean;
     }): DynamicModule {
         return this.register({
@@ -160,7 +160,7 @@ export class TemporalWorkerModule {
     /**
      * Create providers for activity classes with proper DI setup
      */
-    private static createActivityProviders(activityClasses: Array<Type<any>>): Provider[] {
+    private static createActivityProviders(activityClasses: Array<Type<unknown>>): Provider[] {
         return activityClasses.map((ActivityClass) => ({
             provide: ActivityClass,
             useClass: ActivityClass,
@@ -176,7 +176,7 @@ export class TemporalWorkerModule {
         if (options.useFactory) {
             providers.push({
                 provide: TEMPORAL_MODULE_OPTIONS,
-                useFactory: async (...args: any[]) => {
+                useFactory: async (...args: unknown[]) => {
                     const temporalOptions = await options.useFactory!(...args);
                     this.validateWorkerOptions(temporalOptions);
                     return this.extractWorkerOptions(temporalOptions);
@@ -251,19 +251,14 @@ export class TemporalWorkerModule {
                 throw new Error('Worker cannot have both workflowsPath and workflowBundle');
             }
 
-            // If worker config is provided, require at least one workflow source
-            if (!hasWorkflowsPath && !hasWorkflowBundle) {
-                throw new Error(
-                    'Worker requires either workflowsPath or workflowBundle when worker config is provided',
-                );
-            }
+            // Activity-only workers are allowed (no workflow source required)
         }
     }
 
     /**
      * Extract worker-specific options from full Temporal options
      */
-    private static extractWorkerOptions(options: TemporalOptions): any {
+    private static extractWorkerOptions(options: TemporalOptions): Record<string, unknown> {
         return {
             connection: {
                 address: options.connection.address,

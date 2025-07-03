@@ -11,6 +11,7 @@ import {
     QueryMethodHandler,
     QueryMethodInfo,
     ScheduledMethodInfo,
+    ScheduledOptions,
     SignalMethodHandler,
     SignalMethodInfo,
 } from '../interfaces';
@@ -76,7 +77,7 @@ export class TemporalDiscoveryService implements OnModuleInit {
     /**
      * Discover all methods within a class
      */
-    private async discoverMethods(instance: any): Promise<void> {
+    private async discoverMethods(instance: object): Promise<void> {
         const prototype = Object.getPrototypeOf(instance);
 
         // Get all method names
@@ -100,7 +101,7 @@ export class TemporalDiscoveryService implements OnModuleInit {
     /**
      * Categorize a method based on its decorators
      */
-    private categorizeMethod(instance: any, methodName: string, method: any): void {
+    private categorizeMethod(instance: object, methodName: string, method: Function): void {
         const boundMethod = method.bind(instance);
 
         // Check for scheduled workflows
@@ -139,24 +140,22 @@ export class TemporalDiscoveryService implements OnModuleInit {
      */
     private createScheduledMethodInfo(
         methodName: string,
-        scheduleMetadata: any,
-        boundMethod: any,
-        instance: any,
+        scheduleMetadata: unknown,
+        boundMethod: Function,
+        instance: object,
     ): ScheduledMethodInfo {
+        const metadata = scheduleMetadata as Record<string, unknown>;
         return {
             methodName,
-            workflowName: scheduleMetadata.workflowName || methodName,
-            scheduleOptions: scheduleMetadata,
-            workflowOptions: {},
-            handler: boundMethod,
+            workflowName: (metadata.workflowName as string) || methodName,
+            scheduleOptions: metadata as unknown as ScheduledOptions,
+            workflowOptions: {
+                taskQueue: (metadata.taskQueue as string) || 'default',
+            },
+            handler: boundMethod as (...args: unknown[]) => unknown,
             controllerInfo: {
+                name: instance.constructor.name,
                 instance,
-                metatype: instance.constructor,
-                taskQueue: undefined,
-                methods: [],
-                signals: [],
-                queries: [],
-                scheduledMethods: [],
             },
         };
     }
@@ -166,13 +165,14 @@ export class TemporalDiscoveryService implements OnModuleInit {
      */
     private createSignalMethodInfo(
         methodName: string,
-        metadata: any,
+        metadata: unknown,
         boundMethod: SignalMethodHandler,
     ): SignalMethodInfo {
+        const signalMetadata = metadata as Record<string, unknown>;
         return {
             methodName,
-            signalName: metadata.name || methodName,
-            options: metadata,
+            signalName: (signalMetadata.name as string) || methodName,
+            options: signalMetadata,
             handler: boundMethod,
         };
     }
@@ -182,13 +182,14 @@ export class TemporalDiscoveryService implements OnModuleInit {
      */
     private createQueryMethodInfo(
         methodName: string,
-        metadata: any,
+        metadata: unknown,
         boundMethod: QueryMethodHandler,
     ): QueryMethodInfo {
+        const queryMetadata = metadata as Record<string, unknown>;
         return {
             methodName,
-            queryName: metadata.name || methodName,
-            options: metadata,
+            queryName: (queryMetadata.name as string) || methodName,
+            options: queryMetadata,
             handler: boundMethod,
         };
     }
@@ -292,7 +293,7 @@ export class TemporalDiscoveryService implements OnModuleInit {
     /**
      * @deprecated Workflow controllers are no longer supported
      */
-    getWorkflowControllers(): any[] {
+    getWorkflowControllers(): object[] {
         this.logger.warn(
             'getWorkflowControllers() is deprecated - workflow controllers are no longer supported',
         );
@@ -302,7 +303,7 @@ export class TemporalDiscoveryService implements OnModuleInit {
     /**
      * @deprecated Workflow methods are no longer supported
      */
-    getWorkflowMethod(workflowName: string): any {
+    getWorkflowMethod(_workflowName: string): unknown {
         this.logger.warn(
             'getWorkflowMethod() is deprecated - workflow methods are no longer supported',
         );
@@ -322,7 +323,7 @@ export class TemporalDiscoveryService implements OnModuleInit {
     /**
      * @deprecated Workflow existence check is no longer supported
      */
-    hasWorkflow(workflowName: string): boolean {
+    hasWorkflow(_workflowName: string): boolean {
         this.logger.warn(
             'hasWorkflow() is deprecated - workflow existence check is no longer supported',
         );

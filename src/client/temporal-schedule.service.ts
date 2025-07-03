@@ -1,7 +1,9 @@
-import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { Client, ScheduleClient, ScheduleHandle, ScheduleOverlapPolicy } from '@temporalio/client';
-import { StringValue } from '@temporalio/common';
-import { ERRORS, TEMPORAL_CLIENT } from '../constants';
+import { Duration } from '@temporalio/common';
+import { ERRORS, TEMPORAL_CLIENT, TEMPORAL_MODULE_OPTIONS } from '../constants';
+import { TemporalLogger } from '../utils/logger';
+import { TemporalOptions } from '../interfaces';
 
 /**
  * Streamlined Temporal Schedule Service
@@ -9,13 +11,20 @@ import { ERRORS, TEMPORAL_CLIENT } from '../constants';
  */
 @Injectable()
 export class TemporalScheduleService implements OnModuleInit {
-    private readonly logger = new Logger(TemporalScheduleService.name);
+    private readonly logger: TemporalLogger;
     private scheduleClient: ScheduleClient | null = null;
 
     constructor(
         @Inject(TEMPORAL_CLIENT)
         private readonly client: Client | null,
-    ) {}
+        @Inject(TEMPORAL_MODULE_OPTIONS)
+        private readonly options: TemporalOptions,
+    ) {
+        this.logger = new TemporalLogger(TemporalScheduleService.name, {
+            enableLogger: this.options.enableLogger,
+            logLevel: this.options.logLevel,
+        });
+    }
 
     async onModuleInit(): Promise<void> {
         if (!this.client) {
@@ -50,7 +59,7 @@ export class TemporalScheduleService implements OnModuleInit {
         workflowType: string,
         cronExpression: string,
         taskQueue: string,
-        args: any[] = [],
+        args: unknown[] = [],
         options?: {
             description?: string;
             timezone?: string;
@@ -61,7 +70,7 @@ export class TemporalScheduleService implements OnModuleInit {
         this.ensureClientInitialized();
 
         try {
-            const scheduleSpec: any = {
+            const scheduleSpec: Record<string, unknown> = {
                 cronExpressions: [cronExpression],
                 ...(options?.timezone && { timeZone: options.timezone }),
             };
@@ -105,9 +114,9 @@ export class TemporalScheduleService implements OnModuleInit {
     async createIntervalSchedule(
         scheduleId: string,
         workflowType: string,
-        interval: StringValue | number,
+        interval: Duration,
         taskQueue: string,
-        args: any[] = [],
+        args: unknown[] = [],
         options?: {
             description?: string;
             overlapPolicy?: ScheduleOverlapPolicy;
@@ -193,9 +202,12 @@ export class TemporalScheduleService implements OnModuleInit {
     /**
      * Update a schedule's configuration
      */
-    async updateSchedule(scheduleId: string, updateFn: (schedule: any) => any): Promise<void> {
+    async updateSchedule(
+        scheduleId: string,
+        updateFn: (schedule: unknown) => unknown,
+    ): Promise<void> {
         await this.executeScheduleOperation(scheduleId, 'update', (handle) =>
-            handle.update(updateFn),
+            handle.update(updateFn as never),
         );
     }
 
@@ -206,11 +218,11 @@ export class TemporalScheduleService implements OnModuleInit {
     /**
      * List all schedules with pagination
      */
-    async listSchedules(pageSize = 100): Promise<any[]> {
+    async listSchedules(pageSize = 100): Promise<unknown[]> {
         this.ensureClientInitialized();
 
         try {
-            const schedules: any[] = [];
+            const schedules: unknown[] = [];
             for await (const schedule of this.scheduleClient!.list({ pageSize })) {
                 schedules.push(schedule);
             }
@@ -225,7 +237,7 @@ export class TemporalScheduleService implements OnModuleInit {
     /**
      * Get detailed information about a specific schedule
      */
-    async describeSchedule(scheduleId: string): Promise<any> {
+    async describeSchedule(scheduleId: string): Promise<unknown> {
         this.ensureClientInitialized();
 
         try {
@@ -244,7 +256,7 @@ export class TemporalScheduleService implements OnModuleInit {
     async scheduleExists(scheduleId: string): Promise<boolean> {
         try {
             const schedules = await this.listSchedules();
-            return schedules.some((s) => s.scheduleId === scheduleId);
+            return schedules.some((s) => (s as { scheduleId: string }).scheduleId === scheduleId);
         } catch (error) {
             this.logger.warn(`Failed to check if schedule exists: ${error.message}`);
             return false;
@@ -294,7 +306,7 @@ export class TemporalScheduleService implements OnModuleInit {
     private async executeScheduleOperation(
         scheduleId: string,
         operation: string,
-        action: (handle: ScheduleHandle) => Promise<any>,
+        action: (handle: ScheduleHandle) => Promise<unknown>,
     ): Promise<void> {
         this.ensureClientInitialized();
 

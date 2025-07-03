@@ -21,7 +21,8 @@ export class TemporalLogger {
      * Check if logging is enabled and level is appropriate
      */
     private shouldLog(level: LogLevel): boolean {
-        if (!this.config.enableLogger) {
+        // First check if logging is globally disabled
+        if (this.config.enableLogger === false) {
             return false;
         }
 
@@ -35,7 +36,7 @@ export class TemporalLogger {
     /**
      * Log error message
      */
-    error(message: any, trace?: string): void {
+    error(message: unknown, trace?: string): void {
         if (this.shouldLog('error')) {
             this.nestLogger.error(message, trace);
         }
@@ -44,7 +45,7 @@ export class TemporalLogger {
     /**
      * Log warning message
      */
-    warn(message: any): void {
+    warn(message: unknown): void {
         if (this.shouldLog('warn')) {
             this.nestLogger.warn(message);
         }
@@ -53,7 +54,7 @@ export class TemporalLogger {
     /**
      * Log info message
      */
-    log(message: any): void {
+    log(message: unknown): void {
         if (this.shouldLog('info')) {
             this.nestLogger.log(message);
         }
@@ -62,7 +63,7 @@ export class TemporalLogger {
     /**
      * Log debug message
      */
-    debug(message: any): void {
+    debug(message: unknown): void {
         if (this.shouldLog('debug')) {
             this.nestLogger.debug(message);
         }
@@ -71,7 +72,7 @@ export class TemporalLogger {
     /**
      * Log verbose message
      */
-    verbose(message: any): void {
+    verbose(message: unknown): void {
         if (this.shouldLog('verbose')) {
             this.nestLogger.verbose(message);
         }

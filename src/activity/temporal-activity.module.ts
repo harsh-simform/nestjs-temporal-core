@@ -1,4 +1,4 @@
-import { DynamicModule, Module } from '@nestjs/common';
+import { DynamicModule, Module, Type } from '@nestjs/common';
 import { DiscoveryModule } from '@nestjs/core';
 import { TemporalActivityService } from './temporal-activity.service';
 import { ActivityModuleOptions } from '../interfaces';
@@ -61,9 +61,9 @@ export class TemporalActivityModule {
      * Configure activity module with asynchronous options
      */
     static forRootAsync(options: {
-        imports?: any[];
-        useFactory: (...args: any[]) => Promise<ActivityModuleOptions> | ActivityModuleOptions;
-        inject?: any[];
+        imports?: (Type<unknown> | DynamicModule)[];
+        useFactory: (...args: unknown[]) => Promise<ActivityModuleOptions> | ActivityModuleOptions;
+        inject?: string[];
         global?: boolean;
     }): DynamicModule {
         return {

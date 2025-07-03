@@ -115,20 +115,24 @@ export class TemporalSchedulesService implements OnModuleInit {
      * Parse interval string to milliseconds
      */
     private parseInterval(interval: string): number {
-        // Simple parser for intervals like "5m", "1h", "30s"
-        const match = interval.match(/^(\d+)([smh])$/);
+        // Simple parser for intervals like "5m", "1h", "30s", "500ms"
+        const match = interval.match(/^(\d+)(ms|[smhd])$/);
         if (!match) return 60000; // Default 1 minute
 
         const value = parseInt(match[1]);
         const unit = match[2];
 
         switch (unit) {
+            case 'ms':
+                return value;
             case 's':
                 return value * 1000;
             case 'm':
                 return value * 60 * 1000;
             case 'h':
                 return value * 60 * 60 * 1000;
+            case 'd':
+                return value * 24 * 60 * 60 * 1000;
             default:
                 return 60000;
         }

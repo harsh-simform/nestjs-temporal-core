@@ -42,8 +42,8 @@ export interface TemporalOptions extends LoggerConfig {
     taskQueue?: string;
     worker?: {
         workflowsPath?: string;
-        workflowBundle?: any;
-        activityClasses?: Array<Type<any>>;
+        workflowBundle?: unknown;
+        activityClasses?: Array<Type<unknown>>;
         autoStart?: boolean;
         workerOptions?: WorkerCreateOptions;
     };
@@ -59,7 +59,11 @@ export interface WorkerCreateOptions {
     reuseV8Context?: boolean;
     identity?: string;
     buildId?: string;
-    [key: string]: any;
+    // Additional worker options for flexibility
+    maxCachedWorkflows?: number;
+    maxConcurrentWorkflowTaskPolls?: number;
+    maxConcurrentActivityTaskPolls?: number;
+    enableLoggingInReplay?: boolean;
 }
 
 export interface RetryPolicyConfig {
@@ -80,8 +84,8 @@ export interface TemporalOptionsFactory {
 export interface TemporalAsyncOptions extends Pick<ModuleMetadata, 'imports'> {
     useExisting?: Type<TemporalOptionsFactory>;
     useClass?: Type<TemporalOptionsFactory>;
-    useFactory?: (...args: any[]) => Promise<TemporalOptions> | TemporalOptions;
-    inject?: any[];
+    useFactory?: (...args: unknown[]) => Promise<TemporalOptions> | TemporalOptions;
+    inject?: (string | symbol | Type<unknown>)[];
     isGlobal?: boolean;
 }
 
@@ -102,9 +106,9 @@ export interface StartWorkflowOptions {
     workflowId?: string;
     signal?: {
         name: string;
-        args?: any[];
+        args?: unknown[];
     };
-    [key: string]: any;
+    [key: string]: unknown;
 }
 
 export interface WorkflowExecutionContext {
@@ -131,7 +135,7 @@ export interface ActivityMethodOptions {
 
 export interface ActivityMetadata {
     name?: string;
-    options?: Record<string, any>;
+    options?: Record<string, unknown>;
 }
 
 // ==========================================
@@ -162,37 +166,40 @@ export interface IntervalOptions extends Omit<ScheduledOptions, 'cron' | 'interv
 // Discovery & Method Handlers
 // ==========================================
 
-export type SignalMethodHandler = (...args: any[]) => void | Promise<void>;
-export type QueryMethodHandler = (...args: any[]) => any;
-export type ActivityMethodHandler = (...args: any[]) => any | Promise<any>;
+export type SignalMethodHandler = (...args: unknown[]) => void | Promise<void>;
+export type QueryMethodHandler = (...args: unknown[]) => unknown;
+export type ActivityMethodHandler = (...args: unknown[]) => unknown | Promise<unknown>;
 
 export interface SignalMethodInfo {
     methodName: string;
     signalName: string;
-    options: any;
+    options: SignalOptions;
     handler: SignalMethodHandler;
 }
 
 export interface QueryMethodInfo {
     methodName: string;
     queryName: string;
-    options: any;
+    options: QueryOptions;
     handler: QueryMethodHandler;
 }
 
 export interface ScheduledMethodInfo {
     methodName: string;
     workflowName: string;
-    scheduleOptions: any;
-    workflowOptions: any;
-    handler: any;
-    controllerInfo: any;
+    scheduleOptions: ScheduledOptions;
+    workflowOptions: StartWorkflowOptions;
+    handler: (...args: unknown[]) => unknown | Promise<unknown>;
+    controllerInfo: {
+        name: string;
+        instance: object;
+    };
 }
 
 export interface ActivityMethodMetadata {
     name: string;
     originalName: string;
-    options?: Record<string, any>;
+    options?: Record<string, unknown>;
     handler: ActivityMethodHandler;
 }
 
@@ -277,7 +284,7 @@ export interface LoggerConfig {
 
 export interface ActivityModuleOptions extends LoggerConfig {
     /** Specific activity classes to register (optional - will auto-discover if not provided) */
-    activityClasses?: Array<Type<any>>;
+    activityClasses?: Array<Type<unknown>>;
     /** Timeout for activities */
     timeout?: string | number;
     /** Global module registration */
@@ -286,12 +293,12 @@ export interface ActivityModuleOptions extends LoggerConfig {
 
 export interface ActivityInfo {
     className: string;
-    instance: any;
-    targetClass: any;
+    instance: object;
+    targetClass: Type<unknown>;
     methods: Array<{
         name: string;
         methodName: string;
-        options: any;
+        options: ActivityMethodOptions;
     }>;
     totalMethods: number;
 }
@@ -320,8 +327,11 @@ export interface ScheduleInfo {
     isActive: boolean;
     autoStart: boolean;
     taskQueue?: string;
-    handler: any;
-    controllerInfo: any;
+    handler: (...args: unknown[]) => unknown | Promise<unknown>;
+    controllerInfo: {
+        name: string;
+        instance: object;
+    };
     createdAt: Date;
     lastTriggered?: Date;
     lastModified?: Date;
