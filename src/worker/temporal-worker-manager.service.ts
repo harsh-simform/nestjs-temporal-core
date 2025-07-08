@@ -67,7 +67,11 @@ export class TemporalWorkerManagerService
         }
 
         // Start worker in background - DO NOT BLOCK APPLICATION STARTUP
-        this.startWorkerInBackground();
+        // Use setImmediate to ensure this runs after the current event loop tick
+        // This prevents deadlocks during NestJS application startup
+        setImmediate(() => {
+            this.startWorkerInBackground();
+        });
     }
 
     async onModuleDestroy() {
@@ -88,6 +92,7 @@ export class TemporalWorkerManagerService
 
         this.logger.log(`Starting worker for task queue: ${this.options?.taskQueue} in background`);
 
+        // Create the worker promise with comprehensive error handling
         this.workerPromise = this.runWorkerLoop().catch((error) => {
             this.isRunning = false;
             this.lastError = error?.message || 'Unknown worker error';
@@ -100,6 +105,14 @@ export class TemporalWorkerManagerService
                     this.startWorkerInBackground();
                 }, 5000);
             }
+
+            // Don't re-throw, just handle the error gracefully
+            return Promise.resolve();
+        });
+
+        // Add unhandled rejection handler as safety net
+        this.workerPromise.catch(() => {
+            // This should never be reached due to the catch above, but included for safety
         });
     }
 
@@ -117,8 +130,19 @@ export class TemporalWorkerManagerService
 
         this.logger.log('Worker started successfully');
 
-        // This blocks, but it's running in background
-        await this.worker.run();
+        try {
+            // This blocks indefinitely (intended behavior), but it's running in background
+            // The worker.run() method handles the event loop for processing activities and workflows
+            await this.worker.run();
+        } catch (error) {
+            this.isRunning = false;
+            this.lastError = error?.message || 'Worker execution error';
+            this.logger.error('Worker execution failed', error?.stack || error);
+            throw error;
+        } finally {
+            this.isRunning = false;
+            this.logger.log('Worker execution completed');
+        }
     }
 
     /**
@@ -327,6 +351,7 @@ export class TemporalWorkerManagerService
     async shutdown(): Promise<void> {
         this.logger.log('Shutting down Temporal worker...');
 
+        // First, stop the worker if it's running
         if (this.worker && this.isRunning) {
             try {
                 await this.worker.shutdown();
@@ -336,6 +361,23 @@ export class TemporalWorkerManagerService
                 this.logger.error('Error during worker shutdown', error?.stack);
             } finally {
                 this.worker = null;
+            }
+        }
+
+        // Wait for the worker promise to complete if it exists
+        if (this.workerPromise) {
+            try {
+                await Promise.race([
+                    this.workerPromise,
+                    new Promise((resolve) => setTimeout(resolve, 5000)), // 5 second timeout
+                ]);
+            } catch (error) {
+                this.logger.debug(
+                    'Worker promise completed with error during shutdown:',
+                    error?.message,
+                );
+            } finally {
+                this.workerPromise = null;
             }
         }
 
