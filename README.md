@@ -167,14 +167,14 @@ import {
 
 @Injectable()
 export class ScheduledService {
-  @Scheduled({
-    scheduleId: 'daily-report',
-    cron: CRON_EXPRESSIONS.DAILY_8AM,
-    description: 'Generate daily sales report',
-    taskQueue: 'reports',
-    workflowType: 'generateReportWorkflow', // Name of the workflow function to run
-    workflowArgs: [{ reportType: 'sales', date: new Date().toISOString() }], // Arguments passed to the workflow
-  })
+      @Scheduled({
+      scheduleId: 'daily-report',
+      cron: CRON_EXPRESSIONS.DAILY_8AM,
+      description: 'Generate daily sales report',
+      taskQueue: 'reports',
+      workflowType: 'generateReportWorkflow', // Name of the workflow function to run
+      workflowArgs: [{ reportType: 'sales' }], // Arguments passed to the workflow
+    })
   async generateDailyReport(): Promise<void> {
     // This method is NOT executed directly. Instead, the schedule triggers the workflow specified above.
   }
