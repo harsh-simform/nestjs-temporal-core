@@ -17,7 +17,6 @@ import { isValidCronExpression, isValidIntervalExpression } from '../utils';
  *     cron: '0 8 * * *',
  *     description: 'Daily sales report'
  *   })
- *   @WorkflowMethod()
  *   async generateReport() {
  *     // workflow logic
  *   }
@@ -27,7 +26,6 @@ import { isValidCronExpression, isValidIntervalExpression } from '../utils';
  *     interval: '1h',
  *     description: 'Sync data every hour'
  *   })
- *   @WorkflowMethod()
  *   async syncData() {
  *     // workflow logic
  *   }
@@ -79,7 +77,6 @@ export const Scheduled = (options: ScheduledOptions): MethodDecorator => {
  *     scheduleId: 'daily-report',
  *     description: 'Daily sales report'
  *   })
- *   @WorkflowMethod()
  *   async generateDailyReport() {
  *     // workflow logic
  *   }
@@ -88,7 +85,6 @@ export const Scheduled = (options: ScheduledOptions): MethodDecorator => {
  *     scheduleId: 'monthly-summary',
  *     description: 'Monthly summary'
  *   })
- *   @WorkflowMethod()
  *   async generateMonthlyReport() {
  *     // workflow logic
  *   }
@@ -116,7 +112,6 @@ export const Cron = (cronExpression: string, options: CronOptions): MethodDecora
  *     scheduleId: 'health-check',
  *     description: 'Health check every 5 minutes'
  *   })
- *   @WorkflowMethod()
  *   async healthCheck() {
  *     // workflow logic
  *   }
@@ -125,7 +120,6 @@ export const Cron = (cronExpression: string, options: CronOptions): MethodDecora
  *     scheduleId: 'metrics-collection',
  *     description: 'Collect metrics hourly'
  *   })
- *   @WorkflowMethod()
  *   async collectMetrics() {
  *     // workflow logic
  *   }

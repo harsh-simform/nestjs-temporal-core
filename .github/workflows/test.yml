@@ -1,0 +1,25 @@
+name: Unit Tests
+
+on:
+  push:
+    branches: [main, feat/**, fix/**]
+  pull_request:
+    branches: [main, feat/**, fix/**]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18.x
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm run test

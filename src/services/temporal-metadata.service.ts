@@ -4,146 +4,158 @@ import { ActivityMetadata, ActivityMethodHandler, ActivityMethodMetadata } from 
 import { createLogger } from '../utils/logger';
 
 /**
- * Streamlined Temporal Metadata Accessor
- * Provides efficient discovery and extraction of metadata from decorated classes and methods
+ * Provides access to Temporal metadata for activities and their methods.
+ *
+ * This service manages metadata extraction, validation, and caching for Temporal activities.
+ * It uses reflection to read decorator metadata and provides efficient access to activity
+ * information with performance optimizations through caching.
+ *
+ * Key features:
+ * - Activity class and method metadata extraction
+ * - Metadata validation and error handling
+ * - Performance optimization through WeakMap caching
+ * - Activity method handler extraction and binding
+ * - Comprehensive validation and diagnostics
+ * - Memory-efficient caching that prevents memory leaks
+ *
+ * @example
+ * ```typescript
+ * // Check if a class is an activity
+ * const isActivity = metadataAccessor.isActivity(MyActivityClass);
+ *
+ * // Get activity options
+ * const options = metadataAccessor.getActivityOptions(MyActivityClass);
+ *
+ * // Extract activity methods from instance
+ * const methods = metadataAccessor.extractActivityMethods(instance);
+ *
+ * // Validate activity class
+ * const validation = metadataAccessor.validateActivityClass(MyActivityClass);
+ * ```
  */
 @Injectable()
 export class TemporalMetadataAccessor {
     private readonly logger = createLogger(TemporalMetadataAccessor.name);
-
-    // Efficient caching to avoid repeated reflection calls
     private readonly activityClassCache = new WeakMap<Type<unknown>, ActivityMetadata | null>();
     private readonly activityMethodCache = new WeakMap<
         Type<unknown>,
         Map<string, ActivityMethodMetadata>
     >();
 
-    // ==========================================
-    // Activity Class Methods
-    // ==========================================
-
     /**
-     * Check if target class is marked as a Temporal Activity
+     * Checks if a class is marked as a Temporal Activity.
+     *
+     * @param target - The class to check
+     * @returns True if the class is decorated with @Activity
      */
     isActivity(target: Type<unknown>): boolean {
-        if (!target || typeof target !== 'function') {
-            return false;
-        }
-
-        // Check cache first
+        if (!target || typeof target !== 'function') return false;
         if (this.activityClassCache.has(target)) {
             return this.activityClassCache.get(target) !== null;
         }
-
         const metadata = this.getActivityMetadata(target);
         const isActivity = metadata !== null;
-
         this.activityClassCache.set(target, metadata);
         return isActivity;
     }
 
     /**
-     * Get activity metadata from a decorated class
+     * Returns activity metadata from a decorated class.
+     *
+     * @param target - The activity class
+     * @returns Activity metadata or null if not an activity
      */
     getActivityOptions(target: Type<unknown>): ActivityMetadata | null {
-        if (!target || typeof target !== 'function') {
-            return null;
-        }
-
-        // Check cache first
+        if (!target || typeof target !== 'function') return null;
         if (this.activityClassCache.has(target)) {
             return this.activityClassCache.get(target) || null;
         }
-
         const metadata = this.getActivityMetadata(target);
         this.activityClassCache.set(target, metadata);
         return metadata;
     }
 
-    // ==========================================
-    // Activity Method Methods
-    // ==========================================
-
     /**
-     * Check if target method is marked as a Temporal Activity Method
+     * Checks if a method is marked as a Temporal Activity Method.
+     *
+     * @param target - The method to check
+     * @returns True if the method is decorated with @ActivityMethod
      */
     isActivityMethod(target: object): boolean {
-        return (
+        return !!(
             target &&
             typeof target === 'function' &&
-            Boolean(Reflect.getMetadata(TEMPORAL_ACTIVITY_METHOD, target))
+            Reflect.getMetadata(TEMPORAL_ACTIVITY_METHOD, target)
         );
     }
 
     /**
-     * Get the name of an Activity Method
+     * Returns the name of an Activity Method.
+     *
+     * @param target - The method to get the name for
+     * @returns The activity method name or null if not found
      */
     getActivityMethodName(target: object): string | null {
-        if (!target || typeof target !== 'function') {
-            return null;
-        }
-
+        if (!target || typeof target !== 'function') return null;
         const metadata = Reflect.getMetadata(TEMPORAL_ACTIVITY_METHOD, target);
         return metadata?.name || null;
     }
 
     /**
-     * Get options for an Activity Method
+     * Returns options for an Activity Method.
+     *
+     * @param target - The method to get options for
+     * @returns The activity method options or null if not found
      */
     getActivityMethodOptions(target: object): Record<string, unknown> | null {
-        if (!target || typeof target !== 'function') {
-            return null;
-        }
-
+        if (!target || typeof target !== 'function') return null;
         const metadata = Reflect.getMetadata(TEMPORAL_ACTIVITY_METHOD, target);
         return metadata || null;
     }
 
-    // ==========================================
-    // Activity Extraction Methods
-    // ==========================================
-
     /**
-     * Extract all activity methods from a class instance
-     * Returns map of activity name to bound method handler
+     * Extracts all activity methods from a class instance.
+     * Returns a map of activity name to bound method handler.
+     *
+     * @param instance - The activity class instance
+     * @returns Map of activity names to bound method handlers
      */
     extractActivityMethods(instance: object): Map<string, ActivityMethodHandler> {
         if (!instance || typeof instance !== 'object') {
             this.logger.warn('Invalid instance provided to extractActivityMethods');
             return new Map();
         }
-
         const { constructor } = instance as { constructor: Type<unknown> };
-
-        // Check cache first
+        if (!constructor || typeof constructor !== 'function') {
+            this.logger.warn('Instance does not have a valid constructor');
+            return new Map();
+        }
         if (this.activityMethodCache.has(constructor)) {
             const cachedMethods = this.activityMethodCache.get(constructor)!;
-            // Return new map with bound methods
             const boundMethods = new Map<string, ActivityMethodHandler>();
             for (const [name, metadata] of cachedMethods.entries()) {
                 boundMethods.set(name, metadata.handler.bind(instance));
             }
             return boundMethods;
         }
-
         const methods = this.extractMethodsFromPrototype(instance);
         this.activityMethodCache.set(constructor, methods);
-
-        // Return bound methods
         const boundMethods = new Map<string, ActivityMethodHandler>();
         for (const [name, metadata] of methods.entries()) {
             boundMethods.set(name, metadata.handler.bind(instance));
         }
-
         return boundMethods;
     }
 
     /**
-     * Get activity method metadata for a specific method
+     * Returns activity method metadata for a specific method.
+     *
+     * @param instance - The activity class instance
+     * @param methodName - The name of the method
+     * @returns Activity method metadata or null if not found
      */
     getActivityMethodMetadata(instance: object, methodName: string): ActivityMethodMetadata | null {
         const methods = this.extractActivityMethods(instance);
-
         for (const [activityName, handler] of methods.entries()) {
             const cachedMethods = this.activityMethodCache.get(
                 instance.constructor as Type<unknown>,
@@ -151,42 +163,31 @@ export class TemporalMetadataAccessor {
             if (cachedMethods) {
                 const metadata = cachedMethods.get(activityName);
                 if (metadata && metadata.originalName === methodName) {
-                    return {
-                        ...metadata,
-                        handler, // This is already bound
-                    };
+                    return { ...metadata, handler };
                 }
             }
         }
-
         return null;
     }
 
     /**
-     * Get all activity method names for a class
+     * Returns all activity method names for a class.
+     *
+     * @param target - The activity class
+     * @returns Array of activity method names
      */
     getActivityMethodNames(target: unknown): string[] {
-        if (!target || typeof target !== 'function') {
-            return [];
-        }
-
+        if (!target || typeof target !== 'function') return [];
         const cachedMethods = this.activityMethodCache.get(target as Type<unknown>);
         if (cachedMethods) {
             return Array.from(cachedMethods.keys());
         }
-
-        // Extract methods from prototype without creating instance
         const { prototype } = target;
-        if (!prototype) {
-            return [];
-        }
-
+        if (!prototype) return [];
         const methodNames: string[] = [];
         const propertyNames = Object.getOwnPropertyNames(prototype);
-
         for (const propertyName of propertyNames) {
             if (propertyName === 'constructor') continue;
-
             try {
                 const method = prototype[propertyName];
                 if (typeof method === 'function' && this.isActivityMethod(method)) {
@@ -197,16 +198,14 @@ export class TemporalMetadataAccessor {
                 this.logger.debug(`Error checking method ${propertyName}: ${error.message}`);
             }
         }
-
         return methodNames;
     }
 
-    // ==========================================
-    // Utility Methods
-    // ==========================================
-
     /**
-     * Get comprehensive activity information for a class
+     * Returns comprehensive activity information for a class.
+     *
+     * @param target - The activity class
+     * @returns Object containing complete activity information
      */
     getActivityInfo(target: unknown): {
         isActivity: boolean;
@@ -223,23 +222,23 @@ export class TemporalMetadataAccessor {
     }
 
     /**
-     * Validate that an activity class has at least one activity method
+     * Validates that an activity class has at least one activity method.
+     *
+     * @param target - The activity class to validate
+     * @returns Validation result with issues if any
      */
     validateActivityClass(target: unknown): {
         isValid: boolean;
         issues: string[];
     } {
         const issues: string[] = [];
-
         if (!this.isActivity(target as Type<unknown>)) {
             issues.push('Class is not marked with @Activity decorator');
         }
-
         const methodNames = this.getActivityMethodNames(target);
         if (methodNames.length === 0) {
             issues.push('Activity class has no methods marked with @ActivityMethod');
         }
-
         return {
             isValid: issues.length === 0,
             issues,
@@ -247,35 +246,33 @@ export class TemporalMetadataAccessor {
     }
 
     /**
-     * Clear metadata caches (useful for testing or hot reloading)
+     * Clears metadata caches (useful for testing or hot reloading).
+     * Note: WeakMap caches are automatically cleared when objects are garbage collected.
      */
     clearCache(): void {
-        // WeakMaps don't have clear() method, but they'll be garbage collected
-        // when their keys are no longer referenced
         this.logger.debug('Metadata accessor cache cleared');
     }
 
     /**
-     * Get cache statistics (limited due to WeakMap nature)
+     * Returns cache statistics (limited due to WeakMap nature).
+     *
+     * @returns Object explaining cache statistics limitations
      */
     getCacheStats(): {
         message: string;
         note: string;
     } {
-        // WeakMaps don't expose size, so we can't provide exact counts
-        // This protects against memory leaks but limits introspection
         return {
             message: 'Cache statistics not available',
             note: 'WeakMap-based caching prevents memory leaks but limits size reporting',
         };
     }
 
-    // ==========================================
-    // Private Helper Methods
-    // ==========================================
-
     /**
-     * Get activity metadata from target class
+     * Gets activity metadata from a class using reflection.
+     *
+     * @param target - The activity class
+     * @returns Activity metadata or null if not found
      */
     private getActivityMetadata(target: unknown): ActivityMetadata | null {
         try {
@@ -288,36 +285,40 @@ export class TemporalMetadataAccessor {
     }
 
     /**
-     * Extract methods from class prototype
+     * Extracts activity methods from a class prototype.
+     *
+     * @param instance - The activity class instance
+     * @returns Map of activity names to method metadata
      */
     private extractMethodsFromPrototype(instance: object): Map<string, ActivityMethodMetadata> {
         const methods = new Map<string, ActivityMethodMetadata>();
         const prototype = Object.getPrototypeOf(instance);
+        if (!prototype) return methods;
 
-        if (!prototype) {
+        let propertyNames: string[];
+        try {
+            propertyNames = Object.getOwnPropertyNames(prototype);
+        } catch (error) {
+            this.logger.warn(
+                `Error getting property names for ${instance.constructor.name}: ${error.message}`,
+            );
             return methods;
         }
 
-        const propertyNames = Object.getOwnPropertyNames(prototype);
-
         for (const propertyName of propertyNames) {
             if (propertyName === 'constructor') continue;
-
             try {
                 const method = prototype[propertyName];
                 if (typeof method !== 'function') continue;
-
                 if (this.isActivityMethod(method)) {
                     const metadata = this.getActivityMethodOptions(method);
                     const activityName = (metadata?.name as string) || propertyName;
-
                     methods.set(activityName, {
                         name: activityName,
                         originalName: propertyName,
                         options: metadata || undefined,
-                        handler: method, // Not bound yet
+                        handler: method,
                     });
-
                     this.logger.debug(
                         `Found activity method: ${instance.constructor.name}.${propertyName} -> ${activityName}`,
                     );
@@ -328,7 +329,6 @@ export class TemporalMetadataAccessor {
                 );
             }
         }
-
         return methods;
     }
 }

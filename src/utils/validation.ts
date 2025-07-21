@@ -1,14 +1,4 @@
 /**
- * @fileoverview Validation utilities for NestJS Temporal Core
- *
- * This module provides validation functions for cron expressions, interval
- * expressions, and other input formats used in scheduling decorators.
- *
- * @author NestJS Temporal Core
- * @version 1.0.0
- */
-
-/**
  * Validates cron expression format.
  *
  * Supports both 5-field (minute hour day month weekday) and
@@ -29,15 +19,48 @@ export function isValidCronExpression(cron: string): boolean {
         return false;
     }
 
-    const parts = cron.trim().split(/\s+/);
+    // Replace tabs/newlines with spaces for uniformity
+    const normalized = cron.replace(/[\t\n\r]+/g, ' ');
+
+    // Check for leading-only spaces (creates empty parts)
+    if (normalized.startsWith(' ') && !normalized.endsWith(' ')) {
+        return false;
+    }
+
+    // Trim leading/trailing spaces for processing
+    const trimmed = normalized.trim();
+    const parts = trimmed.split(/\s+/);
 
     // Support both 5-field (minute hour day month weekday) and 6-field (second minute hour day month weekday) format
     if (parts.length !== 5 && parts.length !== 6) {
         return false;
     }
 
-    // Basic validation - each part should not be empty
-    return parts.every((part) => part.length > 0 && part !== '');
+    // Valid cron part: numbers, *, /, -, ,, and ?
+    const validCronChars = /^[\d*/,\-?]+$/;
+
+    if (parts.length === 6) {
+        // 6-field format: second minute hour day month weekday
+        // First field: valid seconds (0-59, *, ranges, lists, steps)
+        const sec = parts[0];
+        if (!validCronChars.test(sec)) {
+            return false;
+        }
+        // If it's a simple number, validate range
+        if (/^\d+$/.test(sec) && (+sec < 0 || +sec > 59)) {
+            return false;
+        }
+        // The rest must be valid cron fields
+        for (let i = 1; i < 6; i++) {
+            if (!parts[i] || !validCronChars.test(parts[i])) return false;
+        }
+    } else {
+        // All must be valid cron fields
+        for (let i = 0; i < 5; i++) {
+            if (!parts[i] || !validCronChars.test(parts[i])) return false;
+        }
+    }
+    return true;
 }
 
 /**

@@ -1,5 +1,5 @@
 import { Injectable, OnModuleInit, Optional, Inject } from '@nestjs/common';
-import { DEFAULT_TASK_QUEUE, TEMPORAL_MODULE_OPTIONS } from './constants';
+import { DEFAULT_TASK_QUEUE, TEMPORAL_MODULE_OPTIONS } from '../constants';
 import {
     DiscoveryStats,
     ScheduledMethodInfo,
@@ -8,11 +8,12 @@ import {
     SystemStatus,
     WorkerStatus,
     TemporalOptions,
-} from './interfaces';
-import { TemporalClientService, TemporalScheduleService } from './client';
-import { TemporalDiscoveryService, TemporalScheduleManagerService } from './discovery';
-import { TemporalWorkerManagerService } from './worker';
-import { createLogger, TemporalLogger } from './utils/logger';
+} from '../interfaces';
+import { TemporalClientService } from './temporal-client.service';
+import { TemporalScheduleService } from './temporal-schedule.service';
+import { TemporalDiscoveryService } from './temporal-discovery.service';
+import { TemporalWorkerManagerService } from './temporal-worker.service';
+import { createLogger, TemporalLogger } from '../utils/logger';
 
 /**
  * Streamlined unified service for interacting with Temporal
@@ -54,7 +55,6 @@ export class TemporalService implements OnModuleInit {
         private readonly clientService: TemporalClientService,
         private readonly scheduleService: TemporalScheduleService,
         private readonly discoveryService: TemporalDiscoveryService,
-        private readonly scheduleManager: TemporalScheduleManagerService,
         @Inject(TEMPORAL_MODULE_OPTIONS)
         private readonly options: TemporalOptions,
         @Optional() private readonly workerManager?: TemporalWorkerManagerService,
@@ -65,10 +65,6 @@ export class TemporalService implements OnModuleInit {
     async onModuleInit() {
         await this.logInitializationSummary();
     }
-
-    // ==========================================
-    // Core Service Access Methods
-    // ==========================================
 
     /**
      * Get the Temporal client service for advanced operations
@@ -82,13 +78,6 @@ export class TemporalService implements OnModuleInit {
      */
     getScheduleService(): TemporalScheduleService {
         return this.scheduleService;
-    }
-
-    /**
-     * Get the schedule manager service for discovered schedules
-     */
-    getScheduleManager(): TemporalScheduleManagerService {
-        return this.scheduleManager;
     }
 
     /**
@@ -134,7 +123,7 @@ export class TemporalService implements OnModuleInit {
     async startWorkflow<T, A extends unknown[]>(
         workflowType: string,
         args: A,
-        options: StartWorkflowOptions,
+        options: Partial<StartWorkflowOptions>,
     ): Promise<{
         result: Promise<T>;
         workflowId: string;
@@ -202,7 +191,7 @@ export class TemporalService implements OnModuleInit {
      */
     async triggerSchedule(scheduleId: string): Promise<void> {
         this.validateScheduleExists(scheduleId);
-        await this.scheduleManager.triggerSchedule(scheduleId);
+        await this.scheduleService.triggerSchedule(scheduleId);
         this.logger.log(`Triggered schedule: ${scheduleId}`);
     }
 
@@ -211,7 +200,7 @@ export class TemporalService implements OnModuleInit {
      */
     async pauseSchedule(scheduleId: string, note?: string): Promise<void> {
         this.validateScheduleExists(scheduleId);
-        await this.scheduleManager.pauseSchedule(scheduleId, note);
+        await this.scheduleService.pauseSchedule(scheduleId, note);
         this.logger.log(`Paused schedule: ${scheduleId}${note ? ` (${note})` : ''}`);
     }
 
@@ -220,7 +209,7 @@ export class TemporalService implements OnModuleInit {
      */
     async resumeSchedule(scheduleId: string, note?: string): Promise<void> {
         this.validateScheduleExists(scheduleId);
-        await this.scheduleManager.resumeSchedule(scheduleId, note);
+        await this.scheduleService.resumeSchedule(scheduleId, note);
         this.logger.log(`Resumed schedule: ${scheduleId}${note ? ` (${note})` : ''}`);
     }
 
@@ -237,7 +226,7 @@ export class TemporalService implements OnModuleInit {
             return;
         }
 
-        await this.scheduleManager.deleteSchedule(scheduleId, force);
+        await this.scheduleService.deleteSchedule(scheduleId);
         this.logger.log(`Deleted schedule: ${scheduleId}`);
     }
 
@@ -248,56 +237,51 @@ export class TemporalService implements OnModuleInit {
     /**
      * Get all managed schedule IDs
      */
-    getManagedSchedules(): string[] {
-        return this.scheduleManager.getManagedSchedules();
+    getScheduleIds(): string[] {
+        return this.discoveryService.getScheduleIds();
     }
 
     /**
-     * Get detailed information about a specific schedule
+     * Get schedule information by ID
      */
     getScheduleInfo(scheduleId: string): ScheduledMethodInfo | undefined {
         return this.discoveryService.getScheduledWorkflow(scheduleId);
     }
 
     /**
-     * Check if a schedule is managed
+     * Check if a schedule exists
      */
     hasSchedule(scheduleId: string): boolean {
-        return this.scheduleManager.isScheduleManaged(scheduleId);
+        return this.discoveryService.hasSchedule(scheduleId);
     }
 
-    // ==========================================
-    // Worker Operations (if available)
-    // ==========================================
-
     /**
-     * Check if worker functionality is available
+     * Check if worker is available
      */
     hasWorker(): boolean {
-        return Boolean(this.workerManager);
+        return this.workerManager !== undefined;
     }
 
     /**
-     * Get worker status (if worker is available)
+     * Get worker status if available
      */
     getWorkerStatus(): WorkerStatus | null {
         return this.workerManager?.getWorkerStatus() || null;
     }
 
     /**
-     * Restart worker (if available)
+     * Restart worker if available
      */
     async restartWorker(): Promise<void> {
         if (!this.workerManager) {
             throw new Error('Worker manager not available');
         }
-
         await this.workerManager.restartWorker();
         this.logger.log('Worker restarted successfully');
     }
 
     /**
-     * Get worker health check (if available)
+     * Get worker health status
      */
     async getWorkerHealth(): Promise<{
         status: 'healthy' | 'unhealthy' | 'degraded' | 'not_available';
@@ -307,44 +291,56 @@ export class TemporalService implements OnModuleInit {
             return { status: 'not_available' };
         }
 
-        const health = await this.workerManager.healthCheck();
-        return health;
+        try {
+            const status = this.workerManager.getWorkerStatus();
+            if (status.isHealthy) {
+                return { status: 'healthy', details: status };
+            } else if (status.isRunning) {
+                return { status: 'degraded', details: status };
+            } else {
+                return { status: 'unhealthy', details: status };
+            }
+        } catch (error) {
+            this.logger.error(`Error checking worker health: ${(error as Error).message}`);
+            return { status: 'unhealthy', details: { error: (error as Error).message } };
+        }
     }
 
-    // ==========================================
-    // Statistics and Monitoring
-    // ==========================================
-
     /**
-     * Get comprehensive discovery statistics
+     * Get discovery statistics
      */
     getDiscoveryStats(): DiscoveryStats {
         return this.discoveryService.getStats();
     }
 
     /**
-     * Get schedule management statistics
+     * Get schedule statistics
      */
     getScheduleStats(): ScheduleStats {
-        return this.scheduleManager.getScheduleStats();
+        return this.scheduleService.getScheduleStats();
     }
 
     /**
      * Get comprehensive system status
      */
     async getSystemStatus(): Promise<SystemStatus> {
-        const clientAvailable = Boolean(this.clientService.getRawClient());
-        const workerHealth = await this.getWorkerHealth();
+        const clientStatus = {
+            available: this.clientService.getRawClient() !== null,
+            healthy: this.clientService.isHealthy(),
+        };
+
+        const workerStatus = this.hasWorker() ? this.getWorkerStatus() : undefined;
 
         return {
-            client: {
-                available: clientAvailable,
-                healthy: this.clientService.isHealthy(),
-            },
+            client: clientStatus,
             worker: {
                 available: this.hasWorker(),
-                status: this.getWorkerStatus() || undefined,
-                health: workerHealth.status,
+                status: workerStatus || undefined,
+                health: workerStatus
+                    ? workerStatus.isHealthy
+                        ? 'healthy'
+                        : 'unhealthy'
+                    : undefined,
             },
             discovery: this.getDiscoveryStats(),
             schedules: this.getScheduleStats(),
@@ -352,7 +348,7 @@ export class TemporalService implements OnModuleInit {
     }
 
     /**
-     * Get overall health status for monitoring
+     * Get overall system health
      */
     async getOverallHealth(): Promise<{
         status: 'healthy' | 'degraded' | 'unhealthy';
@@ -364,77 +360,84 @@ export class TemporalService implements OnModuleInit {
         };
     }> {
         const systemStatus = await this.getSystemStatus();
-        const discoveryHealth = this.discoveryService.getHealthStatus();
-        const scheduleHealth = this.scheduleManager.getHealthStatus();
+        const discoveryStats = this.getDiscoveryStats();
+        const scheduleStats = this.getScheduleStats();
 
-        const components = {
-            client: {
-                status: systemStatus.client.healthy ? 'healthy' : 'unhealthy',
-                healthy: systemStatus.client.healthy,
-            },
-            worker: {
-                status: systemStatus.worker.health || 'not_available',
-                available: systemStatus.worker.available,
-            },
-            discovery: {
-                status: discoveryHealth.status,
-                scheduled: discoveryHealth.discoveredItems.scheduled,
-            },
-            schedules: {
-                status: scheduleHealth.status,
-                active: scheduleHealth.activeSchedules,
-                errors: scheduleHealth.errorCount,
-            },
-        };
-
-        // Determine overall status
         let overallStatus: 'healthy' | 'degraded' | 'unhealthy' = 'healthy';
 
+        // Check client health
         if (!systemStatus.client.healthy) {
             overallStatus = 'unhealthy';
-        } else if (
-            scheduleHealth.status === 'unhealthy' ||
-            systemStatus.worker.health === 'unhealthy'
-        ) {
-            overallStatus = 'degraded';
+        }
+
+        // Check worker health
+        if (systemStatus.worker.available && !systemStatus.worker.status?.isHealthy) {
+            overallStatus = overallStatus === 'healthy' ? 'degraded' : 'unhealthy';
+        }
+
+        // Check discovery health
+        if (discoveryStats.scheduled === 0 && discoveryStats.controllers > 0) {
+            overallStatus = overallStatus === 'healthy' ? 'degraded' : 'unhealthy';
+        }
+
+        // Check schedule health
+        if (scheduleStats.errors > 0) {
+            overallStatus = overallStatus === 'healthy' ? 'degraded' : 'unhealthy';
         }
 
         return {
             status: overallStatus,
-            components,
+            components: {
+                client: {
+                    status: systemStatus.client.healthy ? 'connected' : 'disconnected',
+                    healthy: systemStatus.client.healthy,
+                },
+                worker: {
+                    status: systemStatus.worker.available
+                        ? systemStatus.worker.status?.isHealthy
+                            ? 'running'
+                            : 'error'
+                        : 'not_available',
+                    available: systemStatus.worker.available,
+                },
+                discovery: {
+                    status: discoveryStats.scheduled > 0 ? 'active' : 'inactive',
+                    scheduled: discoveryStats.scheduled,
+                },
+                schedules: {
+                    status: scheduleStats.active > 0 ? 'active' : 'inactive',
+                    active: scheduleStats.active,
+                    errors: scheduleStats.errors,
+                },
+            },
         };
     }
 
     // ==========================================
-    // Deprecated Methods (for backward compatibility)
+    // Utility Methods
     // ==========================================
 
     /**
-     * @deprecated Workflow discovery is no longer supported
+     * Get available workflow types
      */
     getAvailableWorkflows(): string[] {
-        this.logger.warn(
-            'getAvailableWorkflows() is deprecated - workflow discovery is no longer supported',
-        );
-        return [];
+        return this.discoveryService.getWorkflowNames();
     }
 
     /**
-     * @deprecated Workflow info is no longer supported
+     * Get workflow information
      */
-    getWorkflowInfo(_workflowName: string): unknown {
-        this.logger.warn('getWorkflowInfo() is deprecated - workflow info is no longer supported');
-        return undefined;
+    getWorkflowInfo(workflowName: string): ScheduledMethodInfo | undefined {
+        // Search all scheduled workflows for a matching workflowName
+        const allWorkflows = this.discoveryService.getScheduledWorkflows();
+        return allWorkflows.find((wf) => wf.workflowName === workflowName);
     }
 
     /**
-     * @deprecated Workflow existence check is no longer supported
+     * Check if workflow exists
      */
     hasWorkflow(_workflowName: string): boolean {
-        this.logger.warn(
-            'hasWorkflow() is deprecated - workflow existence check is no longer supported',
-        );
-        return false;
+        return this.discoveryService.hasWorkflow(_workflowName);
     }
 
     // ==========================================
@@ -442,36 +445,31 @@ export class TemporalService implements OnModuleInit {
     // ==========================================
 
     /**
-     * Enhance workflow options with basic defaults
+     * Enhance workflow options with defaults
      */
-    private enhanceWorkflowOptions(options: StartWorkflowOptions): StartWorkflowOptions {
-        // Extract taskQueue and apply default if not provided
+    private enhanceWorkflowOptions(options: Partial<StartWorkflowOptions>): StartWorkflowOptions {
         const { taskQueue, ...restOptions } = options;
-
-        const enhancedOptions: StartWorkflowOptions = {
-            taskQueue: taskQueue || DEFAULT_TASK_QUEUE,
+        return {
+            taskQueue: taskQueue || this.options.taskQueue || DEFAULT_TASK_QUEUE,
             ...restOptions,
         };
-
-        return enhancedOptions;
     }
 
     /**
-     * Validate that a workflow exists (for operations requiring existing workflows)
+     * Validate workflow exists before operations
      */
     private validateWorkflowExists(workflowId: string): void {
-        if (!workflowId || typeof workflowId !== 'string') {
-            throw new Error('Invalid workflow ID provided');
+        if (!workflowId || workflowId.trim().length === 0) {
+            throw new Error('Workflow ID is required');
         }
-        // Additional validation could be added here
     }
 
     /**
-     * Validate that a schedule exists and is managed
+     * Validate schedule exists before operations
      */
     private validateScheduleExists(scheduleId: string): void {
-        if (!this.scheduleManager.isScheduleManaged(scheduleId)) {
-            throw new Error(`Schedule '${scheduleId}' is not managed by this service`);
+        if (!this.hasSchedule(scheduleId)) {
+            throw new Error(`Schedule '${scheduleId}' not found`);
         }
     }
 
@@ -479,23 +477,16 @@ export class TemporalService implements OnModuleInit {
      * Log initialization summary
      */
     private async logInitializationSummary(): Promise<void> {
-        const stats = this.getDiscoveryStats();
+        const discoveryStats = this.getDiscoveryStats();
         const scheduleStats = this.getScheduleStats();
 
-        this.logger.log('Temporal service initialized');
+        this.logger.log('Temporal Service initialized successfully');
         this.logger.log(
-            `Discovered: ${stats.scheduled} scheduled workflows, ${stats.signals} signals, ${stats.queries} queries`,
+            `Discovery: ${discoveryStats.controllers} controllers, ${discoveryStats.scheduled} scheduled workflows`,
         );
-        this.logger.log(`Schedules: ${scheduleStats.total} total, ${scheduleStats.active} active`);
-
-        if (this.workerManager) {
-            const workerStatus = this.workerManager.getWorkerStatus();
-            this.logger.log(
-                `Worker: ${workerStatus.isInitialized ? 'initialized' : 'not initialized'}, ` +
-                    `${workerStatus.activitiesCount} activities registered`,
-            );
-        } else {
-            this.logger.log('Running in client-only mode (no worker)');
-        }
+        this.logger.log(
+            `Schedules: ${scheduleStats.active} active, ${scheduleStats.errors} errors`,
+        );
+        this.logger.log(`Worker: ${this.hasWorker() ? 'available' : 'not available'}`);
     }
 }
