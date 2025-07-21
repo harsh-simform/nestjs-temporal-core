@@ -42,7 +42,8 @@
     "release:dry": "npm run build && npm publish --dry-run",
     "test": "jest --passWithNoTests --forceExit",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage --passWithNoTests --forceExit"
+    "test:coverage": "jest --coverage --passWithNoTests --forceExit",
+    "make-badges": "istanbul-badges-readme"
   },
   "keywords": [
     "nestjs",
@@ -103,6 +104,7 @@
     "eslint-plugin-prettier": "^5.5.3",
     "globals": "^16.3.0",
     "husky": "^9.1.7",
+    "istanbul-badges-readme": "^1.9.0",
     "jest": "^30.0.4",
     "prettier": "^3.6.2",
     "rimraf": "^6.0.1",
