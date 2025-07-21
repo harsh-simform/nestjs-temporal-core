@@ -1,5 +1,7 @@
 import 'reflect-metadata';
 
+export * from './decorators';
+
 /** Main Temporal module for unified integration */
 export { TemporalModule } from './temporal.module';
 
