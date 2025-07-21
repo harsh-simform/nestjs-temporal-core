@@ -499,6 +499,6 @@ export class TemporalScheduleService implements OnModuleInit {
      * @returns A unique workflow ID with timestamp
      */
     private generateScheduledWorkflowId(scheduleId: string): string {
-        return `${scheduleId}-${Date.now()}`;
+        return `${scheduleId}-${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
     }
 }

@@ -246,7 +246,7 @@ describe('TemporalScheduleService', () => {
                     workflowType,
                     taskQueue,
                     args,
-                    workflowId: expect.stringMatching(new RegExp(`^${scheduleId}-\\d+$`)),
+                    workflowId: expect.stringMatching(new RegExp(`^${scheduleId}-\\d+-\\d+$`)),
                 },
                 policies: {},
                 state: {
@@ -289,7 +289,7 @@ describe('TemporalScheduleService', () => {
                     workflowType,
                     taskQueue,
                     args,
-                    workflowId: expect.stringMatching(new RegExp(`^${scheduleId}-\\d+$`)),
+                    workflowId: expect.stringMatching(new RegExp(`^${scheduleId}-\\d+-\\d+$`)),
                 },
                 memo: {
                     description: 'Test schedule',
@@ -376,7 +376,7 @@ describe('TemporalScheduleService', () => {
                     workflowType,
                     taskQueue,
                     args,
-                    workflowId: expect.stringMatching(new RegExp(`^${scheduleId}-\\d+$`)),
+                    workflowId: expect.stringMatching(new RegExp(`^${scheduleId}-\\d+-\\d+$`)),
                 },
                 policies: {},
                 state: {
@@ -417,7 +417,7 @@ describe('TemporalScheduleService', () => {
                     workflowType,
                     taskQueue,
                     args,
-                    workflowId: expect.stringMatching(new RegExp(`^${scheduleId}-\\d+$`)),
+                    workflowId: expect.stringMatching(new RegExp(`^${scheduleId}-\\d+-\\d+$`)),
                 },
                 memo: {
                     description: 'Test interval schedule',
@@ -885,7 +885,7 @@ describe('TemporalScheduleService', () => {
         it('should include timestamp in workflow ID', () => {
             const id = service['generateScheduledWorkflowId']('test-schedule');
 
-            expect(id).toMatch(/test-schedule-\d+$/);
+            expect(id).toMatch(/^test-schedule-\d+-\d+$/);
         });
 
         it('should handle different schedule IDs', () => {
