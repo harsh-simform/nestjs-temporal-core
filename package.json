@@ -40,9 +40,9 @@
     "publish:alpha": "npm version prerelease --preid=alpha --no-git-tag-version && npm publish --tag alpha",
     "release": "npm run build && npm publish",
     "release:dry": "npm run build && npm publish --dry-run",
-    "test": "jest",
+    "test": "jest --passWithNoTests --forceExit",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage --passWithNoTests --forceExit"
   },
   "keywords": [
     "nestjs",
