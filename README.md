@@ -3,10 +3,10 @@
 Complete NestJS integration for Temporal.io with unified service architecture, comprehensive workflow management, and enterprise-ready features.
 
 [![codecov](https://codecov.io/github/harsh-simform/nestjs-temporal-core/graph/badge.svg?token=BYSE45L6DI)](https://codecov.io/github/harsh-simform/nestjs-temporal-core)
-![Statements](https://img.shields.io/badge/statements-99.91%25-brightgreen.svg?style=flat)
-![Branches](https://img.shields.io/badge/branches-98.89%25-brightgreen.svg?style=flat)
-![Functions](https://img.shields.io/badge/functions-98.52%25-brightgreen.svg?style=flat)
-![Lines](https://img.shields.io/badge/lines-99.9%25-brightgreen.svg?style=flat)
+![Statements](https://img.shields.io/badge/statements-99.67%25-brightgreen.svg?style=flat)
+![Branches](https://img.shields.io/badge/branches-97.65%25-brightgreen.svg?style=flat)
+![Functions](https://img.shields.io/badge/functions-98.86%25-brightgreen.svg?style=flat)
+![Lines](https://img.shields.io/badge/lines-99.65%25-brightgreen.svg?style=flat)
 
 ## 🚀 Features
 
