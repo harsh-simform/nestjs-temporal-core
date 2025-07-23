@@ -445,7 +445,7 @@ describe('TemporalMetadataAccessor', () => {
 
         it('should handle metadata access errors', () => {
             const instance = { constructor: { name: 'TestClass' } };
-            
+
             // Mock to throw error during method processing
             jest.spyOn(Object, 'getOwnPropertyNames').mockImplementation(() => {
                 throw new Error('Property access error');
@@ -621,7 +621,7 @@ describe('TemporalMetadataAccessor', () => {
 
         it('should handle instance without constructor', () => {
             const instance = Object.create(null);
-            
+
             // This should return empty map when no constructor exists
             const result = service.extractActivityMethods(instance);
             expect(result).toBeInstanceOf(Map);
@@ -777,7 +777,9 @@ describe('TemporalMetadataAccessor', () => {
             const validation = service.validateActivityClass(EmptyActivity);
 
             expect(validation.isValid).toBe(false);
-            expect(validation.issues).toContain('Activity class has no methods marked with @ActivityMethod');
+            expect(validation.issues).toContain(
+                'Activity class has no methods marked with @ActivityMethod',
+            );
         });
 
         it('should handle invalid target in validateActivityClass', () => {
@@ -827,7 +829,7 @@ describe('TemporalMetadataAccessor', () => {
             const result = service['getActivityMetadata']('string' as any);
             expect(result).toBeNull();
         });
-        
+
         it('should handle cache miss when getting activity method metadata', () => {
             class CacheMissActivity {
                 testActivity() {}
@@ -844,13 +846,13 @@ describe('TemporalMetadataAccessor', () => {
 
         it('should handle cache hit when getting activity method metadata (covering line 163)', () => {
             const instance = new TestActivity();
-            
+
             // First, populate cache by calling extractActivityMethods
             service.extractActivityMethods(instance);
-            
+
             // Now call getActivityMethodMetadata to trigger cache hit on line 163
             const result = service.getActivityMethodMetadata(instance, 'testMethod');
-            
+
             if (result) {
                 expect(result.originalName).toBe('testMethod');
                 expect(result.name).toBe('testMethod'); // Fixed - should be testMethod based on metadata
@@ -868,22 +870,24 @@ describe('TemporalMetadataAccessor', () => {
                 }
             }
 
-            // Apply activity decorator but not method decorator  
+            // Apply activity decorator but not method decorator
             Activity()(ActivityWithoutMetadata);
 
             const instance = new ActivityWithoutMetadata();
 
             // Mock metadata to return null for method metadata to trigger line 319 fallback
             const originalGetMetadata = Reflect.getMetadata;
-            jest.spyOn(Reflect, 'getMetadata').mockImplementation((metadataKey: any, target: any) => {
-                if (metadataKey === TEMPORAL_ACTIVITY_METHOD) {
-                    return null; // This should trigger the || undefined fallback on line 319
-                }
-                return originalGetMetadata(metadataKey, target);
-            });
+            jest.spyOn(Reflect, 'getMetadata').mockImplementation(
+                (metadataKey: any, target: any) => {
+                    if (metadataKey === TEMPORAL_ACTIVITY_METHOD) {
+                        return null; // This should trigger the || undefined fallback on line 319
+                    }
+                    return originalGetMetadata(metadataKey, target);
+                },
+            );
 
             const methods = service['extractMethodsFromPrototype'](instance);
-            
+
             // If no methods were extracted, let's just test the fallback logic directly
             if (methods.size === 0) {
                 // This confirms that the method extraction filters out methods without decorators
@@ -975,7 +979,7 @@ describe('TemporalMetadataAccessor', () => {
             }
 
             const instance = new TestActivityWithMethods();
-            
+
             // Mock the cache to have methods
             const mockMethods = new Map();
             mockMethods.set('testActivity', {
@@ -984,12 +988,12 @@ describe('TemporalMetadataAccessor', () => {
                 options: { name: 'testActivity' },
                 handler: instance.activityMethod,
             });
-            
+
             service['activityMethodCache'].set(TestActivityWithMethods, mockMethods);
 
             // This should trigger line 163: if (cachedMethods)
             const result = service.getActivityMethodMetadata(instance, 'activityMethod');
-            
+
             expect(result).toBeDefined();
             expect(result?.name).toBe('testActivity');
         });
@@ -1003,7 +1007,10 @@ describe('TemporalMetadataAccessor', () => {
 
             // Mock getMetadata to return specific metadata for the method
             jest.spyOn(Reflect, 'getMetadata').mockImplementation((key: string, target: any) => {
-                if (key === TEMPORAL_ACTIVITY_METHOD && target === TestActivityForLine319.prototype.testMethod) {
+                if (
+                    key === TEMPORAL_ACTIVITY_METHOD &&
+                    target === TestActivityForLine319.prototype.testMethod
+                ) {
                     return { name: 'customActivityName', timeout: '30s' };
                 }
                 return undefined;
@@ -1011,7 +1018,7 @@ describe('TemporalMetadataAccessor', () => {
 
             // This should trigger line 319: options: metadata || undefined
             const methods = service.extractActivityMethods(instance);
-            
+
             expect(methods.has('customActivityName')).toBe(true);
             // Get the cached method metadata to verify line 319
             const cachedMethods = service['activityMethodCache'].get(TestActivityForLine319);
@@ -1019,6 +1026,34 @@ describe('TemporalMetadataAccessor', () => {
             const methodMetadata = cachedMethods?.get('customActivityName');
             expect(methodMetadata?.options).toBeDefined();
             expect((methodMetadata?.options as any)?.timeout).toBe('30s');
+        });
+        it('should use cached methods when available (line 163)', () => {
+            class TestActivityForLine163 {
+                testMethod() {}
+            }
+
+            const instance = new TestActivityForLine163();
+
+            // Create proper metadata for cache
+            const mockCachedMethods = new Map([
+                [
+                    'cachedMethod',
+                    {
+                        name: 'cachedMethod',
+                        originalName: 'testMethod',
+                        handler: jest.fn(),
+                        options: {},
+                    },
+                ],
+            ]);
+            service['activityMethodCache'].set(TestActivityForLine163, mockCachedMethods);
+
+            // This should trigger line 163: if (cachedMethods)
+            const methods = service.extractActivityMethods(instance);
+
+            // Should return the cached methods
+            expect(methods.has('cachedMethod')).toBe(true);
+            expect(methods.size).toBe(1);
         });
     });
 });

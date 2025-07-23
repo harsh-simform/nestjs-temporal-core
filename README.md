@@ -12,23 +12,14 @@ Complete NestJS integration for Temporal.io with unified service architecture, c
 
 - **Unified TemporalModule** with sync and async configuration support
 - **Comprehensive TemporalService** providing all Temporal functionality in one place
-- **Workflow Management** with decorators (`@Workflow()`, `@SignalMethod()`, `@QueryMethod()`)
-- **Activity Management** with decorators (`@Activity()`, `@ActivityMethod()`)
+- **Complete Decorator Suite** for workflows, activities, signals, queries, and scheduling
 - **Advanced Worker Management** with health monitoring and lifecycle control
-- **Schedule Management** with full CRUD operations and validation
+- **Schedule Management** with full CRUD operations and cron/interval support
 - **Automatic Discovery** of workflows, activities, and scheduled methods
-- **Enhanced Logging** with structured logging and different log levels
-- **Health Monitoring** with comprehensive system status reporting
-- **Error Handling** with detailed error messages and validation
-- **Unified Service Architecture** with single entry point (`TemporalService`)
-- **Service-Based Modular Design** with specialized services for each concern
-- **SOLID Principles** applied throughout the codebase
-- **TypeScript Best Practices** with comprehensive type safety
-- **Improved Configuration Management** with flexible async options
-- **Clean Service Exports** for all specialized services
-- **Full TypeScript Typings** for all interfaces and configurations
-- **Comprehensive JSDoc Documentation** throughout the codebase
-- **Specialized Services** for client, worker, schedule, discovery, and metadata operations
+- **Enhanced Health Monitoring** with comprehensive system status reporting
+- **Service-Based Architecture** with specialized services for each concern
+- **TypeScript Best Practices** with comprehensive type safety and JSDoc documentation
+- **Enterprise Ready** with error handling, validation, and production monitoring
 
 ## 📦 Installation
 
@@ -83,7 +74,7 @@ import { TemporalModule } from 'nestjs-temporal-core';
         taskQueue: configService.get('TEMPORAL_TASK_QUEUE'),
         worker: {
           workflowsPath: configService.get('WORKFLOWS_PATH'),
-          activityClasses: [], // Add your activity classes here
+          activityClasses: [],
           autoStart: true,
         },
         enableLogger: true,
@@ -96,30 +87,9 @@ import { TemporalModule } from 'nestjs-temporal-core';
 export class AppModule {}
 ```
 
-### Client-Only Setup (No Worker)
-
-```typescript
-import { Module } from '@nestjs/common';
-import { TemporalModule } from 'nestjs-temporal-core';
-
-@Module({
-  imports: [
-    TemporalModule.register({
-      connection: {
-        address: 'localhost:7233',
-        namespace: 'default',
-      },
-      // Omit worker configuration for client-only setup
-      isGlobal: true,
-    }),
-  ],
-})
-export class AppModule {}
-```
-
 ### Application Bootstrap (Required for Safe Shutdown)
 
-**Important:** To ensure safe worker shutdown and proper cleanup, you must enable shutdown hooks in your main.ts file:
+**Important:** Enable shutdown hooks in your main.ts file for proper cleanup:
 
 ```typescript
 import { NestFactory } from '@nestjs/core';
@@ -136,24 +106,23 @@ async function bootstrap() {
 bootstrap();
 ```
 
-Without `enableShutdownHooks()`, Temporal workers may not shut down gracefully, which can lead to:
-- Incomplete workflow executions
-- Resource leaks
-- Connection timeouts
-- Inconsistent application state
-
 ## 🎯 Decorators
 
 ### Activity Decorators
 
 ```typescript
-import { Activity, ActivityMethod } from 'nestjs-temporal-core';
+import { Activity, ActivityMethod, InjectWorkflowClient } from 'nestjs-temporal-core';
+import { Injectable } from '@nestjs/common';
 
 @Activity({ name: 'email-activities' })
+@Injectable()
 export class EmailActivities {
+  @InjectWorkflowClient()
+  private workflowClient: any;
+
   @ActivityMethod('sendEmail')
   async sendEmail(to: string, subject: string, body: string): Promise<void> {
-    // Implementation
+    // Send email implementation
   }
 
   @ActivityMethod({
@@ -162,7 +131,7 @@ export class EmailActivities {
     maxRetries: 3,
   })
   async processEmail(emailData: any): Promise<void> {
-    // Implementation
+    // Process email implementation
   }
 }
 ```
@@ -170,28 +139,51 @@ export class EmailActivities {
 ### Workflow Decorators
 
 ```typescript
-import { Workflow, SignalMethod, QueryMethod } from 'nestjs-temporal-core';
+import { 
+  Workflow, 
+  WorkflowRun, 
+  SignalMethod, 
+  QueryMethod,
+  InjectActivity,
+  ChildWorkflow 
+} from 'nestjs-temporal-core';
 
-@Workflow({ name: 'order-processing' })
+@Workflow({ name: 'order-processing', description: 'Handles order lifecycle' })
 export class OrderWorkflow {
+  private orderStatus = 'pending';
+  private orderItems: any[] = [];
+
+  @InjectActivity(EmailActivities, { startToCloseTimeout: '1m' })
+  private emailActivities: EmailActivities;
+
+  @ChildWorkflow(PaymentWorkflow, { taskQueue: 'payments' })
+  private paymentWorkflow: PaymentWorkflow;
+
+  @WorkflowRun()
+  async execute(orderId: string): Promise<any> {
+    this.orderStatus = 'processing';
+    // Workflow logic here
+    return { orderId, status: this.orderStatus };
+  }
+
   @SignalMethod('addItem')
-  async addItem(item: any) {
-    // Handle signal
+  async addItem(item: any): Promise<void> {
+    this.orderItems.push(item);
   }
 
   @SignalMethod('cancel-order')
-  async cancelOrder() {
-    // Handle cancel signal
+  async cancelOrder(): Promise<void> {
+    this.orderStatus = 'cancelled';
   }
 
   @QueryMethod('getStatus')
   getOrderStatus(): string {
-    return this.status;
+    return this.orderStatus;
   }
 
   @QueryMethod('get-order-details')
   getOrderDetails() {
-    return this.orderDetails;
+    return { status: this.orderStatus, items: this.orderItems };
   }
 }
 ```
@@ -200,31 +192,36 @@ export class OrderWorkflow {
 
 ```typescript
 import { Scheduled, Cron, Interval } from 'nestjs-temporal-core';
+import { Injectable } from '@nestjs/common';
 
+@Injectable()
 export class ReportController {
   @Scheduled({
     scheduleId: 'daily-report',
     cron: '0 8 * * *',
-    description: 'Daily sales report'
+    description: 'Daily sales report',
+    timezone: 'America/New_York',
+    overlapPolicy: 'SKIP'
   })
-  async generateDailyReport() {
-    // workflow logic
+  async generateDailyReport(): Promise<void> {
+    // Generate daily report
   }
 
   @Cron('0 0 1 * *', {
     scheduleId: 'monthly-summary',
-    description: 'Monthly summary'
+    description: 'Monthly summary report'
   })
-  async generateMonthlyReport() {
-    // workflow logic
+  async generateMonthlyReport(): Promise<void> {
+    // Generate monthly report
   }
 
   @Interval('5m', {
     scheduleId: 'health-check',
-    description: 'Health check every 5 minutes'
+    description: 'Health check every 5 minutes',
+    startPaused: false
   })
-  async healthCheck() {
-    // workflow logic
+  async healthCheck(): Promise<void> {
+    // Health check logic
   }
 }
 ```
@@ -242,22 +239,33 @@ export class OrderService {
   constructor(private readonly temporal: TemporalService) {}
 
   async processOrder(orderId: string) {
-    // Start workflow
-    const { workflowId, result } = await this.temporal.startWorkflow(
-      'processOrder',
+    // Start workflow with enhanced options
+    const handle = await this.temporal.startWorkflow(
+      'order-processing',
       [orderId],
-      { taskQueue: 'orders' }
+      {
+        taskQueue: 'orders',
+        workflowId: `order-${orderId}`,
+        workflowIdReusePolicy: 'ALLOW_DUPLICATE'
+      }
     );
 
-    return { workflowId, result };
+    return {
+      workflowId: handle.workflowId,
+      runId: handle.firstExecutionRunId
+    };
   }
 
   async getOrderStatus(workflowId: string) {
     return await this.temporal.queryWorkflow(workflowId, 'getStatus');
   }
 
+  async addOrderItem(workflowId: string, item: any) {
+    await this.temporal.signalWorkflow(workflowId, 'addItem', [item]);
+  }
+
   async cancelOrder(workflowId: string) {
-    await this.temporal.signalWorkflow(workflowId, 'cancelOrder');
+    await this.temporal.signalWorkflow(workflowId, 'cancel-order');
   }
 }
 ```
@@ -272,16 +280,23 @@ import { TemporalService } from 'nestjs-temporal-core';
 export class ScheduleService {
   constructor(private readonly temporal: TemporalService) {}
 
-  async triggerSchedule(scheduleId: string) {
-    await this.temporal.triggerSchedule(scheduleId);
-  }
+  async manageSchedules() {
+    // Get all managed schedules
+    const scheduleIds = this.temporal.getScheduleIds();
+    
+    // Trigger a schedule immediately
+    await this.temporal.triggerSchedule('daily-report');
 
-  async pauseSchedule(scheduleId: string) {
-    await this.temporal.pauseSchedule(scheduleId, 'Manual pause');
-  }
+    // Pause a schedule
+    await this.temporal.pauseSchedule('daily-report', 'Maintenance pause');
 
-  async resumeSchedule(scheduleId: string) {
-    await this.temporal.resumeSchedule(scheduleId, 'Manual resume');
+    // Resume a schedule
+    await this.temporal.resumeSchedule('daily-report', 'Maintenance complete');
+
+    // Get schedule information
+    const scheduleInfo = await this.temporal.getScheduleInfo('daily-report');
+    
+    return { scheduleIds, scheduleInfo };
   }
 }
 ```
@@ -297,15 +312,259 @@ export class HealthService {
   constructor(private readonly temporal: TemporalService) {}
 
   async getSystemHealth() {
+    // Get overall system health with component breakdown
     return await this.temporal.getOverallHealth();
   }
 
-  async getWorkerStatus() {
-    return this.temporal.getWorkerStatus();
+  async getDetailedStatus() {
+    return {
+      system: await this.temporal.getSystemStatus(),
+      worker: this.temporal.getWorkerStatus(),
+      discovery: this.temporal.getDiscoveryStats(),
+      schedules: this.temporal.getScheduleStats()
+    };
   }
 
-  async getDiscoveryStats() {
-    return this.temporal.getDiscoveryStats();
+  async restartWorkerIfNeeded() {
+    const workerStatus = this.temporal.getWorkerStatus();
+    if (!workerStatus.isHealthy) {
+      await this.temporal.restartWorker();
+    }
+  }
+}
+```
+
+## 📚 API Reference
+
+### TemporalModule
+
+#### Static Methods
+- **`register(options: TemporalOptions)`** - Synchronous module registration
+- **`registerAsync(options: TemporalAsyncOptions)`** - Asynchronous module registration
+
+### TemporalService (Main Service)
+
+#### Workflow Operations
+- **`startWorkflow<T>(workflowType, args, options)`** - Start workflow execution
+- **`signalWorkflow(workflowId, signalName, args?)`** - Send signal to workflow
+- **`queryWorkflow<T>(workflowId, queryName, args?)`** - Query workflow state  
+- **`terminateWorkflow(workflowId, reason?)`** - Terminate workflow
+- **`cancelWorkflow(workflowId)`** - Cancel workflow gracefully
+
+#### Schedule Management
+- **`triggerSchedule(scheduleId)`** - Trigger immediate execution
+- **`pauseSchedule(scheduleId, note?)`** - Pause schedule
+- **`resumeSchedule(scheduleId, note?)`** - Resume schedule
+- **`deleteSchedule(scheduleId, force?)`** - Delete schedule
+- **`getScheduleIds()`** - Get all managed schedule IDs
+- **`getScheduleInfo(scheduleId)`** - Get schedule details
+- **`hasSchedule(scheduleId)`** - Check if schedule exists
+
+#### Health & Monitoring
+- **`getSystemStatus()`** - Get comprehensive system status
+- **`getOverallHealth()`** - Get overall system health
+- **`getWorkerHealth()`** - Get worker health status
+- **`getDiscoveryStats()`** - Get discovery statistics
+- **`getScheduleStats()`** - Get schedule statistics
+
+#### Worker Management
+- **`hasWorker()`** - Check if worker is available
+- **`getWorkerStatus()`** - Get detailed worker status
+- **`restartWorker()`** - Restart worker
+
+#### Discovery Operations
+- **`getAvailableWorkflows()`** - Get available workflow types
+- **`getWorkflowInfo(workflowName)`** - Get workflow information
+- **`hasWorkflow(workflowName)`** - Check if workflow exists
+
+### Specialized Services
+
+#### TemporalClientService
+Direct client operations and workflow management.
+
+```typescript
+@Injectable()
+export class AdvancedWorkflowService {
+  constructor(private clientService: TemporalClientService) {}
+
+  async getWorkflowHandle(workflowId: string) {
+    return this.clientService.getWorkflowHandle(workflowId);
+  }
+
+  async listWorkflows(query?: string) {
+    return this.clientService.listWorkflows(query);
+  }
+}
+```
+
+#### TemporalWorkerManagerService
+Worker lifecycle and health management.
+
+```typescript
+@Injectable()
+export class WorkerManagementService {
+  constructor(private workerManager: TemporalWorkerManagerService) {}
+
+  async checkWorkerHealth() {
+    return this.workerManager.healthCheck();
+  }
+
+  async getWorkerConnection() {
+    return this.workerManager.getConnection();
+  }
+}
+```
+
+#### TemporalScheduleService
+Advanced schedule operations.
+
+```typescript
+@Injectable()
+export class AdvancedScheduleService {
+  constructor(private scheduleService: TemporalScheduleService) {}
+
+  async createDynamicSchedule() {
+    return this.scheduleService.createCronSchedule(
+      'dynamic-schedule',
+      'MyWorkflow',
+      '0 */2 * * *',
+      'default',
+      ['arg1', 'arg2']
+    );
+  }
+
+  async listAllSchedules() {
+    return this.scheduleService.listSchedules();
+  }
+}
+```
+
+#### TemporalDiscoveryService
+Workflow and activity introspection.
+
+```typescript
+@Injectable()
+export class IntrospectionService {
+  constructor(private discoveryService: TemporalDiscoveryService) {}
+
+  getSystemInfo() {
+    return {
+      workflows: this.discoveryService.getWorkflowNames(),
+      schedules: this.discoveryService.getScheduleIds(),
+      signals: this.discoveryService.getSignals(),
+      queries: this.discoveryService.getQueries(),
+      stats: this.discoveryService.getStats()
+    };
+  }
+}
+```
+
+#### TemporalActivityService
+Activity management and discovery.
+
+```typescript
+@Injectable()
+export class ActivityManagementService {
+  constructor(private activityService: TemporalActivityService) {}
+
+  getActivityInfo() {
+    return {
+      activities: this.activityService.getActivityNames(),
+      handlers: this.activityService.getActivityHandlers(),
+      stats: this.activityService.getActivityStats()
+    };
+  }
+}
+```
+
+### Configuration Interfaces
+
+#### TemporalOptions
+```typescript
+interface TemporalOptions {
+  connection: {
+    address: string;
+    namespace?: string;
+    tls?: boolean | TlsConfig;
+    apiKey?: string;
+    metadata?: Record<string, string>;
+  };
+  taskQueue?: string;
+  worker?: {
+    workflowsPath?: string;
+    workflowBundle?: unknown;
+    activityClasses?: Array<Type<unknown>>;
+    autoStart?: boolean;
+    workerOptions?: WorkerCreateOptions;
+  };
+  isGlobal?: boolean;
+  allowConnectionFailure?: boolean;
+  enableLogger?: boolean;
+  logLevel?: 'error' | 'warn' | 'info' | 'debug' | 'verbose';
+}
+```
+
+#### ScheduledOptions
+```typescript
+interface ScheduledOptions {
+  scheduleId: string;
+  cron?: string;
+  interval?: string;
+  description?: string;
+  taskQueue?: string;
+  timezone?: string;
+  overlapPolicy?: 'ALLOW_ALL' | 'SKIP' | 'BUFFER_ONE' | 'BUFFER_ALL' | 'CANCEL_OTHER';
+  startPaused?: boolean;
+  autoStart?: boolean;
+}
+```
+
+## 🏥 Health Monitoring
+
+### Built-in Health Module
+
+Import the health module for comprehensive monitoring:
+
+```typescript
+import { TemporalHealthModule } from 'nestjs-temporal-core';
+
+@Module({
+  imports: [TemporalHealthModule],
+})
+export class AppModule {}
+```
+
+### Available Health Endpoints
+
+- **GET `/temporal/health`** - Overall system health
+- **GET `/temporal/health/system`** - Detailed system status
+- **GET `/temporal/health/client`** - Client connectivity
+- **GET `/temporal/health/worker`** - Worker status
+- **GET `/temporal/health/discovery`** - Discovery service
+- **GET `/temporal/health/schedules`** - Schedule service
+- **GET `/temporal/health/live`** - Liveness probe
+- **GET `/temporal/health/ready`** - Readiness probe
+- **GET `/temporal/health/startup`** - Startup probe
+
+### Custom Health Checks
+
+```typescript
+import { Injectable } from '@nestjs/common';
+import { TemporalService } from 'nestjs-temporal-core';
+
+@Injectable()
+export class CustomHealthService {
+  constructor(private temporal: TemporalService) {}
+
+  async performHealthCheck() {
+    const health = await this.temporal.getOverallHealth();
+    
+    if (health.status === 'unhealthy') {
+      // Implement alerting or remediation logic
+      throw new Error('Temporal system is unhealthy');
+    }
+    
+    return health;
   }
 }
 ```
@@ -321,196 +580,59 @@ npm run test:watch
 
 # Run tests with coverage
 npm run test:coverage
+
+# Run specific test suite
+npm test -- --testNamePattern="TemporalService"
 ```
 
-## 📚 API Reference
+## 🔧 Advanced Configuration
 
-### TemporalModule
+### Worker Options
 
-#### `TemporalModule.register(options)`
-Register the module with synchronous configuration. Supports both client and worker functionality based on configuration.
-
-#### `TemporalModule.registerAsync(options)`
-Register the module with asynchronous configuration using factory functions, classes, or existing providers.
-
-### TemporalService
-
-#### Core Service Access
-- `getClient()` - Get the Temporal client service for advanced operations
-- `getScheduleService()` - Get the schedule service for schedule management
-- `getDiscoveryService()` - Get the discovery service for introspection
-- `getWorkerManager()` - Get the worker manager if available
-
-#### Workflow Operations
-- `startWorkflow<T, A>(workflowType, args, options)` - Start a workflow with type safety
-- `signalWorkflow(workflowId, signalName, args?)` - Send signal to workflow with validation
-- `queryWorkflow<T>(workflowId, queryName, args?)` - Query workflow state with validation
-- `terminateWorkflow(workflowId, reason?)` - Terminate workflow with enhanced logging
-- `cancelWorkflow(workflowId)` - Cancel workflow with enhanced logging
-
-#### Schedule Operations
-- `triggerSchedule(scheduleId)` - Trigger a managed schedule with validation
-- `pauseSchedule(scheduleId, note?)` - Pause a managed schedule with validation
-- `resumeSchedule(scheduleId, note?)` - Resume a managed schedule with validation
-- `deleteSchedule(scheduleId, force?)` - Delete a managed schedule with confirmation
-- `getScheduleIds()` - Get all managed schedule IDs
-- `getScheduleInfo(scheduleId)` - Get schedule information by ID
-- `hasSchedule(scheduleId)` - Check if a schedule exists
-
-#### Worker Operations
-- `hasWorker()` - Check if worker is available
-- `getWorkerStatus()` - Get worker status if available
-- `restartWorker()` - Restart worker if available
-- `getWorkerHealth()` - Get worker health status
-
-#### Health & Monitoring
-- `getSystemStatus()` - Get comprehensive system status
-- `getOverallHealth()` - Get overall system health with component breakdown
-- `getDiscoveryStats()` - Get discovery statistics
-- `getScheduleStats()` - Get schedule statistics
-
-#### Utility Methods
-- `getAvailableWorkflows()` - Get available workflow types
-- `getWorkflowInfo(workflowName)` - Get workflow information
-- `hasWorkflow(workflowName)` - Check if workflow exists
-
-### Decorators
-
-#### `@Activity(options?)`
-Mark a class as a Temporal activity.
-
-#### `@ActivityMethod(nameOrOptions?)`
-Mark a method as a Temporal activity method.
-
-#### `@Workflow(options?)`
-Mark a class as a Temporal workflow controller.
-
-#### `@SignalMethod(signalName?)`
-Mark a method as a Temporal signal handler.
-
-#### `@QueryMethod(queryName?)`
-Mark a method as a Temporal query handler.
-
-#### `@Scheduled(options)`
-Mark a method as a scheduled workflow with cron or interval timing.
-
-#### `@Cron(cronExpression, options)`
-Shorthand decorator for cron-based scheduling.
-
-#### `@Interval(interval, options)`
-Shorthand decorator for interval-based scheduling.
-
-## 🎛️ Specialized Services
-
-The package exports several specialized services for advanced use cases:
-
-### TemporalClientService
-Direct access to Temporal client operations:
 ```typescript
-import { TemporalClientService } from 'nestjs-temporal-core';
-
-@Injectable()
-export class MyService {
-  constructor(private clientService: TemporalClientService) {}
-  
-  async advancedWorkflowOperation() {
-    const client = this.clientService.getRawClient();
-    // Direct Temporal client operations
-  }
-}
-```
-
-### TemporalWorkerManagerService
-Worker lifecycle and health management:
-```typescript
-import { TemporalWorkerManagerService } from 'nestjs-temporal-core';
-
-@Injectable()
-export class WorkerHealthService {
-  constructor(private workerManager: TemporalWorkerManagerService) {}
-  
-  async checkWorkerHealth() {
-    const status = this.workerManager.getWorkerStatus();
-    if (!status.isHealthy) {
-      await this.workerManager.restartWorker();
+TemporalModule.register({
+  connection: { /* ... */ },
+  worker: {
+    workflowsPath: './dist/workflows',
+    activityClasses: [EmailActivities, PaymentActivities],
+    autoStart: true,
+    workerOptions: {
+      maxConcurrentActivityTaskExecutions: 100,
+      maxConcurrentWorkflowTaskExecutions: 50,
+      maxActivitiesPerSecond: 200,
+      enableLoggingInReplay: false,
+      identity: 'my-worker-identity'
     }
   }
-}
+})
 ```
 
-### TemporalScheduleService
-Advanced schedule operations:
+### TLS Configuration
+
 ```typescript
-import { TemporalScheduleService } from 'nestjs-temporal-core';
-
-@Injectable()
-export class ScheduleManagementService {
-  constructor(private scheduleService: TemporalScheduleService) {}
-  
-  async manageSchedules() {
-    const stats = this.scheduleService.getScheduleStats();
-    // Advanced schedule operations
+TemporalModule.register({
+  connection: {
+    address: 'temporal.example.com:7233',
+    namespace: 'production',
+    tls: {
+      serverName: 'temporal.example.com',
+      clientCertPair: {
+        crt: fs.readFileSync('client.crt'),
+        key: fs.readFileSync('client.key'),
+        ca: fs.readFileSync('ca.crt')
+      }
+    }
   }
-}
-```
-
-### TemporalDiscoveryService
-Workflow and activity introspection:
-```typescript
-import { TemporalDiscoveryService } from 'nestjs-temporal-core';
-
-@Injectable()
-export class IntrospectionService {
-  constructor(private discoveryService: TemporalDiscoveryService) {}
-  
-  getSystemInfo() {
-    return {
-      workflows: this.discoveryService.getWorkflowNames(),
-      schedules: this.discoveryService.getScheduleIds(),
-      stats: this.discoveryService.getStats(),
-    };
-  }
-}
-```
-
-### TemporalActivityService
-Activity-specific operations:
-```typescript
-import { TemporalActivityService } from 'nestjs-temporal-core';
-
-@Injectable()
-export class ActivityManagementService {
-  constructor(private activityService: TemporalActivityService) {}
-  
-  getActivityInfo() {
-    // Activity-specific operations
-  }
-}
-```
-
-### TemporalMetadataAccessor
-Metadata access and validation:
-```typescript
-import { TemporalMetadataAccessor } from 'nestjs-temporal-core';
-
-@Injectable()
-export class MetadataService {
-  constructor(private metadataAccessor: TemporalMetadataAccessor) {}
-  
-  getMetadata() {
-    // Metadata operations
-  }
-}
+})
 ```
 
 ## 🤝 Contributing
 
 1. Fork the repository
 2. Create a feature branch
-3. Make your changes
-4. Add tests for new functionality
-5. Ensure all tests pass
-6. Submit a pull request
+3. Make your changes with comprehensive tests
+4. Ensure all tests pass and coverage remains high
+5. Submit a pull request
 
 ## 📄 License
 

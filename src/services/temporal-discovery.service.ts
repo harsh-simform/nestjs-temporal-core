@@ -13,20 +13,18 @@ import {
     SignalMethodInfo,
     WorkflowRunInfo,
     ChildWorkflowInfo,
-    ScheduledMethodInfo,
-    ScheduledOptions,
 } from '../interfaces';
 import { createLogger } from '../utils/logger';
 
 /**
  * Discovers and manages Temporal workflow components in a NestJS application.
  *
- * This service automatically discovers methods decorated with @Scheduled, @Signal, and @Query
+ * This service automatically discovers methods decorated with @Signal and @Query
  * decorators across all providers and controllers in the application. It provides metadata
  * access and management for these components.
  *
  * Key features:
- * - Automatic discovery of scheduled workflows, signals, and queries
+ * - Automatic discovery of signals, queries, and workflow runs
  * - Metadata extraction and management
  * - Component validation and health monitoring
  * - Statistics and monitoring capabilities
@@ -34,11 +32,11 @@ import { createLogger } from '../utils/logger';
  *
  * @example
  * ```typescript
- * // Get all scheduled workflows
- * const workflows = discoveryService.getScheduledWorkflows();
+ * // Get all signals
+ * const signals = discoveryService.getSignals();
  *
- * // Check if a schedule exists
- * const exists = discoveryService.hasSchedule('daily-report');
+ * // Check if a signal exists
+ * const signal = discoveryService.getSignal('mySignal');
  *
  * // Get workflow names
  * const workflowNames = discoveryService.getWorkflowNames();
@@ -50,7 +48,6 @@ import { createLogger } from '../utils/logger';
 @Injectable()
 export class TemporalDiscoveryService implements OnModuleInit {
     private readonly logger = createLogger(TemporalDiscoveryService.name);
-    private readonly scheduledWorkflows = new Map<string, ScheduledMethodInfo>();
     private readonly signals = new Map<string, SignalMethodInfo>();
     private readonly queries = new Map<string, QueryMethodInfo>();
     private readonly workflows = new Map<string, WorkflowRunInfo>();
@@ -160,17 +157,6 @@ export class TemporalDiscoveryService implements OnModuleInit {
                 instance,
             });
         }
-        // Scheduled workflows
-        const scheduleMeta = Reflect.getMetadata('TEMPORAL_SCHEDULED_WORKFLOW', method);
-        if (scheduleMeta && scheduleMeta.scheduleId) {
-            const scheduledInfo = this.createScheduledMethodInfo(
-                methodName,
-                scheduleMeta,
-                boundMethod,
-                instance,
-            );
-            this.scheduledWorkflows.set(scheduleMeta.scheduleId, scheduledInfo);
-        }
         // Signals
         const signalMetadata = Reflect.getMetadata(TEMPORAL_SIGNAL_METHOD, proto) || {};
         Object.entries(signalMetadata).forEach(([signalName, propKey]) => {
@@ -199,75 +185,6 @@ export class TemporalDiscoveryService implements OnModuleInit {
                 });
             }
         });
-    }
-
-    /**
-     * Creates metadata information for a scheduled method.
-     *
-     * @param methodName - The name of the method
-     * @param scheduleMetadata - The schedule metadata from the decorator
-     * @param boundMethod - The bound method function
-     * @param instance - The class instance
-     * @returns Scheduled method information object
-     */
-    private createScheduledMethodInfo(
-        methodName: string,
-        scheduleMetadata: unknown,
-        boundMethod: Function,
-        instance: object,
-    ): ScheduledMethodInfo {
-        const metadata = scheduleMetadata as Record<string, unknown>;
-        return {
-            methodName,
-            workflowName: (metadata.workflowName as string) || methodName,
-            scheduleOptions: metadata as unknown as ScheduledOptions,
-            workflowOptions: {
-                taskQueue: (metadata.taskQueue as string) || 'default',
-            },
-            handler: boundMethod as (...args: unknown[]) => unknown,
-            controllerInfo: {
-                name: instance.constructor.name,
-                instance,
-            },
-        };
-    }
-
-    /**
-     * Returns all discovered scheduled workflows.
-     *
-     * @returns Array of scheduled workflow metadata
-     */
-    getScheduledWorkflows(): ScheduledMethodInfo[] {
-        return Array.from(this.scheduledWorkflows.values());
-    }
-
-    /**
-     * Returns scheduled workflow metadata by schedule ID.
-     *
-     * @param scheduleId - The ID of the schedule to retrieve
-     * @returns Scheduled workflow metadata or undefined if not found
-     */
-    getScheduledWorkflow(scheduleId: string): ScheduledMethodInfo | undefined {
-        return this.scheduledWorkflows.get(scheduleId);
-    }
-
-    /**
-     * Returns all schedule IDs.
-     *
-     * @returns Array of schedule IDs
-     */
-    getScheduleIds(): string[] {
-        return Array.from(this.scheduledWorkflows.keys());
-    }
-
-    /**
-     * Checks if a schedule exists by ID.
-     *
-     * @param scheduleId - The ID of the schedule to check
-     * @returns True if the schedule exists
-     */
-    hasSchedule(scheduleId: string): boolean {
-        return this.scheduledWorkflows.has(scheduleId);
     }
 
     /**
@@ -355,7 +272,6 @@ export class TemporalDiscoveryService implements OnModuleInit {
         return {
             controllers: 0,
             methods: 0,
-            scheduled: this.scheduledWorkflows.size,
             signals: this.signals.size,
             queries: this.queries.size,
             workflows: this.workflows.size,
@@ -375,7 +291,6 @@ export class TemporalDiscoveryService implements OnModuleInit {
     } {
         const stats = this.getStats();
         const status =
-            stats.scheduled > 0 ||
             stats.signals > 0 ||
             stats.queries > 0 ||
             stats.workflows > 0 ||
@@ -390,15 +305,15 @@ export class TemporalDiscoveryService implements OnModuleInit {
     }
 
     /**
-     * Returns all unique workflow names from scheduled workflows.
+     * Returns all unique workflow names from workflow runs.
      *
      * @returns Array of unique workflow names
      */
     getWorkflowNames(): string[] {
         const names = new Set<string>();
-        for (const info of this.scheduledWorkflows.values()) {
-            if (info.workflowName && info.workflowName.trim()) {
-                names.add(info.workflowName);
+        for (const info of this.workflows.values()) {
+            if (info.methodName && info.methodName.trim()) {
+                names.add(info.methodName);
             }
         }
         return Array.from(names);
@@ -411,8 +326,8 @@ export class TemporalDiscoveryService implements OnModuleInit {
      * @returns True if the workflow exists
      */
     hasWorkflow(workflowName: string): boolean {
-        for (const info of this.scheduledWorkflows.values()) {
-            if (info.workflowName === workflowName) {
+        for (const info of this.workflows.values()) {
+            if (info.methodName === workflowName) {
                 return true;
             }
         }
@@ -426,13 +341,8 @@ export class TemporalDiscoveryService implements OnModuleInit {
     private logDiscoveryResults(): void {
         const stats = this.getStats();
         this.logger.log(
-            `Discovery completed: ${stats.scheduled} scheduled workflows, ${stats.signals} signals, ${stats.queries} queries, ${stats.workflows} workflows, ${stats.childWorkflows} child workflows`,
+            `Discovery completed: ${stats.signals} signals, ${stats.queries} queries, ${stats.workflows} workflows, ${stats.childWorkflows} child workflows`,
         );
-        if (stats.scheduled > 0) {
-            this.logger.debug(
-                `Discovered scheduled workflows: ${Array.from(this.scheduledWorkflows.keys()).join(', ')}`,
-            );
-        }
         if (stats.signals > 0) {
             this.logger.debug(`Discovered signals: ${Array.from(this.signals.keys()).join(', ')}`);
         }

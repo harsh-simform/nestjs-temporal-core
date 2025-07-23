@@ -73,22 +73,8 @@ describe('Interfaces', () => {
         expect(startOptions.workflowId).toBe('test-workflow-id');
     });
 
-    it('should support schedule-related interfaces', () => {
-        const scheduledOptions: interfaces.ScheduledOptions = {
-            scheduleId: 'test-schedule',
-            cron: '0 0 * * *',
-            description: 'Daily schedule',
-            taskQueue: 'schedule-queue',
-            timezone: 'UTC',
-            overlapPolicy: 'SKIP',
-            startPaused: false,
-            autoStart: true,
-        };
-
-        expect(scheduledOptions.scheduleId).toBe('test-schedule');
-        expect(scheduledOptions.cron).toBe('0 0 * * *');
-        expect(scheduledOptions.overlapPolicy).toBe('SKIP');
-    });
+    // Note: Schedule-related interfaces have been removed
+    // as they required static configuration that should be dynamic
 
     it('should support signal and query interfaces', () => {
         const signalOptions: interfaces.SignalOptions = {
@@ -141,14 +127,13 @@ describe('Interfaces', () => {
         const discoveryStats: interfaces.DiscoveryStats = {
             controllers: 1,
             methods: 2,
-            scheduled: 3,
             signals: 4,
             queries: 5,
             workflows: 6,
             childWorkflows: 7,
         };
         expect(discoveryStats.controllers).toBe(1);
-        expect(discoveryStats.scheduled).toBe(3);
+        expect(discoveryStats.workflows).toBe(6);
     });
 
     it('should support workflow metadata interfaces', () => {

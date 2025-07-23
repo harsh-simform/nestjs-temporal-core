@@ -82,8 +82,11 @@ export class TemporalWorkerManagerService
             this.isInitialized = true;
             this.logger.log('Temporal worker initialization completed');
         } catch (error) {
-            this.lastError = error?.message || 'Unknown initialization error';
-            this.logger.error('Error during worker initialization', error?.stack || error);
+            this.lastError = (error as Error)?.message || 'Unknown initialization error';
+            this.logger.error(
+                'Error during worker initialization',
+                (error as Error)?.stack || error,
+            );
 
             if (this.options?.allowWorkerFailure !== false) {
                 this.logger.warn('Continuing application startup without Temporal worker');
@@ -139,8 +142,8 @@ export class TemporalWorkerManagerService
         // Create the worker promise with comprehensive error handling
         this.workerPromise = this.runWorkerLoop().catch((error) => {
             this.isRunning = false;
-            this.lastError = error?.message || 'Unknown worker error';
-            this.logger.error('Worker crashed', error?.stack || error);
+            this.lastError = (error as Error)?.message || 'Unknown worker error';
+            this.logger.error('Worker crashed', (error as Error)?.stack || error);
 
             // Optionally restart worker after delay
             if (this.options?.autoRestart !== false) {
@@ -182,8 +185,8 @@ export class TemporalWorkerManagerService
             await this.worker.run();
         } catch (error) {
             this.isRunning = false;
-            this.lastError = error?.message || 'Worker execution error';
-            this.logger.error('Worker execution failed', error?.stack || error);
+            this.lastError = (error as Error)?.message || 'Worker execution error';
+            this.logger.error('Worker execution failed', (error as Error)?.stack || error);
             throw error;
         } finally {
             this.isRunning = false;
@@ -404,7 +407,7 @@ export class TemporalWorkerManagerService
             } catch (error) {
                 this.logger.error(
                     `Failed to process activity class ${instance.constructor.name}:`,
-                    error?.stack || error,
+                    (error as Error)?.stack || error,
                 );
             }
         }
@@ -446,6 +449,8 @@ export class TemporalWorkerManagerService
      * Gracefully shuts down the worker and all connections.
      * Implements timeout handling and proper resource cleanup.
      * Ensures all pending operations complete before shutdown.
+     *
+     * @throws Never throws - handles all shutdown errors gracefully and logs them
      */
     async shutdown(): Promise<void> {
         this.logger.log('Shutting down Temporal worker...');
@@ -457,7 +462,7 @@ export class TemporalWorkerManagerService
                 this.isRunning = false;
                 this.logger.log('Worker shut down successfully');
             } catch (error) {
-                this.logger.error('Error during worker shutdown', error?.stack);
+                this.logger.error('Error during worker shutdown', (error as Error)?.stack);
             } finally {
                 this.worker = null;
             }
@@ -473,7 +478,7 @@ export class TemporalWorkerManagerService
             } catch (error) {
                 this.logger.debug(
                     'Worker promise completed with error during shutdown:',
-                    error?.message,
+                    (error as Error)?.message,
                 );
             } finally {
                 this.workerPromise = null;
@@ -485,7 +490,7 @@ export class TemporalWorkerManagerService
                 await this.connection.close();
                 this.logger.log('Connection closed successfully');
             } catch (error) {
-                this.logger.error('Error during connection close', error?.stack);
+                this.logger.error('Error during connection close', (error as Error)?.stack);
             } finally {
                 this.connection = null;
             }
@@ -559,6 +564,11 @@ export class TemporalWorkerManagerService
      * Restarts the worker by shutting down and reinitializing.
      * Handles errors during restart and maintains proper state.
      * Automatically starts the worker if auto-start is enabled.
+     *
+     * @throws Error when worker is not initialized
+     * @throws Error when worker shutdown fails
+     * @throws Error when worker reinitialization fails
+     * @throws Error when connection to Temporal server fails
      */
     async restartWorker(): Promise<void> {
         this.logger.log('Restarting Temporal worker...');
@@ -592,6 +602,9 @@ export class TemporalWorkerManagerService
      * Performs a comprehensive health check of the worker.
      * Returns status, detailed worker information, and activity statistics.
      * Categorizes health as healthy, degraded, or unhealthy based on various factors.
+     *
+     * @returns Promise resolving to comprehensive health status
+     * @throws Never throws - handles all errors gracefully and returns status
      */
     async healthCheck(): Promise<{
         status: 'healthy' | 'unhealthy' | 'degraded';

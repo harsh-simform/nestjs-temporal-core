@@ -39,3 +39,8 @@ lerna-debug.log*
 .env.local
 .env.*.local
 
+# Documentation
+/docs/generated
+/docs/temp
+/docs/API.md
+

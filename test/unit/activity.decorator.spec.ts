@@ -571,11 +571,13 @@ describe('Activity Decorator', () => {
             class TestClass {}
             const instance = new TestClass();
 
+            const decorator = InjectWorkflowClient();
+            decorator(instance, 'workflowClient');
+
             expect(() => {
-                const decorator = InjectWorkflowClient();
-                decorator(instance, 'workflowClient');
+                (instance as any).workflowClient;
             }).toThrow(
-                'No WorkflowClient instance available. Please implement getWorkflowClient().',
+                'No WorkflowClient instance available. Please ensure the TemporalModule is properly configured and imported.',
             );
         });
 
@@ -585,11 +587,13 @@ describe('Activity Decorator', () => {
             class TestClass {}
             const instance = new TestClass();
 
+            const decorator = InjectWorkflowClient();
+            decorator(instance, 'workflowClient');
+
             expect(() => {
-                const decorator = InjectWorkflowClient();
-                decorator(instance, 'workflowClient');
+                (instance as any).workflowClient;
             }).toThrow(
-                'No WorkflowClient instance available. Please implement getWorkflowClient().',
+                'No WorkflowClient instance available. Please ensure the TemporalModule is properly configured and imported.',
             );
         });
 
@@ -608,7 +612,8 @@ describe('Activity Decorator', () => {
 
             const descriptor = Object.getOwnPropertyDescriptor(instance, 'workflowClient');
 
-            expect(descriptor?.writable).toBe(false);
+            expect(descriptor?.get).toBeDefined();
+            expect(descriptor?.set).toBeUndefined();
             expect(descriptor?.enumerable).toBe(false);
             expect(descriptor?.configurable).toBe(false);
         });

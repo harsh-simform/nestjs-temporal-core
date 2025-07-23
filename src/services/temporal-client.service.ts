@@ -69,7 +69,11 @@ export class TemporalClientService implements OnModuleInit {
      * @param args - Arguments to pass to the workflow
      * @param options - Workflow execution options including task queue and workflow ID
      * @returns Promise resolving to workflow execution details including handle and result
-     * @throws Error if client is not initialized or workflow start fails
+     * @throws Error when Temporal client is not initialized or connection fails
+     * @throws Error when workflow type is not found or not registered with workers
+     * @throws Error when task queue is invalid or not available
+     * @throws Error when workflow ID conflicts with existing workflow
+     * @throws Error when workflow arguments are invalid or serialization fails
      *
      * @example
      * ```typescript
@@ -130,7 +134,10 @@ export class TemporalClientService implements OnModuleInit {
      * @param workflowId - The ID of the workflow to signal
      * @param signalName - The name of the signal to send
      * @param args - Arguments to pass with the signal
-     * @throws Error if client is not initialized or signal fails
+     * @throws Error when Temporal client is not initialized or connection fails
+     * @throws Error when workflow is not found, completed, or failed
+     * @throws Error when signal name is not defined in the workflow
+     * @throws Error when signal arguments are invalid or serialization fails
      *
      * @example
      * ```typescript
@@ -164,7 +171,10 @@ export class TemporalClientService implements OnModuleInit {
      * @param queryName - The name of the query to execute
      * @param args - Arguments to pass with the query
      * @returns Promise resolving to the query result
-     * @throws Error if client is not initialized or query fails
+     * @throws Error when Temporal client is not initialized or connection fails
+     * @throws Error when workflow is not found, completed, or failed
+     * @throws Error when query name is not defined in the workflow
+     * @throws Error when query arguments are invalid or serialization fails
      *
      * @example
      * ```typescript
@@ -198,7 +208,8 @@ export class TemporalClientService implements OnModuleInit {
      *
      * @param workflowId - The ID of the workflow to terminate
      * @param reason - Optional reason for termination
-     * @throws Error if client is not initialized or termination fails
+     * @throws Error when Temporal client is not initialized or connection fails
+     * @throws Error when workflow is not found or already completed/terminated
      *
      * @example
      * ```typescript
@@ -221,7 +232,8 @@ export class TemporalClientService implements OnModuleInit {
      * Cancels a running workflow, requesting it to stop gracefully.
      *
      * @param workflowId - The ID of the workflow to cancel
-     * @throws Error if client is not initialized or cancellation fails
+     * @throws Error when Temporal client is not initialized or connection fails
+     * @throws Error when workflow is not found or already completed/cancelled
      *
      * @example
      * ```typescript
@@ -246,7 +258,8 @@ export class TemporalClientService implements OnModuleInit {
      * @param workflowId - The ID of the workflow
      * @param runId - Optional run ID for a specific execution
      * @returns Promise resolving to the workflow handle
-     * @throws Error if client is not initialized or handle retrieval fails
+     * @throws Error when Temporal client is not initialized or connection fails
+     * @throws Error when workflow is not found or run ID is invalid
      *
      * @example
      * ```typescript
@@ -270,7 +283,8 @@ export class TemporalClientService implements OnModuleInit {
      * @param workflowId - The ID of the workflow to describe
      * @param runId - Optional run ID for a specific execution
      * @returns Promise resolving to workflow description
-     * @throws Error if client is not initialized or description fails
+     * @throws Error when Temporal client is not initialized or connection fails
+     * @throws Error when workflow is not found or run ID is invalid
      *
      * @example
      * ```typescript
@@ -295,7 +309,9 @@ export class TemporalClientService implements OnModuleInit {
      * @param query - Query string to filter workflows
      * @param pageSize - Number of results per page (default: 100)
      * @returns Async iterator of workflow descriptions
-     * @throws Error if client is not initialized or listing fails
+     * @throws Error when Temporal client is not initialized or connection fails
+     * @throws Error when query syntax is invalid or malformed
+     * @throws Error when page size exceeds server limits
      *
      * @example
      * ```typescript

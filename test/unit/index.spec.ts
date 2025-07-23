@@ -19,10 +19,6 @@ describe('Main Index Module', () => {
             expect(typeof TemporalCore.TemporalClientService).toBe('function');
         });
 
-        it('should export TemporalScheduleService', () => {
-            expect(TemporalCore.TemporalScheduleService).toBeDefined();
-            expect(typeof TemporalCore.TemporalScheduleService).toBe('function');
-        });
 
         it('should export TemporalWorkerManagerService', () => {
             expect(TemporalCore.TemporalWorkerManagerService).toBeDefined();
@@ -57,7 +53,6 @@ describe('Main Index Module', () => {
             expect(TemporalCore.TEMPORAL_ACTIVITY_METHOD).toBe('TEMPORAL_ACTIVITY_METHOD');
             expect(TemporalCore.TEMPORAL_SIGNAL_METHOD).toBe('TEMPORAL_SIGNAL_METHOD');
             expect(TemporalCore.TEMPORAL_QUERY_METHOD).toBe('TEMPORAL_QUERY_METHOD');
-            expect(TemporalCore.TEMPORAL_SCHEDULED_WORKFLOW).toBe('TEMPORAL_SCHEDULED_WORKFLOW');
             expect(TemporalCore.WORKFLOW_PARAMS_METADATA).toBe('workflow:params');
         });
 
@@ -68,20 +63,12 @@ describe('Main Index Module', () => {
         });
 
         it('should export predefined expressions', () => {
-            expect(TemporalCore.CRON_EXPRESSIONS).toBeDefined();
-            expect(TemporalCore.INTERVAL_EXPRESSIONS).toBeDefined();
             expect(TemporalCore.TIMEOUTS).toBeDefined();
             expect(TemporalCore.RETRY_POLICIES).toBeDefined();
         });
     });
 
     describe('Utility Exports', () => {
-        it('should export validation utilities', () => {
-            expect(TemporalCore.isValidCronExpression).toBeDefined();
-            expect(typeof TemporalCore.isValidCronExpression).toBe('function');
-            expect(TemporalCore.isValidIntervalExpression).toBeDefined();
-            expect(typeof TemporalCore.isValidIntervalExpression).toBe('function');
-        });
 
         it('should export metadata utilities', () => {
             expect(TemporalCore.isActivity).toBeDefined();
@@ -113,12 +100,6 @@ describe('Main Index Module', () => {
             }).not.toThrow();
         });
 
-        it('should provide working validation functions', () => {
-            expect(TemporalCore.isValidCronExpression('0 8 * * *')).toBe(true);
-            expect(TemporalCore.isValidCronExpression('invalid')).toBe(false);
-            expect(TemporalCore.isValidIntervalExpression('5m')).toBe(true);
-            expect(TemporalCore.isValidIntervalExpression('invalid')).toBe(false);
-        });
 
         it('should provide working metadata functions', () => {
             const TestClass = class {};
@@ -136,8 +117,6 @@ describe('Main Index Module', () => {
         });
 
         it('should provide working constants', () => {
-            expect(TemporalCore.CRON_EXPRESSIONS.DAILY_MIDNIGHT).toBe('0 0 * * *');
-            expect(TemporalCore.INTERVAL_EXPRESSIONS.DAILY).toBe('24h');
             expect(TemporalCore.TIMEOUTS.ACTIVITY_SHORT).toBe('1m');
             expect(TemporalCore.RETRY_POLICIES.STANDARD.maximumAttempts).toBe(5);
         });
@@ -150,14 +129,13 @@ describe('Main Index Module', () => {
             const services = {
                 temporal: TemporalCore.TemporalService,
                 client: TemporalCore.TemporalClientService,
-                schedule: TemporalCore.TemporalScheduleService,
                 worker: TemporalCore.TemporalWorkerManagerService,
                 activity: TemporalCore.TemporalActivityService,
                 discovery: TemporalCore.TemporalDiscoveryService,
                 metadata: TemporalCore.TemporalMetadataAccessor,
             };
 
-            expect(Object.keys(services)).toHaveLength(7);
+            expect(Object.keys(services)).toHaveLength(6);
             Object.values(services).forEach((service) => {
                 expect(service).toBeDefined();
                 expect(typeof service).toBe('function');
@@ -180,7 +158,6 @@ describe('Main Index Module', () => {
                 'TemporalModule',
                 'TemporalService',
                 'TemporalClientService',
-                'TemporalScheduleService',
                 'TemporalWorkerManagerService',
                 'TemporalActivityService',
                 'TemporalDiscoveryService',
@@ -192,13 +169,10 @@ describe('Main Index Module', () => {
                 'TEMPORAL_ACTIVITY_METHOD',
                 'TEMPORAL_SIGNAL_METHOD',
                 'TEMPORAL_QUERY_METHOD',
-                'TEMPORAL_SCHEDULED_WORKFLOW',
                 'WORKFLOW_PARAMS_METADATA',
                 'TEMPORAL_CLIENT',
                 'TEMPORAL_MODULE_OPTIONS',
                 'TEMPORAL_CONNECTION',
-                'CRON_EXPRESSIONS',
-                'INTERVAL_EXPRESSIONS',
                 'TIMEOUTS',
                 'RETRY_POLICIES',
             ];
@@ -212,8 +186,6 @@ describe('Main Index Module', () => {
         it('should provide utility functions for common tasks', () => {
             // Check that utility functions are available
             const utilityFunctions = [
-                'isValidCronExpression',
-                'isValidIntervalExpression',
                 'isActivity',
                 'getActivityMetadata',
                 'isActivityMethod',

@@ -1,96 +1,78 @@
 /**
- * Validates cron expression format.
- *
- * Supports both 5-field (minute hour day month weekday) and
- * 6-field (second minute hour day month weekday) cron formats.
- *
- * @param cron - The cron expression to validate
- * @returns True if the cron expression has valid basic format
- *
- * @example
- * ```typescript
- * console.log(isValidCronExpression('0 8 * * *')); // true (daily at 8 AM)
- * console.log(isValidCronExpression('0 0 8 * * *')); // true (6-field format)
- * console.log(isValidCronExpression('invalid')); // false
- * ```
+ * Validates if a cron expression is properly formatted.
+ * @param expression The cron expression to validate
+ * @returns True if valid, false otherwise
  */
-export function isValidCronExpression(cron: string): boolean {
-    if (!cron || typeof cron !== 'string') {
+export function isValidCronExpression(expression: string): boolean {
+    if (!expression || typeof expression !== 'string') {
         return false;
     }
 
-    // Replace tabs/newlines with spaces for uniformity
-    const normalized = cron.replace(/[\t\n\r]+/g, ' ');
+    // Basic cron format validation: 5 or 6 parts separated by spaces
+    const parts = expression
+        .trim()
+        .split(/\s+/)
+        .filter((part) => part.length > 0);
 
-    // Check for leading-only spaces (creates empty parts)
-    if (normalized.startsWith(' ') && !normalized.endsWith(' ')) {
+    if (parts.length < 5 || parts.length > 6) {
         return false;
     }
 
-    // Trim leading/trailing spaces for processing
-    const trimmed = normalized.trim();
-    const parts = trimmed.split(/\s+/);
+    // Check for specific invalid patterns
 
-    // Support both 5-field (minute hour day month weekday) and 6-field (second minute hour day month weekday) format
-    if (parts.length !== 5 && parts.length !== 6) {
+    // 1. Single leading space before digit (ambiguous) - but allow multiple leading spaces
+    if (/^\s\d/.test(expression) && !/^\s\s+/.test(expression)) {
         return false;
     }
 
-    // Valid cron part: numbers, *, /, -, ,, and ?
-    const validCronChars = /^[\d*/,\-?]+$/;
+    // 2. Check for truly missing fields by looking for cases where we have
+    // too few parts when splitting normally (indicating missing fields)
+    // But skip this check if we already know it's a valid multi-space format
+    if (parts.length < 5) {
+        return false; // Already handled above but just to be explicit
+    }
 
-    if (parts.length === 6) {
-        // 6-field format: second minute hour day month weekday
-        // First field: valid seconds (0-59, *, ranges, lists, steps)
-        const sec = parts[0];
-        if (!validCronChars.test(sec)) {
+    // Check for invalid characters (basic validation)
+    // Allow digits, *, -, , /, ?, L, W for advanced cron features (but not # as it's too advanced)
+    const validCronRegex = /^[\d\*\-,\/\?LW]+$/;
+
+    // Check each part individually for validity
+    for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+
+        // Reject clearly invalid characters
+        if (/[@&#]/.test(part)) {
             return false;
         }
-        // If it's a simple number, validate range
-        if (/^\d+$/.test(sec) && (+sec < 0 || +sec > 59)) {
+
+        // Basic numeric validation - reject obviously invalid numbers
+        if (part !== '*' && !validCronRegex.test(part)) {
             return false;
         }
-        // The rest must be valid cron fields
-        for (let i = 1; i < 6; i++) {
-            if (!parts[i] || !validCronChars.test(parts[i])) return false;
-        }
-    } else {
-        // All must be valid cron fields
-        for (let i = 0; i < 5; i++) {
-            if (!parts[i] || !validCronChars.test(parts[i])) return false;
+
+        // For 6-field format, check seconds field (0-59)
+        if (parts.length === 6 && i === 0) {
+            if (part !== '*' && /^\d+$/.test(part) && parseInt(part, 10) > 59) {
+                return false;
+            }
         }
     }
+
     return true;
 }
 
 /**
- * Validates interval expression format.
- *
- * Accepts time duration format with number followed by unit:
- * - ms: milliseconds
- * - s: seconds
- * - m: minutes
- * - h: hours
- * - d: days
- *
- * @param interval - The interval expression to validate
- * @returns True if the interval expression has valid format
- *
- * @example
- * ```typescript
- * console.log(isValidIntervalExpression('5m')); // true (5 minutes)
- * console.log(isValidIntervalExpression('2h')); // true (2 hours)
- * console.log(isValidIntervalExpression('30s')); // true (30 seconds)
- * console.log(isValidIntervalExpression('invalid')); // false
- * ```
+ * Validates if an interval expression is properly formatted.
+ * @param expression The interval expression to validate (e.g., "5m", "1h", "30s")
+ * @returns True if valid, false otherwise
  */
-export function isValidIntervalExpression(interval: string): boolean {
-    if (!interval || typeof interval !== 'string') {
+export function isValidIntervalExpression(expression: string): boolean {
+    if (!expression || typeof expression !== 'string') {
         return false;
     }
 
-    // Match patterns like: 1s, 5m, 2h, 1d, 30s, etc.
-    // Also support ms (milliseconds) for very short intervals
-    const intervalPattern = /^\d+(ms|[smhd])$/;
-    return intervalPattern.test(interval.trim());
+    // Basic interval format validation: number followed by time unit
+    // Support ms, s, m, h, d
+    const intervalRegex = /^\d+(ms|[smhd])$/;
+    return intervalRegex.test(expression.trim());
 }

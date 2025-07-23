@@ -1,7 +1,6 @@
 import {
     // Injection Tokens
     ACTIVITY_MODULE_OPTIONS,
-    SCHEDULES_MODULE_OPTIONS,
     TEMPORAL_CLIENT,
     TEMPORAL_CONNECTION,
     TEMPORAL_MODULE_OPTIONS,
@@ -12,7 +11,6 @@ import {
     TEMPORAL_ACTIVITY,
     TEMPORAL_ACTIVITY_METHOD,
     TEMPORAL_QUERY_METHOD,
-    TEMPORAL_SCHEDULED_WORKFLOW,
     TEMPORAL_SIGNAL_METHOD,
     TEMPORAL_WORKFLOW,
     TEMPORAL_WORKFLOW_RUN,
@@ -24,16 +22,11 @@ import {
     DEFAULT_CONNECTION_TIMEOUT_MS,
     DEFAULT_NAMESPACE,
     DEFAULT_TASK_QUEUE,
-    // Predefined Cron Expressions
-    CRON_EXPRESSIONS,
-    // Predefined Interval Expressions
-    INTERVAL_EXPRESSIONS,
     // Predefined Timeout Values
     TIMEOUTS,
     // Retry Policy Presets
     RETRY_POLICIES,
     // Enums
-    ScheduleOverlapPolicy,
     WorkflowIdConflictPolicy,
     WorkflowIdReusePolicy,
 } from '../../src/constants';
@@ -42,7 +35,6 @@ describe('Constants', () => {
     describe('Injection Tokens', () => {
         it('should export all injection tokens', () => {
             expect(ACTIVITY_MODULE_OPTIONS).toBe('ACTIVITY_MODULE_OPTIONS');
-            expect(SCHEDULES_MODULE_OPTIONS).toBe('SCHEDULES_MODULE_OPTIONS');
             expect(TEMPORAL_CLIENT).toBe('TEMPORAL_CLIENT');
             expect(TEMPORAL_CONNECTION).toBe('TEMPORAL_CONNECTION');
             expect(TEMPORAL_MODULE_OPTIONS).toBe('TEMPORAL_MODULE_OPTIONS');
@@ -52,7 +44,6 @@ describe('Constants', () => {
         it('should have unique injection token values', () => {
             const tokens = [
                 ACTIVITY_MODULE_OPTIONS,
-                SCHEDULES_MODULE_OPTIONS,
                 TEMPORAL_CLIENT,
                 TEMPORAL_CONNECTION,
                 TEMPORAL_MODULE_OPTIONS,
@@ -70,7 +61,6 @@ describe('Constants', () => {
             expect(TEMPORAL_ACTIVITY).toBe('TEMPORAL_ACTIVITY');
             expect(TEMPORAL_ACTIVITY_METHOD).toBe('TEMPORAL_ACTIVITY_METHOD');
             expect(TEMPORAL_QUERY_METHOD).toBe('TEMPORAL_QUERY_METHOD');
-            expect(TEMPORAL_SCHEDULED_WORKFLOW).toBe('TEMPORAL_SCHEDULED_WORKFLOW');
             expect(TEMPORAL_SIGNAL_METHOD).toBe('TEMPORAL_SIGNAL_METHOD');
             expect(TEMPORAL_WORKFLOW).toBe('TEMPORAL_WORKFLOW');
             expect(TEMPORAL_WORKFLOW_RUN).toBe('TEMPORAL_WORKFLOW_RUN');
@@ -87,7 +77,6 @@ describe('Constants', () => {
                 TEMPORAL_ACTIVITY,
                 TEMPORAL_ACTIVITY_METHOD,
                 TEMPORAL_QUERY_METHOD,
-                TEMPORAL_SCHEDULED_WORKFLOW,
                 TEMPORAL_SIGNAL_METHOD,
                 TEMPORAL_WORKFLOW,
                 TEMPORAL_WORKFLOW_RUN,
@@ -118,77 +107,7 @@ describe('Constants', () => {
         });
     });
 
-    describe('CRON_EXPRESSIONS', () => {
-        it('should export all cron expressions', () => {
-            expect(CRON_EXPRESSIONS.EVERY_15_MINUTES).toBe('*/15 * * * *');
-            expect(CRON_EXPRESSIONS.EVERY_2_HOURS).toBe('0 */2 * * *');
-            expect(CRON_EXPRESSIONS.EVERY_30_MINUTES).toBe('*/30 * * * *');
-            expect(CRON_EXPRESSIONS.EVERY_5_MINUTES).toBe('*/5 * * * *');
-            expect(CRON_EXPRESSIONS.EVERY_6_HOURS).toBe('0 */6 * * *');
-            expect(CRON_EXPRESSIONS.EVERY_12_HOURS).toBe('0 */12 * * *');
-            expect(CRON_EXPRESSIONS.EVERY_HOUR).toBe('0 * * * *');
-            expect(CRON_EXPRESSIONS.EVERY_MINUTE).toBe('* * * * *');
-            expect(CRON_EXPRESSIONS.DAILY_6AM).toBe('0 6 * * *');
-            expect(CRON_EXPRESSIONS.DAILY_6PM).toBe('0 18 * * *');
-            expect(CRON_EXPRESSIONS.DAILY_8AM).toBe('0 8 * * *');
-            expect(CRON_EXPRESSIONS.DAILY_MIDNIGHT).toBe('0 0 * * *');
-            expect(CRON_EXPRESSIONS.DAILY_NOON).toBe('0 12 * * *');
-            expect(CRON_EXPRESSIONS.MONTHLY_FIRST).toBe('0 0 1 * *');
-            expect(CRON_EXPRESSIONS.MONTHLY_LAST).toBe('0 0 28-31 * *');
-            expect(CRON_EXPRESSIONS.WEEKLY_FRIDAY_5PM).toBe('0 17 * * 5');
-            expect(CRON_EXPRESSIONS.WEEKLY_MONDAY_9AM).toBe('0 9 * * 1');
-            expect(CRON_EXPRESSIONS.WEEKLY_SUNDAY_MIDNIGHT).toBe('0 0 * * 0');
-            expect(CRON_EXPRESSIONS.YEARLY).toBe('0 0 1 1 *');
-        });
 
-        it('should have valid cron expression format', () => {
-            const cronExpressions = Object.values(CRON_EXPRESSIONS);
-            cronExpressions.forEach((expression) => {
-                expect(typeof expression).toBe('string');
-                expect(expression.length).toBeGreaterThan(0);
-                expect(expression.split(' ').length).toBe(5);
-            });
-        });
-
-        it('should be readonly', () => {
-            expect(() => {
-                (CRON_EXPRESSIONS as any).EVERY_15_MINUTES = 'invalid';
-            }).toThrow();
-        });
-    });
-
-    describe('INTERVAL_EXPRESSIONS', () => {
-        it('should export all interval expressions', () => {
-            expect(INTERVAL_EXPRESSIONS.DAILY).toBe('24h');
-            expect(INTERVAL_EXPRESSIONS.EVERY_10_SECONDS).toBe('10s');
-            expect(INTERVAL_EXPRESSIONS.EVERY_15_MINUTES).toBe('15m');
-            expect(INTERVAL_EXPRESSIONS.EVERY_2_DAYS).toBe('48h');
-            expect(INTERVAL_EXPRESSIONS.EVERY_2_HOURS).toBe('2h');
-            expect(INTERVAL_EXPRESSIONS.EVERY_30_MINUTES).toBe('30m');
-            expect(INTERVAL_EXPRESSIONS.EVERY_30_SECONDS).toBe('30s');
-            expect(INTERVAL_EXPRESSIONS.EVERY_5_MINUTES).toBe('5m');
-            expect(INTERVAL_EXPRESSIONS.EVERY_6_HOURS).toBe('6h');
-            expect(INTERVAL_EXPRESSIONS.EVERY_12_HOURS).toBe('12h');
-            expect(INTERVAL_EXPRESSIONS.EVERY_HOUR).toBe('1h');
-            expect(INTERVAL_EXPRESSIONS.EVERY_MINUTE).toBe('1m');
-            expect(INTERVAL_EXPRESSIONS.WEEKLY).toBe('168h');
-        });
-
-        it('should have valid interval expression format', () => {
-            const intervalExpressions = Object.values(INTERVAL_EXPRESSIONS);
-            intervalExpressions.forEach((expression) => {
-                expect(typeof expression).toBe('string');
-                expect(expression.length).toBeGreaterThan(0);
-                expect(/^\d+[smhd]$/.test(expression)).toBe(true);
-            });
-        });
-
-        it('should be readonly', () => {
-            expect(() => {
-                (INTERVAL_EXPRESSIONS as any).DAILY = 'invalid';
-            }).toThrow();
-        });
-    });
 
     describe('TIMEOUTS', () => {
         it('should export all timeout values', () => {
@@ -257,21 +176,6 @@ describe('Constants', () => {
         });
     });
 
-    describe('ScheduleOverlapPolicy enum', () => {
-        it('should export all overlap policy values', () => {
-            expect(ScheduleOverlapPolicy.ALLOW_ALL).toBe('ALLOW_ALL');
-            expect(ScheduleOverlapPolicy.SKIP).toBe('SKIP');
-            expect(ScheduleOverlapPolicy.BUFFER_ONE).toBe('BUFFER_ONE');
-            expect(ScheduleOverlapPolicy.BUFFER_ALL).toBe('BUFFER_ALL');
-            expect(ScheduleOverlapPolicy.CANCEL_OTHER).toBe('CANCEL_OTHER');
-        });
-
-        it('should have unique values', () => {
-            const values = Object.values(ScheduleOverlapPolicy);
-            const uniqueValues = new Set(values);
-            expect(uniqueValues.size).toBe(values.length);
-        });
-    });
 
     describe('WorkflowIdConflictPolicy enum', () => {
         it('should export all conflict policy values', () => {
@@ -312,15 +216,7 @@ describe('Constants', () => {
 
     describe('Integration Tests', () => {
         it('should work with common scheduling patterns', () => {
-            // Test cron expressions
-            expect(CRON_EXPRESSIONS.DAILY_MIDNIGHT).toBe('0 0 * * *');
-            expect(CRON_EXPRESSIONS.EVERY_HOUR).toBe('0 * * * *');
-            expect(CRON_EXPRESSIONS.WEEKLY_MONDAY_9AM).toBe('0 9 * * 1');
-
-            // Test interval expressions
-            expect(INTERVAL_EXPRESSIONS.DAILY).toBe('24h');
-            expect(INTERVAL_EXPRESSIONS.EVERY_HOUR).toBe('1h');
-            expect(INTERVAL_EXPRESSIONS.EVERY_5_MINUTES).toBe('5m');
+            // Note: Cron and interval expressions removed due to static configuration issues
 
             // Test timeouts
             expect(TIMEOUTS.ACTIVITY_SHORT).toBe('1m');
@@ -338,7 +234,7 @@ describe('Constants', () => {
         it('should provide valid enum values for workflow policies', () => {
             expect(WorkflowIdReusePolicy.ALLOW_DUPLICATE).toBe(0);
             expect(WorkflowIdConflictPolicy.REJECT_DUPLICATE).toBe('REJECT_DUPLICATE');
-            expect(ScheduleOverlapPolicy.ALLOW_ALL).toBe('ALLOW_ALL');
+            // Note: ScheduleOverlapPolicy removed due to static configuration issues
         });
     });
 });

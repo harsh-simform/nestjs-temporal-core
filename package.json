@@ -18,7 +18,9 @@
     "dist/**/*",
     "LICENSE",
     "README.md",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "docs/README.md",
+    "jsdoc.json"
   ],
   "scripts": {
     "build": "rimraf dist && tsc -p tsconfig.json",
@@ -43,7 +45,10 @@
     "test": "jest --passWithNoTests --forceExit",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage --passWithNoTests --forceExit",
-    "make-badges": "istanbul-badges-readme"
+    "make-badges": "istanbul-badges-readme",
+    "docs:generate": "typedoc src --out docs --excludePrivate --excludeProtected",
+    "docs:serve": "npx http-server docs -p 3001 -o",
+    "docs:clean": "rimraf docs"
   },
   "keywords": [
     "nestjs",
@@ -99,6 +104,7 @@
     "@types/reflect-metadata": "^0.1.0",
     "@typescript-eslint/eslint-plugin": "^8.37.0",
     "@typescript-eslint/parser": "^8.37.0",
+    "better-docs": "^2.7.3",
     "eslint": "^9.31.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.3",
@@ -106,9 +112,14 @@
     "husky": "^9.1.7",
     "istanbul-badges-readme": "^1.9.0",
     "jest": "^30.0.4",
+    "jsdoc": "^4.0.4",
+    "jsdoc-to-markdown": "^9.0.1",
+    "jsdoc-tsimport-plugin": "^1.0.5",
+    "nodemon": "^3.1.7",
     "prettier": "^3.6.2",
     "rimraf": "^6.0.1",
     "ts-jest": "^29.4.0",
+    "typedoc": "^0.28.7",
     "typescript": "^5.8.3"
   },
   "engines": {

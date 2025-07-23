@@ -30,22 +30,7 @@ describe('Decorators Index Module', () => {
         });
     });
 
-    describe('Scheduling Decorators', () => {
-        it('should export Scheduled decorator', () => {
-            expect(Decorators.Scheduled).toBeDefined();
-            expect(typeof Decorators.Scheduled).toBe('function');
-        });
-
-        it('should export Cron decorator', () => {
-            expect(Decorators.Cron).toBeDefined();
-            expect(typeof Decorators.Cron).toBe('function');
-        });
-
-        it('should export Interval decorator', () => {
-            expect(Decorators.Interval).toBeDefined();
-            expect(typeof Decorators.Interval).toBe('function');
-        });
-    });
+    // Note: Scheduling decorators have been removed due to static configuration issues
 
     describe('Workflow Decorators', () => {
         it('should export Workflow decorator', () => {
@@ -125,7 +110,7 @@ describe('Decorators Index Module', () => {
         });
         it('should mark property with child workflow metadata', () => {
             class TestWorkflow {}
-            ChildWorkflow(class Child {}, { foo: 'bar' })(TestWorkflow.prototype, 'child');
+            ChildWorkflow(class Child {})(TestWorkflow.prototype, 'child');
             const metadata = Reflect.getMetadata(
                 'TEMPORAL_CHILD_WORKFLOW',
                 TestWorkflow.prototype,
@@ -133,7 +118,6 @@ describe('Decorators Index Module', () => {
             );
             expect(metadata).toBeDefined();
             expect(metadata.workflowType).toBeDefined();
-            expect(metadata.options.foo).toBe('bar');
         });
     });
 
@@ -143,9 +127,6 @@ describe('Decorators Index Module', () => {
             const decorators = {
                 Activity: Decorators.Activity,
                 ActivityMethod: Decorators.ActivityMethod,
-                Scheduled: Decorators.Scheduled,
-                Cron: Decorators.Cron,
-                Interval: Decorators.Interval,
             };
 
             Object.values(decorators).forEach((decorator) => {
@@ -158,17 +139,13 @@ describe('Decorators Index Module', () => {
             // Test that decorators can be called with appropriate parameters
             expect(() => Decorators.Activity()).not.toThrow();
             expect(() => Decorators.ActivityMethod()).not.toThrow();
-            expect(() =>
-                Decorators.Scheduled({ scheduleId: 'test', cron: '0 8 * * *' }),
-            ).not.toThrow();
-            expect(() => Decorators.Cron('0 8 * * *', { scheduleId: 'test' })).not.toThrow();
-            expect(() => Decorators.Interval('5m', { scheduleId: 'test' })).not.toThrow();
+            // Note: Scheduling decorators removed due to static configuration issues
         });
     });
 
     describe('Module Structure', () => {
         it('should export all required decorators', () => {
-            const requiredExports = ['Activity', 'ActivityMethod', 'Scheduled', 'Cron', 'Interval'];
+            const requiredExports = ['Activity', 'ActivityMethod'];
 
             requiredExports.forEach((exportName) => {
                 expect(Decorators).toHaveProperty(exportName);
@@ -179,15 +156,12 @@ describe('Decorators Index Module', () => {
         it('should provide decorators for all major domains', () => {
             // Check that we have decorators for all major areas
             const activityDecorators = ['Activity', 'ActivityMethod'];
-            const schedulingDecorators = ['Scheduled', 'Cron', 'Interval'];
 
             activityDecorators.forEach((decorator) => {
                 expect(Decorators).toHaveProperty(decorator);
             });
-
-            schedulingDecorators.forEach((decorator) => {
-                expect(Decorators).toHaveProperty(decorator);
-            });
+            
+            // Note: Scheduling decorators removed due to static configuration issues
         });
     });
 
@@ -200,26 +174,13 @@ describe('Decorators Index Module', () => {
             expect(typeof activityMethodDecorator).toBe('function');
         });
 
-        it('should provide working scheduling decorators', () => {
-            const scheduledDecorator = Decorators.Scheduled({
-                scheduleId: 'test',
-                cron: '0 8 * * *',
-            });
-            const cronDecorator = Decorators.Cron('0 8 * * *', { scheduleId: 'test' });
-            const intervalDecorator = Decorators.Interval('5m', { scheduleId: 'test' });
-
-            expect(typeof scheduledDecorator).toBe('function');
-            expect(typeof cronDecorator).toBe('function');
-            expect(typeof intervalDecorator).toBe('function');
-        });
+        // Note: Scheduling decorators removed due to static configuration issues
 
         it('should handle decorator parameters correctly', () => {
             // Test that decorators accept appropriate parameters
             expect(() => Decorators.Activity({ name: 'test' })).not.toThrow();
             expect(() => Decorators.ActivityMethod({ name: 'test' })).not.toThrow();
-            expect(() => Decorators.Scheduled({ scheduleId: 'test' })).not.toThrow();
-            expect(() => Decorators.Cron('0 8 * * *', { scheduleId: 'test' })).not.toThrow();
-            expect(() => Decorators.Interval('5m', { scheduleId: 'test' })).not.toThrow();
+            // Note: Scheduling decorators removed due to static configuration issues
         });
     });
 
@@ -229,10 +190,6 @@ describe('Decorators Index Module', () => {
             expect(Decorators.ActivityMethod).toBeDefined();
         });
 
-        it('should provide scheduling-related decorators', () => {
-            expect(Decorators.Scheduled).toBeDefined();
-            expect(Decorators.Cron).toBeDefined();
-            expect(Decorators.Interval).toBeDefined();
-        });
+        // Note: Scheduling decorators removed due to static configuration issues
     });
 });

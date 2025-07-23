@@ -2,15 +2,12 @@ import { Injectable, OnModuleInit, Optional, Inject } from '@nestjs/common';
 import { DEFAULT_TASK_QUEUE, TEMPORAL_MODULE_OPTIONS } from '../constants';
 import {
     DiscoveryStats,
-    ScheduledMethodInfo,
-    ScheduleStats,
     StartWorkflowOptions,
     SystemStatus,
     WorkerStatus,
     TemporalOptions,
 } from '../interfaces';
 import { TemporalClientService } from './temporal-client.service';
-import { TemporalScheduleService } from './temporal-schedule.service';
 import { TemporalDiscoveryService } from './temporal-discovery.service';
 import { TemporalWorkerManagerService } from './temporal-worker.service';
 import { createLogger, TemporalLogger } from '../utils/logger';
@@ -20,9 +17,8 @@ import { createLogger, TemporalLogger } from '../utils/logger';
  *
  * Provides comprehensive access to all Temporal functionality:
  * - Client operations (start workflows, send signals, execute queries)
- * - Schedule management (create, pause, resume, trigger schedules)
  * - Worker management (status, health checks, restart)
- * - Discovery services (scheduled workflows, activities)
+ * - Discovery services (workflows, activities)
  *
  * @example
  * ```typescript
@@ -53,7 +49,6 @@ export class TemporalService implements OnModuleInit {
 
     constructor(
         private readonly clientService: TemporalClientService,
-        private readonly scheduleService: TemporalScheduleService,
         private readonly discoveryService: TemporalDiscoveryService,
         @Inject(TEMPORAL_MODULE_OPTIONS)
         private readonly options: TemporalOptions,
@@ -73,12 +68,8 @@ export class TemporalService implements OnModuleInit {
         return this.clientService;
     }
 
-    /**
-     * Get the Temporal schedule service for schedule management
-     */
-    getScheduleService(): TemporalScheduleService {
-        return this.scheduleService;
-    }
+    // Note: Schedule service functionality has been removed
+    // due to static configuration issues
 
     /**
      * Get the workflow discovery service for introspection
@@ -105,6 +96,9 @@ export class TemporalService implements OnModuleInit {
      * @param args Arguments to pass to the workflow
      * @param options Workflow execution options
      * @returns Object containing workflow execution details
+     * @throws Error when Temporal client is not initialized or connection fails
+     * @throws Error when workflow start fails due to invalid parameters or server errors
+     * @throws Error when workflow type is not found or not registered
      *
      * @example
      * ```typescript
@@ -141,6 +135,14 @@ export class TemporalService implements OnModuleInit {
 
     /**
      * Send signal to workflow with validation
+     *
+     * @param workflowId The ID of the workflow to signal
+     * @param signalName Name of the signal to send
+     * @param args Arguments to pass with the signal
+     * @throws Error when workflow ID is empty or invalid
+     * @throws Error when workflow is not found or not running
+     * @throws Error when Temporal client connection fails
+     * @throws Error when signal delivery fails
      */
     async signalWorkflow(
         workflowId: string,
@@ -154,6 +156,15 @@ export class TemporalService implements OnModuleInit {
 
     /**
      * Query workflow state with validation
+     *
+     * @param workflowId The ID of the workflow to query
+     * @param queryName Name of the query to execute
+     * @param args Arguments to pass with the query
+     * @returns Promise resolving to the query result
+     * @throws Error when workflow ID is empty or invalid
+     * @throws Error when workflow is not found or not running
+     * @throws Error when query is not defined or not supported by the workflow
+     * @throws Error when Temporal client connection fails
      */
     async queryWorkflow<T>(
         workflowId: string,
@@ -168,6 +179,11 @@ export class TemporalService implements OnModuleInit {
 
     /**
      * Terminate workflow with enhanced logging
+     *
+     * @param workflowId The ID of the workflow to terminate
+     * @param reason Optional reason for termination
+     * @throws Error when workflow is not found or already completed
+     * @throws Error when Temporal client connection fails
      */
     async terminateWorkflow(workflowId: string, reason?: string): Promise<void> {
         await this.clientService.terminateWorkflow(workflowId, reason);
@@ -176,6 +192,10 @@ export class TemporalService implements OnModuleInit {
 
     /**
      * Cancel workflow with enhanced logging
+     *
+     * @param workflowId The ID of the workflow to cancel
+     * @throws Error when workflow is not found or already completed
+     * @throws Error when Temporal client connection fails
      */
     async cancelWorkflow(workflowId: string): Promise<void> {
         await this.clientService.cancelWorkflow(workflowId);
@@ -183,77 +203,13 @@ export class TemporalService implements OnModuleInit {
     }
 
     // ==========================================
-    // Enhanced Schedule Operations
+    // Schedule Operations - Removed
     // ==========================================
-
-    /**
-     * Trigger a managed schedule with validation
-     */
-    async triggerSchedule(scheduleId: string): Promise<void> {
-        this.validateScheduleExists(scheduleId);
-        await this.scheduleService.triggerSchedule(scheduleId);
-        this.logger.log(`Triggered schedule: ${scheduleId}`);
-    }
-
-    /**
-     * Pause a managed schedule with validation
-     */
-    async pauseSchedule(scheduleId: string, note?: string): Promise<void> {
-        this.validateScheduleExists(scheduleId);
-        await this.scheduleService.pauseSchedule(scheduleId, note);
-        this.logger.log(`Paused schedule: ${scheduleId}${note ? ` (${note})` : ''}`);
-    }
-
-    /**
-     * Resume a managed schedule with validation
-     */
-    async resumeSchedule(scheduleId: string, note?: string): Promise<void> {
-        this.validateScheduleExists(scheduleId);
-        await this.scheduleService.resumeSchedule(scheduleId, note);
-        this.logger.log(`Resumed schedule: ${scheduleId}${note ? ` (${note})` : ''}`);
-    }
-
-    /**
-     * Delete a managed schedule with confirmation
-     */
-    async deleteSchedule(scheduleId: string, force = false): Promise<void> {
-        this.validateScheduleExists(scheduleId);
-
-        if (!force) {
-            this.logger.warn(
-                `Deleting schedule ${scheduleId}. This action cannot be undone. Use force=true to confirm.`,
-            );
-            return;
-        }
-
-        await this.scheduleService.deleteSchedule(scheduleId);
-        this.logger.log(`Deleted schedule: ${scheduleId}`);
-    }
+    // Schedule service functionality has been removed due to static configuration issues
 
     // ==========================================
     // Discovery and Introspection
     // ==========================================
-
-    /**
-     * Get all managed schedule IDs
-     */
-    getScheduleIds(): string[] {
-        return this.discoveryService.getScheduleIds();
-    }
-
-    /**
-     * Get schedule information by ID
-     */
-    getScheduleInfo(scheduleId: string): ScheduledMethodInfo | undefined {
-        return this.discoveryService.getScheduledWorkflow(scheduleId);
-    }
-
-    /**
-     * Check if a schedule exists
-     */
-    hasSchedule(scheduleId: string): boolean {
-        return this.discoveryService.hasSchedule(scheduleId);
-    }
 
     /**
      * Check if worker is available
@@ -271,6 +227,9 @@ export class TemporalService implements OnModuleInit {
 
     /**
      * Restart worker if available
+     *
+     * @throws Error when worker manager is not available or initialized
+     * @throws Error when worker restart fails
      */
     async restartWorker(): Promise<void> {
         if (!this.workerManager) {
@@ -314,13 +273,6 @@ export class TemporalService implements OnModuleInit {
     }
 
     /**
-     * Get schedule statistics
-     */
-    getScheduleStats(): ScheduleStats {
-        return this.scheduleService.getScheduleStats();
-    }
-
-    /**
      * Get comprehensive system status
      */
     async getSystemStatus(): Promise<SystemStatus> {
@@ -343,7 +295,6 @@ export class TemporalService implements OnModuleInit {
                     : undefined,
             },
             discovery: this.getDiscoveryStats(),
-            schedules: this.getScheduleStats(),
         };
     }
 
@@ -355,13 +306,11 @@ export class TemporalService implements OnModuleInit {
         components: {
             client: { status: string; healthy: boolean };
             worker: { status: string; available: boolean };
-            discovery: { status: string; scheduled: number };
-            schedules: { status: string; active: number; errors: number };
+            discovery: { status: string; workflows: number };
         };
     }> {
         const systemStatus = await this.getSystemStatus();
         const discoveryStats = this.getDiscoveryStats();
-        const scheduleStats = this.getScheduleStats();
 
         let overallStatus: 'healthy' | 'degraded' | 'unhealthy' = 'healthy';
 
@@ -376,12 +325,7 @@ export class TemporalService implements OnModuleInit {
         }
 
         // Check discovery health
-        if (discoveryStats.scheduled === 0 && discoveryStats.controllers > 0) {
-            overallStatus = overallStatus === 'healthy' ? 'degraded' : 'unhealthy';
-        }
-
-        // Check schedule health
-        if (scheduleStats.errors > 0) {
+        if (discoveryStats.workflows === 0 && discoveryStats.controllers > 0) {
             overallStatus = overallStatus === 'healthy' ? 'degraded' : 'unhealthy';
         }
 
@@ -401,13 +345,8 @@ export class TemporalService implements OnModuleInit {
                     available: systemStatus.worker.available,
                 },
                 discovery: {
-                    status: discoveryStats.scheduled > 0 ? 'active' : 'inactive',
-                    scheduled: discoveryStats.scheduled,
-                },
-                schedules: {
-                    status: scheduleStats.active > 0 ? 'active' : 'inactive',
-                    active: scheduleStats.active,
-                    errors: scheduleStats.errors,
+                    status: discoveryStats.workflows > 0 ? 'active' : 'inactive',
+                    workflows: discoveryStats.workflows,
                 },
             },
         };
@@ -422,15 +361,6 @@ export class TemporalService implements OnModuleInit {
      */
     getAvailableWorkflows(): string[] {
         return this.discoveryService.getWorkflowNames();
-    }
-
-    /**
-     * Get workflow information
-     */
-    getWorkflowInfo(workflowName: string): ScheduledMethodInfo | undefined {
-        // Search all scheduled workflows for a matching workflowName
-        const allWorkflows = this.discoveryService.getScheduledWorkflows();
-        return allWorkflows.find((wf) => wf.workflowName === workflowName);
     }
 
     /**
@@ -465,27 +395,14 @@ export class TemporalService implements OnModuleInit {
     }
 
     /**
-     * Validate schedule exists before operations
-     */
-    private validateScheduleExists(scheduleId: string): void {
-        if (!this.hasSchedule(scheduleId)) {
-            throw new Error(`Schedule '${scheduleId}' not found`);
-        }
-    }
-
-    /**
      * Log initialization summary
      */
     private async logInitializationSummary(): Promise<void> {
         const discoveryStats = this.getDiscoveryStats();
-        const scheduleStats = this.getScheduleStats();
 
         this.logger.log('Temporal Service initialized successfully');
         this.logger.log(
-            `Discovery: ${discoveryStats.controllers} controllers, ${discoveryStats.scheduled} scheduled workflows`,
-        );
-        this.logger.log(
-            `Schedules: ${scheduleStats.active} active, ${scheduleStats.errors} errors`,
+            `Discovery: ${discoveryStats.controllers} controllers, ${discoveryStats.workflows} workflows`,
         );
         this.logger.log(`Worker: ${this.hasWorker() ? 'available' : 'not available'}`);
     }

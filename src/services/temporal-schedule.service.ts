@@ -87,7 +87,12 @@ export class TemporalScheduleService implements OnModuleInit {
      * @param args - Arguments to pass to the workflow
      * @param options - Additional schedule options
      * @returns Promise resolving to the schedule handle
-     * @throws Error if client is not initialized or schedule creation fails
+     * @throws Error when Temporal schedule client is not initialized or connection fails
+     * @throws Error when cron expression is invalid or malformed
+     * @throws Error when schedule ID conflicts with existing schedule
+     * @throws Error when workflow type is not found or not registered
+     * @throws Error when task queue is invalid or not available
+     * @throws Error when timezone is invalid or not supported
      *
      * @example
      * ```typescript
@@ -158,7 +163,11 @@ export class TemporalScheduleService implements OnModuleInit {
      * @param args - Arguments to pass to the workflow
      * @param options - Additional schedule options
      * @returns Promise resolving to the schedule handle
-     * @throws Error if client is not initialized or schedule creation fails
+     * @throws Error when Temporal schedule client is not initialized or connection fails
+     * @throws Error when interval duration is invalid or malformed
+     * @throws Error when schedule ID conflicts with existing schedule
+     * @throws Error when workflow type is not found or not registered
+     * @throws Error when task queue is invalid or not available
      *
      * @example
      * ```typescript
@@ -223,7 +232,8 @@ export class TemporalScheduleService implements OnModuleInit {
      *
      * @param scheduleId - The ID of the schedule to pause
      * @param note - Optional note explaining the pause reason
-     * @throws Error if client is not initialized or pause fails
+     * @throws Error when Temporal schedule client is not initialized or connection fails
+     * @throws Error when schedule is not found or already deleted
      *
      * @example
      * ```typescript
@@ -241,7 +251,8 @@ export class TemporalScheduleService implements OnModuleInit {
      *
      * @param scheduleId - The ID of the schedule to resume
      * @param note - Optional note explaining the resume reason
-     * @throws Error if client is not initialized or resume fails
+     * @throws Error when Temporal schedule client is not initialized or connection fails
+     * @throws Error when schedule is not found or already deleted
      *
      * @example
      * ```typescript
@@ -258,7 +269,8 @@ export class TemporalScheduleService implements OnModuleInit {
      * Deletes a schedule permanently.
      *
      * @param scheduleId - The ID of the schedule to delete
-     * @throws Error if client is not initialized or deletion fails
+     * @throws Error when Temporal schedule client is not initialized or connection fails
+     * @throws Error when schedule is not found or already deleted
      *
      * @example
      * ```typescript
@@ -274,7 +286,9 @@ export class TemporalScheduleService implements OnModuleInit {
      *
      * @param scheduleId - The ID of the schedule to trigger
      * @param overlapPolicy - Policy for handling overlapping executions
-     * @throws Error if client is not initialized or trigger fails
+     * @throws Error when Temporal schedule client is not initialized or connection fails
+     * @throws Error when schedule is not found or already deleted
+     * @throws Error when overlap policy conflicts with current schedule state
      *
      * @example
      * ```typescript
@@ -295,7 +309,9 @@ export class TemporalScheduleService implements OnModuleInit {
      *
      * @param scheduleId - The ID of the schedule to update
      * @param updateFn - Function to modify the schedule configuration
-     * @throws Error if client is not initialized or update fails
+     * @throws Error when Temporal schedule client is not initialized or connection fails
+     * @throws Error when schedule is not found or already deleted
+     * @throws Error when update function returns invalid schedule configuration
      *
      * @example
      * ```typescript
@@ -319,7 +335,8 @@ export class TemporalScheduleService implements OnModuleInit {
      *
      * @param pageSize - Number of schedules to return per page
      * @returns Promise resolving to array of schedule descriptions
-     * @throws Error if client is not initialized or listing fails
+     * @throws Error when Temporal schedule client is not initialized or connection fails
+     * @throws Error when page size exceeds server limits or is invalid
      *
      * @example
      * ```typescript
@@ -346,7 +363,8 @@ export class TemporalScheduleService implements OnModuleInit {
      *
      * @param scheduleId - The ID of the schedule to describe
      * @returns Promise resolving to schedule description
-     * @throws Error if client is not initialized or description fails
+     * @throws Error when Temporal schedule client is not initialized or connection fails
+     * @throws Error when schedule is not found or already deleted
      *
      * @example
      * ```typescript

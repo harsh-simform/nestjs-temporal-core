@@ -1,3 +1,13 @@
+/**
+ * Utility Barrel Exports for NestJS Temporal Core
+ *
+ * This file consolidates and re-exports all utility functions and classes related to:
+ * - Logging (custom logger, logger manager, logger utilities)
+ * - Validation (cron and interval expression validation)
+ * - Metadata (activity and method metadata utilities)
+ *
+ * Consumers should import from this file for convenient access to all core utilities.
+ */
 // Logger exports
 export { createLogger, LoggerUtils, TemporalLogger, TemporalLoggerManager } from './logger';
 

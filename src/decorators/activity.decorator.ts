@@ -118,8 +118,39 @@ export const ActivityMethod = (nameOrOptions?: string | ActivityMethodOptions): 
 };
 
 /**
- * Property decorator to inject an activity proxy inside a workflow class.
- * Usage: @InjectActivity(ActivityClass)
+ * Property decorator to inject a Temporal activity proxy into a workflow class.
+ *
+ * This decorator allows you to call activities from within a workflow by injecting
+ * a type-safe proxy for the specified activity class. The proxy will use the provided
+ * options (timeouts, retry policies, etc.) or sensible defaults if not specified.
+ *
+ * @param activityType The activity class to inject as a proxy
+ * @param options Optional proxy options (timeouts, retry policies, etc.)
+ *
+ * @example
+ * ```typescript
+ * import { InjectActivity } from '@nestjs-temporal/core';
+ * import { EmailActivities } from './email.activities';
+ *
+ * @Workflow()
+ * export class UserWorkflow {
+ *   @InjectActivity(EmailActivities, { startToCloseTimeout: '2m' })
+ *   private readonly email!: EmailActivities;
+ *
+ *   @WorkflowRun()
+ *   async execute(userId: string) {
+ *     await this.email.sendWelcomeEmail(userId);
+ *   }
+ * }
+ * ```
+ *
+ * @remarks
+ * - The injected property will be a proxy that calls the actual activity implementation.
+ * - At least one timeout (startToCloseTimeout or scheduleToCloseTimeout) must be provided; a default is used if omitted.
+ * - This decorator is only valid inside workflow classes.
+ *
+ * @see {@link Activity} for marking activity classes
+ * @see {@link ActivityMethod} for marking activity methods
  */
 export function InjectActivity<T>(
     activityType: Type<T>,
@@ -161,34 +192,5 @@ export function InjectActivity<T>(
     };
 }
 
-/**
- * Property decorator to inject the WorkflowClient into a NestJS service.
- * Usage: @InjectWorkflowClient()
- */
-export function InjectWorkflowClient(): PropertyDecorator {
-    return (target: Object, propertyKey: string | symbol) => {
-        function isGetWorkflowClientAvailable(
-            obj: Record<string, unknown>,
-        ): obj is Record<string, unknown> & { getWorkflowClient: () => unknown } {
-            return typeof (obj as { getWorkflowClient?: unknown }).getWorkflowClient === 'function';
-        }
-        const getWorkflowClient = () => {
-            if (isGetWorkflowClientAvailable(globalThis as Record<string, unknown>)) {
-                return (
-                    globalThis as unknown as Record<string, unknown> & {
-                        getWorkflowClient: () => unknown;
-                    }
-                ).getWorkflowClient();
-            }
-            throw new Error(
-                'No WorkflowClient instance available. Please implement getWorkflowClient().',
-            );
-        };
-        Object.defineProperty(target, propertyKey, {
-            value: getWorkflowClient(),
-            writable: false,
-            enumerable: false,
-            configurable: false,
-        });
-    };
-}
+// Re-export InjectWorkflowClient from workflow decorator for compatibility
+export { InjectWorkflowClient } from './workflow.decorator';
