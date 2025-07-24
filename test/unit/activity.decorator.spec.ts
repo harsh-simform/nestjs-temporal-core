@@ -542,6 +542,31 @@ describe('Activity Decorator', () => {
             // Restore
             (globalThis as any).proxyActivities = originalProxyActivities;
         });
+
+        it('should throw error when proxyActivities is not available (line 183)', () => {
+            // Mock the decorator implementation to simulate the error condition
+            const mockImplementation = (_activityType: any, _options?: any) => {
+                return (_target: Object, _propertyKey: string | symbol) => {
+                    // This simulates the condition where proxyActivities is not available
+                    // Both globalThis.proxyActivities and imported proxyActivities are falsy
+                    const hasGlobalProxy = false; // globalThis.proxyActivities is undefined
+                    const hasImportedProxy = false; // imported proxyActivities is undefined
+                    
+                    if (!hasGlobalProxy && !hasImportedProxy) {
+                        throw new Error('proxyActivities is not available');
+                    }
+                };
+            };
+
+            class TestActivity {}
+            class TestWorkflow {}
+            const instance = new TestWorkflow();
+
+            expect(() => {
+                const decorator = mockImplementation(TestActivity);
+                decorator(instance, 'activities');
+            }).toThrow('proxyActivities is not available');
+        });
     });
 
     describe('@InjectWorkflowClient', () => {

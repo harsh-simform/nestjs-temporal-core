@@ -88,6 +88,36 @@ describe('Validation Utilities', () => {
                 expect(isValidCronExpression('0 8 * * ')).toBe(false); // empty part
             });
 
+            it('should handle parts.length check edge case (line 32)', () => {
+                // Test the explicit check for parts.length < 5 on line 32
+                expect(isValidCronExpression('0 8')).toBe(false); // 2 parts - triggers line 32
+                expect(isValidCronExpression('0')).toBe(false); // 1 part - triggers line 32
+                expect(isValidCronExpression('')).toBe(false); // 0 parts - triggers line 32
+            });
+
+            it('should reject single leading space before digit pattern', () => {
+                // Test the specific pattern from lines 24-26: single leading space before digit (ambiguous)
+                expect(isValidCronExpression(' 0 8 * * *')).toBe(false); // single leading space - should be rejected
+                expect(isValidCronExpression('  0 8 * * *')).toBe(true); // multiple leading spaces - should be allowed
+                expect(isValidCronExpression('   0 8 * * *')).toBe(true); // multiple leading spaces - should be allowed
+            });
+
+            it('should handle edge cases for valid cron regex', () => {
+                // Test expressions that contain valid characters but in specific combinations
+                expect(isValidCronExpression('L * * * *')).toBe(true); // L is valid for last day
+                expect(isValidCronExpression('W * * * *')).toBe(true); // W is valid for weekday
+                expect(isValidCronExpression('? * * * *')).toBe(true); // ? is valid for day/weekday
+                expect(isValidCronExpression('1/5 * * * *')).toBe(true); // slash notation
+                expect(isValidCronExpression('1-5 * * * *')).toBe(true); // range notation
+            });
+
+            it('should handle seconds field validation for 6-field expressions', () => {
+                // Test seconds field boundary conditions
+                expect(isValidCronExpression('59 0 8 * * *')).toBe(true); // 59 seconds is valid
+                expect(isValidCronExpression('60 0 8 * * *')).toBe(false); // 60 seconds is invalid
+                expect(isValidCronExpression('100 0 8 * * *')).toBe(false); // 100 seconds is invalid
+            });
+
             it('should reject 6-field cron with invalid characters in seconds field', () => {
                 expect(isValidCronExpression('a 8 * * * *')).toBe(false); // invalid character in seconds
                 expect(isValidCronExpression('@ 8 * * * *')).toBe(false); // invalid character in seconds
@@ -259,6 +289,20 @@ describe('Validation Utilities', () => {
                 expect(isValidIntervalExpression('30H')).toBe(false);
                 expect(isValidIntervalExpression('1D')).toBe(false);
                 expect(isValidIntervalExpression('100MS')).toBe(false);
+            });
+
+            it('should handle edge cases for regex validation', () => {
+                // Test boundary cases for the regex pattern
+                expect(isValidIntervalExpression('1ms')).toBe(true); // minimal ms
+                expect(isValidIntervalExpression('1s')).toBe(true); // minimal s
+                expect(isValidIntervalExpression('1m')).toBe(true); // minimal m
+                expect(isValidIntervalExpression('1h')).toBe(true); // minimal h
+                expect(isValidIntervalExpression('1d')).toBe(true); // minimal d
+                
+                // Test expressions with only whitespace (after trim)
+                expect(isValidIntervalExpression('   ')).toBe(false); // only spaces
+                expect(isValidIntervalExpression('\t\t')).toBe(false); // only tabs
+                expect(isValidIntervalExpression('\n\n')).toBe(false); // only newlines
             });
         });
     });
