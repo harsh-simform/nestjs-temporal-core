@@ -12,11 +12,10 @@ Complete NestJS integration for Temporal.io with unified service architecture, c
 
 - **Unified TemporalModule** with sync and async configuration support
 - **Comprehensive TemporalService** providing all Temporal functionality in one place
-- **Complete Decorator Suite** for workflows, activities, signals, queries, and scheduling
+- **Complete Decorator Suite** for workflows, activities, signals, and queries
 - **Advanced Worker Management** with health monitoring and lifecycle control
-- **Schedule Management** with full CRUD operations and cron/interval support
-- **Automatic Discovery** of workflows, activities, and scheduled methods
-- **Enhanced Health Monitoring** with comprehensive system status reporting
+- **Automatic Discovery** of workflows, activities, signals, and queries
+- **Enhanced Health Monitoring** with comprehensive system status reporting and health endpoints
 - **Service-Based Architecture** with specialized services for each concern
 - **TypeScript Best Practices** with comprehensive type safety and JSDoc documentation
 - **Enterprise Ready** with error handling, validation, and production monitoring
@@ -188,40 +187,28 @@ export class OrderWorkflow {
 }
 ```
 
-### Scheduling Decorators
+### Discovery and Metadata
 
 ```typescript
-import { Scheduled, Cron, Interval } from 'nestjs-temporal-core';
 import { Injectable } from '@nestjs/common';
+import { TemporalDiscoveryService } from 'nestjs-temporal-core';
 
 @Injectable()
-export class ReportController {
-  @Scheduled({
-    scheduleId: 'daily-report',
-    cron: '0 8 * * *',
-    description: 'Daily sales report',
-    timezone: 'America/New_York',
-    overlapPolicy: 'SKIP'
-  })
-  async generateDailyReport(): Promise<void> {
-    // Generate daily report
+export class DiscoveryService {
+  constructor(private discoveryService: TemporalDiscoveryService) {}
+
+  getSystemInfo() {
+    return {
+      workflows: this.discoveryService.getWorkflowNames(),
+      signals: this.discoveryService.getSignals(),
+      queries: this.discoveryService.getQueries(),
+      activities: this.discoveryService.getActivityNames(),
+      stats: this.discoveryService.getStats()
+    };
   }
 
-  @Cron('0 0 1 * *', {
-    scheduleId: 'monthly-summary',
-    description: 'Monthly summary report'
-  })
-  async generateMonthlyReport(): Promise<void> {
-    // Generate monthly report
-  }
-
-  @Interval('5m', {
-    scheduleId: 'health-check',
-    description: 'Health check every 5 minutes',
-    startPaused: false
-  })
-  async healthCheck(): Promise<void> {
-    // Health check logic
+  getWorkflowMetadata(workflowName: string) {
+    return this.discoveryService.getWorkflowInfo(workflowName);
   }
 }
 ```
@@ -270,33 +257,32 @@ export class OrderService {
 }
 ```
 
-### Schedule Management
+### Worker Management
 
 ```typescript
 import { Injectable } from '@nestjs/common';
 import { TemporalService } from 'nestjs-temporal-core';
 
 @Injectable()
-export class ScheduleService {
+export class WorkerService {
   constructor(private readonly temporal: TemporalService) {}
 
-  async manageSchedules() {
-    // Get all managed schedules
-    const scheduleIds = this.temporal.getScheduleIds();
+  async manageWorker() {
+    // Check if worker is available
+    const hasWorker = this.temporal.hasWorker();
     
-    // Trigger a schedule immediately
-    await this.temporal.triggerSchedule('daily-report');
-
-    // Pause a schedule
-    await this.temporal.pauseSchedule('daily-report', 'Maintenance pause');
-
-    // Resume a schedule
-    await this.temporal.resumeSchedule('daily-report', 'Maintenance complete');
-
-    // Get schedule information
-    const scheduleInfo = await this.temporal.getScheduleInfo('daily-report');
+    // Get detailed worker status
+    const workerStatus = this.temporal.getWorkerStatus();
     
-    return { scheduleIds, scheduleInfo };
+    // Get worker health information
+    const workerHealth = await this.temporal.getWorkerHealth();
+    
+    // Restart worker if needed
+    if (!workerStatus.isHealthy) {
+      await this.temporal.restartWorker();
+    }
+    
+    return { hasWorker, workerStatus, workerHealth };
   }
 }
 ```
@@ -320,8 +306,7 @@ export class HealthService {
     return {
       system: await this.temporal.getSystemStatus(),
       worker: this.temporal.getWorkerStatus(),
-      discovery: this.temporal.getDiscoveryStats(),
-      schedules: this.temporal.getScheduleStats()
+      discovery: this.temporal.getDiscoveryStats()
     };
   }
 
@@ -351,31 +336,21 @@ export class HealthService {
 - **`terminateWorkflow(workflowId, reason?)`** - Terminate workflow
 - **`cancelWorkflow(workflowId)`** - Cancel workflow gracefully
 
-#### Schedule Management
-- **`triggerSchedule(scheduleId)`** - Trigger immediate execution
-- **`pauseSchedule(scheduleId, note?)`** - Pause schedule
-- **`resumeSchedule(scheduleId, note?)`** - Resume schedule
-- **`deleteSchedule(scheduleId, force?)`** - Delete schedule
-- **`getScheduleIds()`** - Get all managed schedule IDs
-- **`getScheduleInfo(scheduleId)`** - Get schedule details
-- **`hasSchedule(scheduleId)`** - Check if schedule exists
+#### Discovery Operations
+- **`getAvailableWorkflows()`** - Get available workflow types
+- **`getWorkflowInfo(workflowName)`** - Get workflow information
+- **`hasWorkflow(workflowName)`** - Check if workflow exists
 
 #### Health & Monitoring
 - **`getSystemStatus()`** - Get comprehensive system status
 - **`getOverallHealth()`** - Get overall system health
 - **`getWorkerHealth()`** - Get worker health status
 - **`getDiscoveryStats()`** - Get discovery statistics
-- **`getScheduleStats()`** - Get schedule statistics
 
 #### Worker Management
 - **`hasWorker()`** - Check if worker is available
 - **`getWorkerStatus()`** - Get detailed worker status
 - **`restartWorker()`** - Restart worker
-
-#### Discovery Operations
-- **`getAvailableWorkflows()`** - Get available workflow types
-- **`getWorkflowInfo(workflowName)`** - Get workflow information
-- **`hasWorkflow(workflowName)`** - Check if workflow exists
 
 ### Specialized Services
 
@@ -397,44 +372,24 @@ export class AdvancedWorkflowService {
 }
 ```
 
-#### TemporalWorkerManagerService
+#### TemporalWorkerService
 Worker lifecycle and health management.
 
 ```typescript
 @Injectable()
 export class WorkerManagementService {
-  constructor(private workerManager: TemporalWorkerManagerService) {}
+  constructor(private workerService: TemporalWorkerService) {}
 
   async checkWorkerHealth() {
-    return this.workerManager.healthCheck();
+    return this.workerService.healthCheck();
   }
 
   async getWorkerConnection() {
-    return this.workerManager.getConnection();
-  }
-}
-```
-
-#### TemporalScheduleService
-Advanced schedule operations.
-
-```typescript
-@Injectable()
-export class AdvancedScheduleService {
-  constructor(private scheduleService: TemporalScheduleService) {}
-
-  async createDynamicSchedule() {
-    return this.scheduleService.createCronSchedule(
-      'dynamic-schedule',
-      'MyWorkflow',
-      '0 */2 * * *',
-      'default',
-      ['arg1', 'arg2']
-    );
+    return this.workerService.getConnection();
   }
 
-  async listAllSchedules() {
-    return this.scheduleService.listSchedules();
+  async getWorkerState() {
+    return this.workerService.getState();
   }
 }
 ```
@@ -504,18 +459,18 @@ interface TemporalOptions {
 }
 ```
 
-#### ScheduledOptions
+#### ActivityOptions
 ```typescript
-interface ScheduledOptions {
-  scheduleId: string;
-  cron?: string;
-  interval?: string;
-  description?: string;
-  taskQueue?: string;
-  timezone?: string;
-  overlapPolicy?: 'ALLOW_ALL' | 'SKIP' | 'BUFFER_ONE' | 'BUFFER_ALL' | 'CANCEL_OTHER';
-  startPaused?: boolean;
-  autoStart?: boolean;
+interface ActivityOptions {
+  name?: string;
+  timeout?: string | Duration;
+  maxRetries?: number;
+  retryPolicy?: {
+    maximumAttempts?: number;
+    initialInterval?: string | Duration;
+    maximumInterval?: string | Duration;
+    backoffCoefficient?: number;
+  };
 }
 ```
 
@@ -540,11 +495,10 @@ export class AppModule {}
 - **GET `/temporal/health/system`** - Detailed system status
 - **GET `/temporal/health/client`** - Client connectivity
 - **GET `/temporal/health/worker`** - Worker status
-- **GET `/temporal/health/discovery`** - Discovery service
-- **GET `/temporal/health/schedules`** - Schedule service
-- **GET `/temporal/health/live`** - Liveness probe
-- **GET `/temporal/health/ready`** - Readiness probe
-- **GET `/temporal/health/startup`** - Startup probe
+- **GET `/temporal/health/discovery`** - Discovery service status
+- **GET `/temporal/health/live`** - Liveness probe (K8s compatible)
+- **GET `/temporal/health/ready`** - Readiness probe (K8s compatible)
+- **GET `/temporal/health/startup`** - Startup probe (K8s compatible)
 
 ### Custom Health Checks
 
