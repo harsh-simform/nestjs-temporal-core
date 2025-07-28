@@ -1,9 +1,8 @@
 import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { Client, ScheduleClient, ScheduleHandle, ScheduleOverlapPolicy } from '@temporalio/client';
 import { Duration } from '@temporalio/common';
-import { TEMPORAL_CLIENT, TEMPORAL_MODULE_OPTIONS } from '../constants';
+import { TEMPORAL_CLIENT } from '../constants';
 import { createLogger, TemporalLogger } from '../utils/logger';
-import { TemporalOptions } from '../interfaces';
 
 /**
  * Manages Temporal Schedules for recurring workflow execution.
@@ -48,8 +47,6 @@ export class TemporalScheduleService implements OnModuleInit {
     constructor(
         @Inject(TEMPORAL_CLIENT)
         private readonly client: Client | null,
-        @Inject(TEMPORAL_MODULE_OPTIONS)
-        private readonly options: TemporalOptions,
     ) {
         this.logger = createLogger(TemporalScheduleService.name);
     }
@@ -61,19 +58,29 @@ export class TemporalScheduleService implements OnModuleInit {
     async onModuleInit(): Promise<void> {
         if (!this.client) {
             this.logger.warn(
-                'Temporal client not initialized - schedule features will be unavailable',
+                'Temporal client not initialized - schedule features will be unavailable. ' +
+                    'Ensure connection configuration is provided and Temporal server is accessible.',
             );
             return;
         }
         try {
             if (typeof this.client.schedule === 'undefined') {
-                this.logger.warn('Schedule client not available in this Temporal SDK version');
+                this.logger.warn(
+                    'Schedule client not available in this Temporal SDK version. ' +
+                        'Upgrade to a newer version for schedule support.',
+                );
                 return;
             }
             this.scheduleClient = this.client.schedule;
-            this.logger.log('Temporal schedule client initialized');
+            this.logger.log(
+                'Temporal schedule client initialized and ready for schedule management',
+            );
         } catch (error) {
-            this.logger.error('Failed to initialize schedule client', error);
+            this.logger.error('Failed to initialize schedule client:', (error as Error).message);
+            this.logger.debug(
+                `Error details: ${(error as Error).stack || 'No stack trace available'}. ` +
+                    'Suggestion: Check Temporal server connection and SDK version compatibility',
+            );
         }
     }
 
@@ -375,7 +382,7 @@ export class TemporalScheduleService implements OnModuleInit {
     async describeSchedule(scheduleId: string): Promise<unknown> {
         this.ensureClientInitialized();
         try {
-            const handle = await this.scheduleClient!.getHandle(scheduleId);
+            const handle = this.scheduleClient!.getHandle(scheduleId);
             return await handle.describe();
         } catch (error) {
             this.logger.error(`Failed to describe schedule '${scheduleId}': ${error.message}`);
@@ -490,7 +497,7 @@ export class TemporalScheduleService implements OnModuleInit {
     ): Promise<void> {
         this.ensureClientInitialized();
         try {
-            const handle = await this.scheduleClient!.getHandle(scheduleId);
+            const handle = this.scheduleClient!.getHandle(scheduleId);
             await action(handle);
             this.logger.log(`Successfully ${operation}d schedule: ${scheduleId}`);
         } catch (error) {

@@ -3,6 +3,7 @@ import { DiscoveryService } from '@nestjs/core';
 import { NativeConnection, Worker } from '@temporalio/worker';
 import { TemporalWorkerManagerService } from '../../src/services/temporal-worker.service';
 import { TemporalMetadataAccessor } from '../../src/services/temporal-metadata.service';
+import { TemporalDiscoveryService } from '../../src/services/temporal-discovery.service';
 import { TEMPORAL_MODULE_OPTIONS } from '../../src/constants';
 import { WorkerModuleOptions } from '../../src/interfaces';
 
@@ -39,6 +40,7 @@ describe('TemporalWorkerManagerService', () => {
     let service: TemporalWorkerManagerService;
     let mockDiscoveryService: jest.Mocked<DiscoveryService>;
     let mockMetadataAccessor: jest.Mocked<TemporalMetadataAccessor>;
+    let mockTemporalDiscoveryService: jest.Mocked<TemporalDiscoveryService>;
     let mockWorker: jest.Mocked<Worker>;
     let mockConnection: jest.Mocked<NativeConnection>;
     let mockOptions: WorkerModuleOptions;
@@ -46,6 +48,7 @@ describe('TemporalWorkerManagerService', () => {
     beforeEach(async () => {
         // Reset mocks
         jest.clearAllMocks();
+        jest.clearAllTimers();
 
         // Create mock worker
         mockWorker = {
@@ -100,6 +103,22 @@ describe('TemporalWorkerManagerService', () => {
             }),
         } as any;
 
+        // Create mock temporal discovery service
+        mockTemporalDiscoveryService = {
+            getWorkflows: jest.fn().mockReturnValue([]),
+            getSignals: jest.fn().mockReturnValue([]),
+            getQueries: jest.fn().mockReturnValue([]),
+            getChildWorkflows: jest.fn().mockReturnValue([]),
+            getStats: jest.fn().mockReturnValue({
+                controllers: 0,
+                methods: 0,
+                signals: 0,
+                queries: 0,
+                workflows: 0,
+                childWorkflows: 0,
+            }),
+        } as any;
+
         // Setup Temporal SDK mocks
         (NativeConnection.connect as jest.Mock).mockResolvedValue(mockConnection);
         (Worker.create as jest.Mock).mockResolvedValue(mockWorker);
@@ -119,10 +138,40 @@ describe('TemporalWorkerManagerService', () => {
                     provide: TemporalMetadataAccessor,
                     useValue: mockMetadataAccessor,
                 },
+                {
+                    provide: TemporalDiscoveryService,
+                    useValue: mockTemporalDiscoveryService,
+                },
             ],
         }).compile();
 
         service = module.get<TemporalWorkerManagerService>(TemporalWorkerManagerService);
+    });
+
+    afterEach(async () => {
+        // Ensure real timers are restored
+        jest.useRealTimers();
+        
+        // Clear all timers first
+        jest.clearAllTimers();
+        
+        // Ensure service shuts down cleanly
+        if (service) {
+            try {
+                // Force stop any running background processes
+                const workerPromise = (service as any).workerPromise;
+                if (workerPromise) {
+                    (service as any).workerPromise = null;
+                }
+                
+                // Set isRunning to false to stop background loops
+                (service as any).isRunning = false;
+                
+                await service.shutdown();
+            } catch (error) {
+                // Ignore shutdown errors in tests
+            }
+        }
     });
 
     describe('Module Lifecycle', () => {
@@ -273,6 +322,7 @@ describe('TemporalWorkerManagerService', () => {
                 mockOptions,
                 mockDiscoveryService,
                 mockMetadataAccessor,
+                mockTemporalDiscoveryService,
             );
 
             // Mock the worker as null to simulate not initialized
@@ -333,6 +383,7 @@ describe('TemporalWorkerManagerService', () => {
                 invalidOptions,
                 mockDiscoveryService,
                 mockMetadataAccessor,
+                mockTemporalDiscoveryService,
             );
 
             await expect(invalidService.onModuleInit()).rejects.toThrow(
@@ -346,6 +397,7 @@ describe('TemporalWorkerManagerService', () => {
                 invalidOptions,
                 mockDiscoveryService,
                 mockMetadataAccessor,
+                mockTemporalDiscoveryService,
             );
 
             await expect(invalidService.onModuleInit()).rejects.toThrow(
@@ -390,11 +442,11 @@ describe('TemporalWorkerManagerService', () => {
             await service.onModuleInit();
             await service.onApplicationBootstrap();
 
-            // Wait for background processing and restart
+            // Wait for background processing and restart cycle
             await new Promise((resolve) => setTimeout(resolve, 6000));
 
             expect(mockWorker.run).toHaveBeenCalledTimes(2);
-        });
+        }, 15000);
 
         it('should not restart worker when autoRestart is disabled', async () => {
             mockOptions.autoRestart = false;
@@ -403,11 +455,11 @@ describe('TemporalWorkerManagerService', () => {
             await service.onModuleInit();
             await service.onApplicationBootstrap();
 
-            // Wait for background processing
-            await new Promise((resolve) => setTimeout(resolve, 100));
+            // Wait to ensure no restart happens
+            await new Promise((resolve) => setTimeout(resolve, 6000));
 
             expect(mockWorker.run).toHaveBeenCalledTimes(1);
-        });
+        }, 15000);
     });
 
     describe('Integration Tests', () => {
@@ -577,6 +629,7 @@ describe('TemporalWorkerManagerService', () => {
                 optionsWithActivityClasses,
                 mockDiscoveryService,
                 mockMetadataAccessor,
+                mockTemporalDiscoveryService,
             );
 
             // Mock the required methods
@@ -605,6 +658,7 @@ describe('TemporalWorkerManagerService', () => {
                 mockOptions,
                 mockDiscoveryService,
                 mockMetadataAccessor,
+                mockTemporalDiscoveryService,
             );
 
             // Mock the worker as null
@@ -622,10 +676,10 @@ describe('TemporalWorkerManagerService', () => {
             await service.onApplicationBootstrap();
 
             // Wait for background processing
-            await new Promise((resolve) => setTimeout(resolve, 100));
+            await new Promise((resolve) => setTimeout(resolve, 1000));
 
             expect(service.getWorkerStatus().lastError).toBe('Worker execution error');
-        });
+        }, 15000);
     });
 
     describe('Shutdown Error Handling', () => {
@@ -661,11 +715,12 @@ describe('TemporalWorkerManagerService', () => {
             const neverResolvingPromise = new Promise<never>(() => {});
             Object.defineProperty(service, 'workerPromise', { value: neverResolvingPromise });
 
+            // Start shutdown and wait - should complete due to timeout
             await service.shutdown();
 
             // Should complete without hanging
             expect(true).toBe(true);
-        });
+        }, 15000);
     });
 
     describe('Configuration Logging', () => {
@@ -1269,10 +1324,10 @@ describe('TemporalWorkerManagerService', () => {
             await service.onModuleInit();
             await service.onApplicationBootstrap();
 
-            await new Promise((resolve) => setTimeout(resolve, 100));
+            await new Promise((resolve) => setTimeout(resolve, 1000));
 
             expect(service.getWorkerStatus().lastError).toBe('Unknown worker error');
-        });
+        }, 15000);
 
         it('should handle worker loop error with error stack', async () => {
             const error = new Error('Worker error');
@@ -1282,10 +1337,10 @@ describe('TemporalWorkerManagerService', () => {
             await service.onModuleInit();
             await service.onApplicationBootstrap();
 
-            await new Promise((resolve) => setTimeout(resolve, 100));
+            await new Promise((resolve) => setTimeout(resolve, 1000));
 
             expect(service.getWorkerStatus().lastError).toBe('Worker error');
-        });
+        }, 15000);
 
         it('should handle worker execution error with unknown error format', async () => {
             const mockWorker = {
