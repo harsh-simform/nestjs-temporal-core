@@ -172,8 +172,8 @@ describe('TemporalScheduleService', () => {
             await serviceWithError.onModuleInit();
 
             expect(loggerSpy).toHaveBeenCalledWith(
-                'Failed to initialize schedule client',
-                expect.any(Error),
+                'Failed to initialize schedule client:',
+                expect.any(String),
             );
 
             loggerSpy.mockRestore();
@@ -210,8 +210,8 @@ describe('TemporalScheduleService', () => {
 
             // This should trigger the catch block in line 76
             expect(loggerSpy).toHaveBeenCalledWith(
-                'Failed to initialize schedule client',
-                expect.any(Error),
+                'Failed to initialize schedule client:',
+                expect.any(String),
             );
         });
     });

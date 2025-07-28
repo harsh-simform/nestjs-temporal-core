@@ -8,7 +8,8 @@ import {
 import { DiscoveryService } from '@nestjs/core';
 import { NativeConnection, Worker } from '@temporalio/worker';
 import { TemporalMetadataAccessor } from './temporal-metadata.service';
-import { DEFAULT_NAMESPACE, TEMPORAL_MODULE_OPTIONS } from '../constants';
+import { TemporalDiscoveryService } from './temporal-discovery.service';
+import { DEFAULT_NAMESPACE, TEMPORAL_MODULE_OPTIONS, TEMPORAL_WORKFLOW } from '../constants';
 import {
     ActivityMethodHandler,
     WorkerCreateOptions,
@@ -59,6 +60,7 @@ export class TemporalWorkerManagerService
     private startedAt?: Date;
     private lastError?: string;
     private activities: Record<string, ActivityMethodHandler> = {};
+    private workflows: Record<string, (...args: unknown[]) => unknown> = {};
     private workerPromise: Promise<void> | null = null;
 
     constructor(
@@ -66,6 +68,7 @@ export class TemporalWorkerManagerService
         private readonly options: WorkerModuleOptions,
         private readonly discoveryService: DiscoveryService,
         private readonly metadataAccessor: TemporalMetadataAccessor,
+        private readonly temporalDiscoveryService: TemporalDiscoveryService,
     ) {
         this.logger = createLogger(TemporalWorkerManagerService.name);
     }
@@ -137,18 +140,23 @@ export class TemporalWorkerManagerService
             return;
         }
 
-        this.logger.log(`Starting worker for task queue: ${this.options?.taskQueue} in background`);
+        this.logger.log(
+            `Starting Temporal worker in background for task queue: ${this.options?.taskQueue}`,
+        );
 
         // Create the worker promise with comprehensive error handling
         this.workerPromise = this.runWorkerLoop().catch((error) => {
             this.isRunning = false;
             this.lastError = (error as Error)?.message || 'Unknown worker error';
-            this.logger.error('Worker crashed', (error as Error)?.stack || error);
+            this.logger.error(
+                'Temporal worker crashed unexpectedly',
+                (error as Error)?.stack || error,
+            );
 
             // Optionally restart worker after delay
             if (this.options?.autoRestart !== false) {
                 setTimeout(() => {
-                    this.logger.log('Attempting to restart worker...');
+                    this.logger.log('Attempting to restart crashed Temporal worker...');
                     this.startWorkerInBackground();
                 }, 5000);
             }
@@ -177,7 +185,7 @@ export class TemporalWorkerManagerService
         this.startedAt = new Date();
         this.lastError = undefined;
 
-        this.logger.log('Worker started successfully');
+        this.logger.log('Temporal worker started successfully and listening for tasks');
 
         try {
             // This blocks indefinitely (intended behavior), but it's running in background
@@ -196,12 +204,13 @@ export class TemporalWorkerManagerService
 
     /**
      * Initializes the worker configuration and connections.
-     * Sets up activities discovery, creates connections, and prepares the worker.
+     * Sets up activities discovery, workflow registration, creates connections, and prepares the worker.
      * Does not start the worker - that's handled separately.
      */
     private async initializeWorker(): Promise<void> {
         this.validateConfiguration();
         this.activities = await this.discoverActivities();
+        this.workflows = await this.discoverAndRegisterWorkflows();
         await this.createConnection();
         await this.createWorker();
         this.logWorkerConfiguration();
@@ -237,12 +246,66 @@ export class TemporalWorkerManagerService
             throw new Error('Cannot specify both workflowsPath and workflowBundle');
         }
 
+        // Validate workflow path resolution for different environments
+        if (hasWorkflowsPath) {
+            this.validateWorkflowsPath(workflowsPath!);
+        }
+
         if (hasWorkflowBundle) {
             this.logger.debug('Using pre-bundled workflows (recommended for production)');
         } else if (hasWorkflowsPath) {
             this.logger.debug('Using workflows from filesystem path (recommended for development)');
         } else {
-            this.logger.debug('Worker configured for activities only (no workflows)');
+            this.logger.debug(
+                'Worker configured for decorator-based workflow discovery or activities only',
+            );
+        }
+    }
+
+    /**
+     * Validates that the workflow path is accessible and exists.
+     * Provides environment-specific path resolution guidance.
+     */
+    private validateWorkflowsPath(workflowsPath: string): void {
+        try {
+            const fs = require('fs');
+            const path = require('path');
+
+            // Resolve the path relative to the current working directory
+            const resolvedPath = path.resolve(process.cwd(), workflowsPath);
+
+            // Check if the path exists
+            if (!fs.existsSync(resolvedPath)) {
+                this.logger.warn(
+                    `Workflow path does not exist: ${resolvedPath}. ` +
+                        `This may cause issues in production. Consider using workflowBundle instead.`,
+                );
+                return;
+            }
+
+            // Check if it's a directory or file
+            const stats = fs.statSync(resolvedPath);
+            if (stats.isDirectory()) {
+                // Check if directory contains workflow files
+                const files = fs.readdirSync(resolvedPath);
+                const workflowFiles = files.filter(
+                    (file: string) => file.endsWith('.js') || file.endsWith('.ts'),
+                );
+
+                if (workflowFiles.length === 0) {
+                    this.logger.warn(
+                        `Workflow directory ${resolvedPath} contains no .js or .ts files. ` +
+                            `Ensure workflow files are present and properly compiled.`,
+                    );
+                }
+            }
+
+            this.logger.debug(`Workflow path validated: ${resolvedPath}`);
+        } catch (error) {
+            this.logger.warn(
+                `Unable to validate workflow path ${workflowsPath}: ${(error as Error).message}. ` +
+                    `This may cause runtime issues.`,
+            );
         }
     }
 
@@ -300,7 +363,7 @@ export class TemporalWorkerManagerService
     /**
      * Builds the complete worker options configuration.
      * Combines base options, environment defaults, and user overrides.
-     * Handles both workflow bundles and filesystem paths.
+     * Handles both workflow bundles, filesystem paths, and registered workflows.
      */
     private buildWorkerOptions(): Record<string, unknown> {
         const baseOptions: Record<string, unknown> = {
@@ -310,11 +373,20 @@ export class TemporalWorkerManagerService
 
         const workflowBundle = this.options?.workflowBundle;
         const workflowsPath = this.options?.workflowsPath as string | undefined;
+        const hasRegisteredWorkflows = Object.keys(this.workflows).length > 0;
 
-        if (workflowBundle) {
+        // Priority order: registered workflows > workflowBundle > workflowsPath
+        if (hasRegisteredWorkflows) {
+            baseOptions.workflows = this.workflows;
+            this.logger.debug(`Using ${Object.keys(this.workflows).length} registered workflows`);
+        } else if (workflowBundle) {
             baseOptions.workflowBundle = workflowBundle;
+            this.logger.debug('Using pre-bundled workflows');
         } else if (workflowsPath) {
             baseOptions.workflowsPath = workflowsPath;
+            this.logger.debug('Using workflows from filesystem path');
+        } else {
+            this.logger.warn('No workflows configured - worker will only process activities');
         }
 
         const defaultOptions = this.getEnvironmentDefaults();
@@ -350,6 +422,84 @@ export class TemporalWorkerManagerService
                     reuseV8Context: true,
                 };
         }
+    }
+
+    /**
+     * Discovers and registers all workflow classes in the application.
+     * Creates wrapper functions for Temporal's function-based workflow system.
+     * Returns a map of workflow names to their execution functions.
+     */
+    private async discoverAndRegisterWorkflows(): Promise<
+        Record<string, (...args: unknown[]) => unknown>
+    > {
+        const workflows: Record<string, (...args: unknown[]) => unknown> = {};
+
+        // Get discovered workflows from the discovery service
+        const discoveredWorkflows = this.temporalDiscoveryService.getWorkflows();
+
+        this.logger.log(`Found ${discoveredWorkflows.length} workflow classes`);
+
+        for (const workflowInfo of discoveredWorkflows) {
+            try {
+                const { className, methodName, handler, instance } = workflowInfo;
+
+                // Get workflow metadata from the instance constructor
+                const workflowMetadata = Reflect.getMetadata(
+                    TEMPORAL_WORKFLOW,
+                    instance.constructor,
+                );
+                const workflowName = workflowMetadata?.name || methodName;
+
+                // Create a wrapper function that Temporal can execute
+                const workflowFunction = async (...args: unknown[]) => {
+                    this.logger.debug(
+                        `Executing workflow ${workflowName} with ${args.length} args`,
+                    );
+
+                    try {
+                        // Validate handler exists and is callable
+                        if (typeof handler !== 'function') {
+                            throw new Error(
+                                `Workflow handler for ${workflowName} is not a function`,
+                            );
+                        }
+
+                        // Call the bound handler method
+                        const result = await handler(...args);
+                        this.logger.debug(`Workflow ${workflowName} completed successfully`);
+                        return result;
+                    } catch (error) {
+                        this.logger.error(
+                            `Workflow ${workflowName} failed: ${(error as Error).message}`,
+                        );
+                        this.logger.debug(
+                            `Workflow error details: ${(error as Error).stack || 'No stack available'}, ` +
+                                `args: ${args.length}, class: ${className}, method: ${methodName}`,
+                        );
+                        throw error;
+                    }
+                };
+
+                // Set the function name for Temporal registration
+                Object.defineProperty(workflowFunction, 'name', { value: workflowName });
+
+                workflows[workflowName] = workflowFunction;
+
+                this.logger.debug(
+                    `Registered workflow: ${className}.${methodName} -> ${workflowName}`,
+                );
+            } catch (error) {
+                this.logger.error(
+                    `Failed to register workflow ${workflowInfo.className}.${workflowInfo.methodName}:`,
+                    (error as Error)?.stack || error,
+                );
+            }
+        }
+
+        const workflowCount = Object.keys(workflows).length;
+        this.logger.log(`Registered ${workflowCount} workflow functions`);
+
+        return workflows;
     }
 
     /**
@@ -420,18 +570,31 @@ export class TemporalWorkerManagerService
 
     /**
      * Logs a comprehensive summary of the worker configuration.
-     * Includes task queue, namespace, workflow source, and activity count.
+     * Includes task queue, namespace, workflow source, activity count, and workflow count.
      * Provides debugging information for configuration validation.
      */
     private logWorkerConfiguration(): void {
         const connection = this.options?.connection;
         const workflowBundle = this.options?.workflowBundle;
         const workflowsPath = this.options?.workflowsPath;
+        const hasRegisteredWorkflows = Object.keys(this.workflows).length > 0;
+
+        let workflowSource: string;
+        if (hasRegisteredWorkflows) {
+            workflowSource = 'registered';
+        } else if (workflowBundle) {
+            workflowSource = 'bundle';
+        } else if (workflowsPath) {
+            workflowSource = 'filesystem';
+        } else {
+            workflowSource = 'none';
+        }
 
         const config = {
             taskQueue: this.options?.taskQueue,
             namespace: connection?.namespace || DEFAULT_NAMESPACE,
-            workflowSource: workflowBundle ? 'bundle' : workflowsPath ? 'filesystem' : 'none',
+            workflowSource,
+            workflowsCount: Object.keys(this.workflows).length,
             activitiesCount: Object.keys(this.activities).length,
             autoStart: this.options?.autoStart !== false,
             environment: process.env.NODE_ENV || 'development',
@@ -439,6 +602,10 @@ export class TemporalWorkerManagerService
 
         this.logger.log('Worker configuration summary:');
         this.logger.debug(JSON.stringify(config, null, 2));
+
+        if (hasRegisteredWorkflows) {
+            this.logger.log(`Registered workflows: ${Object.keys(this.workflows).join(', ')}`);
+        }
     }
 
     // ==========================================
@@ -539,14 +706,28 @@ export class TemporalWorkerManagerService
         const workflowBundle = this.options?.workflowBundle;
         const workflowsPath = this.options?.workflowsPath;
 
+        const hasRegisteredWorkflows = Object.keys(this.workflows).length > 0;
+        let workflowSource: 'bundle' | 'filesystem' | 'registered' | 'none';
+
+        if (hasRegisteredWorkflows) {
+            workflowSource = 'registered';
+        } else if (workflowBundle) {
+            workflowSource = 'bundle';
+        } else if (workflowsPath) {
+            workflowSource = 'filesystem';
+        } else {
+            workflowSource = 'none';
+        }
+
         return {
             isInitialized: this.isInitialized,
             isRunning: this.isRunning,
             isHealthy: this.isInitialized && !this.lastError && this.connection !== null,
             taskQueue: (this.options?.taskQueue as string) || 'unknown',
             namespace: connection?.namespace || DEFAULT_NAMESPACE,
-            workflowSource: workflowBundle ? 'bundle' : workflowsPath ? 'filesystem' : 'none',
+            workflowSource,
             activitiesCount: Object.keys(this.activities).length,
+            workflowsCount: Object.keys(this.workflows).length,
             lastError: this.lastError,
             startedAt: this.startedAt,
             uptime,

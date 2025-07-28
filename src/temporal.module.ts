@@ -73,7 +73,49 @@ export class TemporalModule {
             },
             {
                 provide: TEMPORAL_CLIENT,
-                useValue: null, // For testing purposes, we'll provide null and let services handle it
+                useFactory: async (temporalOptions: TemporalOptions) => {
+                    // Only create client if connection configuration is provided
+                    if (!temporalOptions.connection) {
+                        return null;
+                    }
+
+                    try {
+                        const { Client } = await import('@temporalio/client');
+
+                        const clientOptions: Record<string, unknown> = {
+                            connection: {
+                                address: temporalOptions.connection.address,
+                                tls: temporalOptions.connection.tls,
+                                metadata: temporalOptions.connection.metadata,
+                            },
+                            namespace: temporalOptions.connection.namespace || 'default',
+                        };
+
+                        // Add API key authentication if provided
+                        if (temporalOptions.connection.apiKey) {
+                            clientOptions.connection = {
+                                ...(clientOptions.connection as Record<string, unknown>),
+                                metadata: {
+                                    ...(temporalOptions.connection.metadata || {}),
+                                    authorization: `Bearer ${temporalOptions.connection.apiKey}`,
+                                },
+                            };
+                        }
+
+                        return new Client(clientOptions);
+                    } catch (error) {
+                        if (temporalOptions.allowConnectionFailure !== false) {
+                            // Logger not available during module initialization
+                            console.warn(
+                                'Temporal client initialization failed - continuing without client:',
+                                error,
+                            );
+                            return null;
+                        }
+                        throw error;
+                    }
+                },
+                inject: [TEMPORAL_MODULE_OPTIONS],
             },
             {
                 provide: ACTIVITY_MODULE_OPTIONS,
@@ -156,7 +198,49 @@ export class TemporalModule {
         providers.push(
             {
                 provide: TEMPORAL_CLIENT,
-                useValue: null, // For testing purposes, we'll provide null and let services handle it
+                useFactory: async (temporalOptions: TemporalOptions) => {
+                    // Only create client if connection configuration is provided
+                    if (!temporalOptions.connection) {
+                        return null;
+                    }
+
+                    try {
+                        const { Client } = await import('@temporalio/client');
+
+                        const clientOptions: Record<string, unknown> = {
+                            connection: {
+                                address: temporalOptions.connection.address,
+                                tls: temporalOptions.connection.tls,
+                                metadata: temporalOptions.connection.metadata,
+                            },
+                            namespace: temporalOptions.connection.namespace || 'default',
+                        };
+
+                        // Add API key authentication if provided
+                        if (temporalOptions.connection.apiKey) {
+                            clientOptions.connection = {
+                                ...(clientOptions.connection as Record<string, unknown>),
+                                metadata: {
+                                    ...(temporalOptions.connection.metadata || {}),
+                                    authorization: `Bearer ${temporalOptions.connection.apiKey}`,
+                                },
+                            };
+                        }
+
+                        return new Client(clientOptions);
+                    } catch (error) {
+                        if (temporalOptions.allowConnectionFailure !== false) {
+                            // Logger not available during module initialization
+                            console.warn(
+                                'Temporal client initialization failed - continuing without client:',
+                                error,
+                            );
+                            return null;
+                        }
+                        throw error;
+                    }
+                },
+                inject: [TEMPORAL_MODULE_OPTIONS],
             },
             {
                 provide: ACTIVITY_MODULE_OPTIONS,

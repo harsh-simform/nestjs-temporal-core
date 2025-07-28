@@ -569,8 +569,9 @@ export interface WorkerStatus {
     isHealthy: boolean;
     taskQueue: string;
     namespace: string;
-    workflowSource: 'bundle' | 'filesystem' | 'none';
+    workflowSource: 'bundle' | 'filesystem' | 'registered' | 'none';
     activitiesCount: number;
+    workflowsCount?: number;
     lastError?: string;
     startedAt?: Date;
     uptime?: number;

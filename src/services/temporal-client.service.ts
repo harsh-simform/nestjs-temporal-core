@@ -53,12 +53,31 @@ export class TemporalClientService implements OnModuleInit {
     /**
      * Initializes the client service during module initialization.
      * Logs initialization status and warns if client is not available.
+     * Performs basic connection health check if client is available.
      */
     async onModuleInit() {
         if (!this.client) {
-            this.logger.warn('Temporal client not initialized - some features may be unavailable');
+            this.logger.warn(
+                'Temporal client not initialized - workflow operations will be unavailable. ' +
+                    'Check connection configuration and ensure Temporal server is accessible.',
+            );
         } else {
-            this.logger.log('Temporal client initialized successfully');
+            try {
+                // Perform a basic health check by trying to access the workflow client
+                const workflowClient = this.client.workflow;
+                if (workflowClient) {
+                    this.logger.log('Temporal client initialized successfully');
+                } else {
+                    this.logger.warn(
+                        'Temporal client initialized but workflow service is unavailable',
+                    );
+                }
+            } catch (error) {
+                this.logger.error(
+                    'Temporal client initialized but connection validation failed:',
+                    (error as Error).message,
+                );
+            }
         }
     }
 
@@ -111,7 +130,7 @@ export class TemporalClientService implements OnModuleInit {
             if (signal) {
                 await handle.signal(signal.name, ...(signal.args || []));
             }
-            this.logger.debug(`Started workflow: ${workflowType} (${workflowId})`);
+            this.logger.debug(`Started workflow '${workflowType}' with ID: ${workflowId}`);
             return {
                 result: handle.result() as Promise<T>,
                 workflowId: handle.workflowId,
@@ -153,7 +172,7 @@ export class TemporalClientService implements OnModuleInit {
         try {
             const handle = await this.workflowClient!.getHandle(workflowId);
             await handle.signal(signalName, ...args);
-            this.logger.debug(`Sent signal '${signalName}' to workflow ${workflowId}`);
+            this.logger.debug(`Sent signal '${signalName}' to workflow: ${workflowId}`);
         } catch (error) {
             this.logger.error(
                 `Failed to send signal '${signalName}' to workflow ${workflowId}: ${(error as Error).message}`,
