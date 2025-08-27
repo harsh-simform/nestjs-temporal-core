@@ -27,21 +27,83 @@ describe('TemporalMetadataAccessor', () => {
 
         service = module.get<TemporalMetadataAccessor>(TemporalMetadataAccessor);
 
-        // Mock Reflect.getMetadata
-        jest.spyOn(Reflect, 'getMetadata').mockImplementation((key: string, target: any) => {
+        // Mock Reflect.getMetadata to match how the decorators actually store metadata
+        jest.spyOn(Reflect, 'getMetadata').mockImplementation((key: string, target: any, propertyKey?: string | symbol) => {
+            // Handle activity class metadata
             if (key === TEMPORAL_ACTIVITY && target === TestActivity) {
                 return { name: 'TestActivity' };
             }
-            if (key === TEMPORAL_ACTIVITY_METHOD) {
-                if (target.name === 'testMethod') {
+            if (key === TEMPORAL_ACTIVITY && target === TestActivity.prototype) {
+                return { name: 'TestActivity' };
+            }
+            
+            // Handle activity method metadata on prototype
+            if (key === TEMPORAL_ACTIVITY_METHOD && target === TestActivity.prototype) {
+                if (propertyKey === 'testMethod') {
                     return { name: 'testMethod' };
                 }
-                if (target.name === 'methodWithoutName') {
+                if (propertyKey === 'methodWithoutName') {
                     return {};
                 }
+                if (propertyKey === 'regularMethod') {
+                    return undefined; // Explicitly return undefined for regularMethod
+                }
+                // Return the object with all method metadata like the real decorator does
+                return {
+                    testMethod: { name: 'testMethod' },
+                    methodWithoutName: {}
+                };
             }
+            
+            // Handle individual method metadata
+            if (key === TEMPORAL_ACTIVITY_METHOD && propertyKey) {
+                if (propertyKey === 'testMethod') {
+                    return { name: 'testMethod' };
+                }
+                if (propertyKey === 'methodWithoutName') {
+                    return {};
+                }
+                if (propertyKey === 'regularMethod') {
+                    return undefined; // Explicitly return undefined for regularMethod
+                }
+            }
+            
             return undefined;
         });
+        
+        // Mock Reflect.hasMetadata to match the getMetadata mock
+        jest.spyOn(Reflect, 'hasMetadata').mockImplementation((key: string, target: any, propertyKey?: string | symbol) => {
+            if (key === TEMPORAL_ACTIVITY && (target === TestActivity || target === TestActivity.prototype)) {
+                return true;
+            }
+            if (key === TEMPORAL_ACTIVITY_METHOD && target === TestActivity.prototype) {
+                // Only return true for methods that actually have metadata
+                if (propertyKey === 'testMethod' || propertyKey === 'methodWithoutName') {
+                    return true;
+                }
+                if (propertyKey === 'regularMethod') {
+                    return false; // Explicitly return false for regularMethod
+                }
+                // Return true if no propertyKey (asking for general metadata) - this means there are activity methods
+                return !propertyKey;
+            }
+            return false;
+        });
+        
+        // Mock Object.getOwnPropertyNames for prototype inspection
+        const originalGetOwnPropertyNames = Object.getOwnPropertyNames;
+        jest.spyOn(Object, 'getOwnPropertyNames').mockImplementation((target: any) => {
+            if (target === TestActivity.prototype) {
+                return ['constructor', 'testMethod', 'methodWithoutName', 'regularMethod'];
+            }
+            // Return original implementation for other objects
+            return originalGetOwnPropertyNames(target);
+        });
+        
+        // Add function properties to TestActivity prototype to simulate real methods
+        TestActivity.prototype.testMethod = function() { return 'test'; };
+        TestActivity.prototype.methodWithoutName = function() { return 'without name'; };
+        TestActivity.prototype.regularMethod = function() { return 'regular'; };
     });
 
     afterEach(() => {
@@ -192,9 +254,10 @@ describe('TemporalMetadataAccessor', () => {
             const instance = new TestActivity();
             const result = service.extractActivityMethods(instance);
 
-            const handler = result.get('testMethod');
-            expect(handler).toBeDefined();
-            expect(typeof handler).toBe('function');
+            const methodInfo = result.get('testMethod');
+            expect(methodInfo).toBeDefined();
+            expect(methodInfo!.handler).toBeDefined();
+            expect(typeof methodInfo!.handler).toBe('function');
         });
 
         it('should use cache for subsequent calls', () => {

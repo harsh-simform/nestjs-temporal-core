@@ -66,7 +66,8 @@ export class TemporalMetadataAccessor {
         try {
             return (
                 Reflect.getMetadata(TEMPORAL_ACTIVITY, target) ||
-                Reflect.getMetadata(TEMPORAL_ACTIVITY, target.prototype)
+                Reflect.getMetadata(TEMPORAL_ACTIVITY, target.prototype) ||
+                null
             );
         } catch {
             return null;
@@ -161,7 +162,7 @@ export class TemporalMetadataAccessor {
     getActivityOptions(target: Function): Record<string, unknown> | null {
         try {
             const metadata = this.getActivityMetadata(target) as any;
-            return metadata?.options || null;
+            return metadata || null;
         } catch {
             return null;
         }
@@ -212,6 +213,11 @@ export class TemporalMetadataAccessor {
 
         try {
             const prototype = Object.getPrototypeOf(instance);
+            if (!prototype) {
+                this.logger.warn('No prototype found for instance');
+                return methods;
+            }
+
             const propertyNames = Object.getOwnPropertyNames(prototype);
 
             for (const propertyName of propertyNames) {
@@ -388,7 +394,7 @@ export class TemporalMetadataAccessor {
             const hasActivityMethods = this.hasActivityMethods(prototype);
 
             if (!hasActivityMethods) {
-                issues.push('Class has no methods marked with @ActivityMethod decorator');
+                issues.push('Activity class has no methods marked with @ActivityMethod');
             }
 
             return {
@@ -540,7 +546,7 @@ export class TemporalMetadataAccessor {
             size: this.activityMethodCache.size,
             entries,
             message: 'Cache statistics not available',
-            note: 'WeakMap implementation',
+            note: 'WeakMap-based caching prevents memory leaks but limits size reporting',
         };
     }
 }

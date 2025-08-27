@@ -15,6 +15,12 @@ describe('TemporalService', () => {
     let clientService: jest.Mocked<TemporalClientService>;
     let discoveryService: jest.Mocked<TemporalDiscoveryService>;
     let workerManager: jest.Mocked<TemporalWorkerManagerService>;
+    
+    // Cache for special service instances to avoid recreating modules
+    let serviceWithoutWorker: TemporalService;
+    let mockScheduleService: any;
+    let mockActivityService: any;
+    let mockMetadataAccessor: any;
 
     const mockOptions: TemporalOptions = {
         connection: {
@@ -24,7 +30,35 @@ describe('TemporalService', () => {
         taskQueue: 'test-queue',
     };
 
-    beforeEach(async () => {
+    beforeAll(async () => {
+        mockScheduleService = {
+            createSchedule: jest.fn(),
+            getSchedule: jest.fn(),
+            updateSchedule: jest.fn(),
+            deleteSchedule: jest.fn(),
+            pauseSchedule: jest.fn(),
+            unpauseSchedule: jest.fn(),
+            isHealthy: jest.fn().mockReturnValue(true),
+            getScheduleStats: jest
+                .fn()
+                .mockReturnValue({ total: 0, active: 0, inactive: 0, errors: 0 }),
+        };
+
+        mockActivityService = {
+            getActivityNames: jest.fn().mockReturnValue([]),
+            registerActivityClass: jest.fn(),
+            registerActivityMethod: jest.fn(),
+            isHealthy: jest.fn().mockReturnValue(true),
+        };
+
+        mockMetadataAccessor = {
+            isActivity: jest.fn(),
+            getActivityMetadata: jest.fn(),
+            getActivityOptions: jest.fn(),
+            extractActivityMethods: jest.fn(),
+            extractActivityMethodsFromClass: jest.fn(),
+        };
+        
         const mockClientService = {
             startWorkflow: jest.fn(),
             signalWorkflow: jest.fn(),
@@ -32,7 +66,7 @@ describe('TemporalService', () => {
             terminateWorkflow: jest.fn(),
             cancelWorkflow: jest.fn(),
             getRawClient: jest.fn(),
-            isHealthy: jest.fn(),
+            isHealthy: jest.fn().mockReturnValue(true), // This is critical for service initialization
             getStatus: jest.fn().mockReturnValue({
                 isConnected: true,
                 lastError: null,
@@ -47,7 +81,10 @@ describe('TemporalService', () => {
             hasWorkflow: jest
                 .fn()
                 .mockImplementation((workflowType: string) => workflowType === 'TestWorkflow'),
-            getHealthStatus: jest.fn().mockReturnValue({ status: 'healthy' }),
+            getHealthStatus: jest.fn().mockReturnValue({ 
+                status: 'healthy', 
+                isComplete: true // This is critical for service initialization
+            }),
         };
 
         const mockWorkerManager = {
@@ -75,33 +112,7 @@ describe('TemporalService', () => {
             startWorker: jest.fn().mockResolvedValue(undefined),
         };
 
-        const mockScheduleService = {
-            createSchedule: jest.fn(),
-            getSchedule: jest.fn(),
-            updateSchedule: jest.fn(),
-            deleteSchedule: jest.fn(),
-            pauseSchedule: jest.fn(),
-            unpauseSchedule: jest.fn(),
-            isHealthy: jest.fn().mockReturnValue(true),
-            getScheduleStats: jest
-                .fn()
-                .mockReturnValue({ total: 0, active: 0, inactive: 0, errors: 0 }),
-        };
-
-        const mockActivityService = {
-            getActivityNames: jest.fn().mockReturnValue([]),
-            registerActivityClass: jest.fn(),
-            registerActivityMethod: jest.fn(),
-            isHealthy: jest.fn().mockReturnValue(true),
-        };
-
-        const mockMetadataAccessor = {
-            isActivity: jest.fn(),
-            getActivityMetadata: jest.fn(),
-            getActivityOptions: jest.fn(),
-            extractActivityMethods: jest.fn(),
-            extractActivityMethodsFromClass: jest.fn(),
-        };
+        // mockScheduleService, mockActivityService, and mockMetadataAccessor already defined above
 
         const module: TestingModule = await Test.createTestingModule({
             providers: [
@@ -144,6 +155,49 @@ describe('TemporalService', () => {
 
         // Initialize the service
         await service.onModuleInit();
+        
+        // Set up service without worker (used by multiple tests)
+        const moduleWithoutWorker: TestingModule = await Test.createTestingModule({
+            providers: [
+                TemporalService,
+                {
+                    provide: TemporalClientService,
+                    useValue: clientService,
+                },
+                {
+                    provide: TemporalWorkerManagerService,
+                    useValue: null,
+                },
+                {
+                    provide: TemporalScheduleService,
+                    useValue: mockScheduleService,
+                },
+                {
+                    provide: TemporalActivityService,
+                    useValue: mockActivityService,
+                },
+                {
+                    provide: TemporalDiscoveryService,
+                    useValue: discoveryService,
+                },
+                {
+                    provide: TemporalMetadataAccessor,
+                    useValue: mockMetadataAccessor,
+                },
+                {
+                    provide: TEMPORAL_MODULE_OPTIONS,
+                    useValue: mockOptions,
+                },
+            ],
+        }).compile();
+
+        serviceWithoutWorker = moduleWithoutWorker.get<TemporalService>(TemporalService);
+        await serviceWithoutWorker.onModuleInit();
+    });
+
+    beforeEach(() => {
+        // Reset all mocks before each test
+        jest.clearAllMocks();
     });
 
     it('should be defined', () => {
@@ -189,69 +243,7 @@ describe('TemporalService', () => {
             expect(result).toBe(workerManager);
         });
 
-        it('should return undefined when worker manager not available', async () => {
-            const mockScheduleService = {
-                createSchedule: jest.fn(),
-                getSchedule: jest.fn(),
-                updateSchedule: jest.fn(),
-                deleteSchedule: jest.fn(),
-                pauseSchedule: jest.fn(),
-                unpauseSchedule: jest.fn(),
-                isHealthy: jest.fn().mockReturnValue(true),
-                getScheduleStats: jest
-                    .fn()
-                    .mockReturnValue({ total: 0, active: 0, inactive: 0, errors: 0 }),
-            };
-            const mockActivityService = {
-                getActivityNames: jest.fn().mockReturnValue([]),
-                registerActivityClass: jest.fn(),
-                registerActivityMethod: jest.fn(),
-                isHealthy: jest.fn().mockReturnValue(true),
-            };
-            const mockMetadataAccessor = {
-                isActivity: jest.fn(),
-                getActivityMetadata: jest.fn(),
-                getActivityOptions: jest.fn(),
-                extractActivityMethods: jest.fn(),
-                extractActivityMethodsFromClass: jest.fn(),
-            };
-
-            const moduleWithoutWorker: TestingModule = await Test.createTestingModule({
-                providers: [
-                    TemporalService,
-                    {
-                        provide: TemporalClientService,
-                        useValue: clientService,
-                    },
-                    {
-                        provide: TemporalWorkerManagerService,
-                        useValue: null,
-                    },
-                    {
-                        provide: TemporalScheduleService,
-                        useValue: mockScheduleService,
-                    },
-                    {
-                        provide: TemporalActivityService,
-                        useValue: mockActivityService,
-                    },
-                    {
-                        provide: TemporalDiscoveryService,
-                        useValue: discoveryService,
-                    },
-                    {
-                        provide: TemporalMetadataAccessor,
-                        useValue: mockMetadataAccessor,
-                    },
-                    {
-                        provide: TEMPORAL_MODULE_OPTIONS,
-                        useValue: mockOptions,
-                    },
-                ],
-            }).compile();
-
-            const serviceWithoutWorker = moduleWithoutWorker.get<TemporalService>(TemporalService);
-            await serviceWithoutWorker.onModuleInit();
+        it('should return undefined when worker manager not available', () => {
             const result = serviceWithoutWorker.getWorkerManager();
             expect(result).toBeUndefined();
         });

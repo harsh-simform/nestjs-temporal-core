@@ -2,8 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { DiscoveryService } from '@nestjs/core';
 import { TemporalActivityService } from '../../src/services/temporal-activity.service';
 import { TemporalMetadataAccessor } from '../../src/services/temporal-metadata.service';
-import { ACTIVITY_MODULE_OPTIONS } from '../../src/constants';
-import { ActivityModuleOptions, ActivityInfo } from '../../src/interfaces';
+import { ACTIVITY_MODULE_OPTIONS, TEMPORAL_MODULE_OPTIONS } from '../../src/constants';
+import { ActivityModuleOptions, ActivityInfo, TemporalOptions } from '../../src/interfaces';
 
 describe('TemporalActivityService', () => {
     let service: TemporalActivityService;
@@ -28,6 +28,10 @@ describe('TemporalActivityService', () => {
 
     const mockOptions: ActivityModuleOptions = {
         activityClasses: [],
+    };
+
+    const mockTemporalOptions: TemporalOptions = {
+        taskQueue: 'test-queue',
     };
 
     beforeEach(async () => {
@@ -56,6 +60,10 @@ describe('TemporalActivityService', () => {
                 {
                     provide: ACTIVITY_MODULE_OPTIONS,
                     useValue: mockOptions,
+                },
+                {
+                    provide: TEMPORAL_MODULE_OPTIONS,
+                    useValue: mockTemporalOptions,
                 },
             ],
         }).compile();

@@ -28,6 +28,8 @@ export class TemporalWorkerManagerService
 {
     private readonly logger: TemporalLogger;
     private worker: Worker | null = null;
+    private restartCount = 0;
+    private readonly maxRestarts = 3;
     private connection: NativeConnection | null = null;
     private isInitialized = false;
     private isRunning = false;
@@ -97,15 +99,79 @@ export class TemporalWorkerManagerService
 
         try {
             this.logger.info('Starting Temporal worker...');
-            await this.worker.run();
             this.isRunning = true;
             this.startedAt = new Date();
             this.lastError = null;
+            this.restartCount = 0; // Reset restart count on successful start
+
+            // Start the worker and handle auto-restart on failure
+            this.runWorkerWithAutoRestart();
 
             this.logger.info('Temporal worker started successfully');
         } catch (error) {
             this.lastError = this.extractErrorMessage(error);
             this.logger.error('Failed to start worker', error);
+            this.isRunning = false;
+            throw error;
+        }
+    }
+
+    private runWorkerWithAutoRestart(): void {
+        if (!this.worker) return;
+
+        this.worker.run().catch(async (error) => {
+            this.lastError = this.extractErrorMessage(error);
+            this.logger.error('Worker run failed', error);
+            this.isRunning = false;
+
+            // Auto-restart if enabled and within restart limits
+            if (this.options.autoRestart !== false && this.restartCount < this.maxRestarts) {
+                this.restartCount++;
+                this.logger.info(
+                    `Auto-restart enabled, attempting to restart worker (attempt ${this.restartCount}/${this.maxRestarts}) in 1 second...`,
+                );
+                setTimeout(async () => {
+                    try {
+                        await this.autoRestartWorker();
+                    } catch (restartError) {
+                        this.logger.error('Auto-restart failed', restartError);
+                    }
+                }, 1000);
+            } else if (this.restartCount >= this.maxRestarts) {
+                this.logger.error(
+                    `Max restart attempts (${this.maxRestarts}) exceeded. Stopping auto-restart.`,
+                );
+            }
+        });
+    }
+
+    /**
+     * Auto-restart the worker (used internally for auto-restart functionality)
+     */
+    private async autoRestartWorker(): Promise<void> {
+        this.logger.info('Auto-restarting Temporal worker...');
+
+        try {
+            if (this.worker) {
+                await this.worker.shutdown();
+            }
+
+            // Wait a bit before restarting
+            await new Promise((resolve) => setTimeout(resolve, 500));
+
+            // Reset state
+            this.isRunning = true;
+            this.startedAt = new Date();
+            this.lastError = null;
+
+            // Start the worker again with auto-restart capability
+            this.runWorkerWithAutoRestart();
+
+            this.logger.info('Temporal worker auto-restarted successfully');
+        } catch (error) {
+            this.lastError = this.extractErrorMessage(error);
+            this.logger.error('Auto-restart failed', error);
+            this.isRunning = false;
             throw error;
         }
     }

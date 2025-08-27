@@ -143,6 +143,7 @@ export interface TemporalOptions extends LoggerConfig {
         autoStart?: boolean;
         workerOptions?: WorkerCreateOptions;
     };
+    autoRestart?: boolean;
     isGlobal?: boolean;
     allowConnectionFailure?: boolean;
 }

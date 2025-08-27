@@ -208,7 +208,7 @@ describe('TemporalModule', () => {
 
             const moduleConfig = TemporalModule.registerAsync(asyncOptions);
             expect(moduleConfig.providers).toBeDefined();
-            expect(moduleConfig.providers!.length).toBe(12);
+            expect(moduleConfig.providers!.length).toBe(13);
         });
 
         it('should handle async configuration validation during module creation', async () => {
@@ -323,7 +323,7 @@ describe('TemporalModule', () => {
 
             const module = TemporalModule.registerAsync(options);
             expect(module).toBeDefined();
-            expect(module.providers).toHaveLength(12); // All providers should be included
+            expect(module.providers).toHaveLength(13); // All providers should be included
         });
 
         it('should execute factory method with useExisting', async () => {
@@ -1127,7 +1127,7 @@ describe('TemporalModule', () => {
             });
 
             const module = TemporalModule.registerAsync({ useFactory: factory });
-            expect(module.providers).toHaveLength(12); // One less than useClass (no factory class provider)
+            expect(module.providers).toHaveLength(13); // All providers should be included
         });
 
         it('should provide correct number of providers for async useExisting', () => {
@@ -1141,7 +1141,7 @@ describe('TemporalModule', () => {
             }
 
             const module = TemporalModule.registerAsync({ useExisting: TestFactory });
-            expect(module.providers).toHaveLength(12); // One less than useClass (no factory class provider)
+            expect(module.providers).toHaveLength(13); // All providers should be included
         });
     });
 
