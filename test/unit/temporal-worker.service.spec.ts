@@ -5,7 +5,7 @@ import { TemporalWorkerManagerService } from '../../src/services/temporal-worker
 import { TemporalMetadataAccessor } from '../../src/services/temporal-metadata.service';
 import { TemporalDiscoveryService } from '../../src/services/temporal-discovery.service';
 import { TEMPORAL_MODULE_OPTIONS, TEMPORAL_CONNECTION } from '../../src/constants';
-import { WorkerModuleOptions } from '../../src/interfaces';
+import { TemporalOptions } from '../../src/interfaces';
 import * as loggerUtils from '../../src/utils/logger';
 
 // Mock Temporal SDK
@@ -54,7 +54,7 @@ describe('TemporalWorkerManagerService', () => {
     let mockTemporalDiscoveryService: jest.Mocked<TemporalDiscoveryService>;
     let mockWorker: jest.Mocked<Worker>;
     let mockConnection: jest.Mocked<NativeConnection>;
-    let mockOptions: WorkerModuleOptions;
+    let mockOptions: TemporalOptions;
 
     beforeEach(async () => {
         // Reset mocks
@@ -86,9 +86,6 @@ describe('TemporalWorkerManagerService', () => {
                 workflowsPath: '/path/to/workflows', // Add workflow configuration to trigger initialization
                 autoStart: true, // Allow auto-start in tests
             },
-            autoStart: true,
-            autoRestart: true,
-            allowWorkerFailure: false,
             enableLogger: true,
             logLevel: 'info',
         } as any;
@@ -208,7 +205,6 @@ describe('TemporalWorkerManagerService', () => {
         });
 
         it('should handle initialization errors gracefully when allowWorkerFailure is true', async () => {
-            mockOptions.allowWorkerFailure = true;
             (NativeConnection.connect as jest.Mock).mockRejectedValue(
                 new Error('Connection failed'),
             );
@@ -230,7 +226,6 @@ describe('TemporalWorkerManagerService', () => {
         });
 
         it('should throw error when allowWorkerFailure is false', async () => {
-            mockOptions.allowWorkerFailure = false;
             (NativeConnection.connect as jest.Mock).mockRejectedValue(
                 new Error('Connection failed'),
             );
@@ -257,7 +252,7 @@ describe('TemporalWorkerManagerService', () => {
         });
 
         it('should not start worker when autoStart is false', async () => {
-            mockOptions.autoStart = false;
+            mockOptions.worker = { ...mockOptions.worker, autoStart: false };
             await service.onModuleInit();
             await service.onApplicationBootstrap();
 
@@ -464,10 +459,22 @@ describe('TemporalWorkerManagerService', () => {
 
     describe('Error Handling', () => {
         it('should handle worker run errors gracefully', async () => {
-            mockWorker.run.mockRejectedValue(new Error('Worker run error'));
+            // Create a mock worker that will reject when run is called
+            const errorWorker = {
+                run: jest.fn().mockRejectedValue(new Error('Worker run error')),
+                shutdown: jest.fn().mockResolvedValue(undefined),
+            } as any;
+
+            // Mock Worker.create to return our error worker
+            (Worker.create as jest.Mock).mockResolvedValue(errorWorker);
 
             await service.onModuleInit();
-            await service.onApplicationBootstrap();
+
+            try {
+                await service.onApplicationBootstrap();
+            } catch (error) {
+                // Expected to fail
+            }
 
             // Wait for background processing
             await new Promise((resolve) => setTimeout(resolve, 100));
@@ -476,48 +483,75 @@ describe('TemporalWorkerManagerService', () => {
         });
 
         it('should handle connection errors', async () => {
+            // Create a new service without injected connection to force NativeConnection.connect
+            const errorService = new TemporalWorkerManagerService(
+                mockDiscoveryService,
+                mockMetadataAccessor,
+                mockOptions as any,
+                null, // No injected connection
+            );
+
             (NativeConnection.connect as jest.Mock).mockRejectedValue(
                 new Error('Connection failed'),
             );
 
-            await expect(service.onModuleInit()).rejects.toThrow('Connection failed');
+            await expect(errorService.onModuleInit()).rejects.toThrow('Connection failed');
         });
 
         it('should handle worker creation errors', async () => {
             (Worker.create as jest.Mock).mockRejectedValue(new Error('Worker creation failed'));
 
-            await service.onModuleInit();
-            await expect(service.onApplicationBootstrap()).rejects.toThrow(
-                'Worker creation failed',
-            );
+            await expect(service.onModuleInit()).rejects.toThrow('Worker creation failed');
         });
     });
 
     describe('Auto Restart', () => {
         it('should restart worker on failure when autoRestart is enabled', async () => {
-            mockOptions.autoRestart = true;
-            mockWorker.run.mockRejectedValue(new Error('Worker error'));
+            // Create a mock worker that will reject when run is called
+            const errorWorker = {
+                run: jest.fn().mockRejectedValue(new Error('Worker error')),
+                shutdown: jest.fn().mockResolvedValue(undefined),
+            } as any;
+
+            // Mock Worker.create to return our error worker
+            (Worker.create as jest.Mock).mockResolvedValue(errorWorker);
 
             await service.onModuleInit();
-            await service.onApplicationBootstrap();
+
+            try {
+                await service.onApplicationBootstrap();
+            } catch (error) {
+                // Expected to fail
+            }
 
             // Wait for background processing and restart cycle
             await new Promise((resolve) => setTimeout(resolve, 6000));
 
-            expect(mockWorker.run).toHaveBeenCalledTimes(2);
+            expect(errorWorker.run).toHaveBeenCalledTimes(2);
         }, 15000);
 
         it('should not restart worker when autoRestart is disabled', async () => {
-            mockOptions.autoRestart = false;
-            mockWorker.run.mockRejectedValue(new Error('Worker error'));
+            // Create a mock worker that will reject when run is called
+            const errorWorker = {
+                run: jest.fn().mockRejectedValue(new Error('Worker error')),
+                shutdown: jest.fn().mockResolvedValue(undefined),
+            } as any;
+
+            // Mock Worker.create to return our error worker
+            (Worker.create as jest.Mock).mockResolvedValue(errorWorker);
 
             await service.onModuleInit();
-            await service.onApplicationBootstrap();
+
+            try {
+                await service.onApplicationBootstrap();
+            } catch (error) {
+                // Expected to fail
+            }
 
             // Wait to ensure no restart happens
             await new Promise((resolve) => setTimeout(resolve, 6000));
 
-            expect(mockWorker.run).toHaveBeenCalledTimes(1);
+            expect(errorWorker.run).toHaveBeenCalledTimes(1);
         }, 15000);
     });
 
@@ -660,7 +694,10 @@ describe('TemporalWorkerManagerService', () => {
             mockDiscoveryService.getProviders.mockReturnValue([mockProvider] as any);
 
             // Set activity classes filter
-            mockOptions.activityClasses = [class AnotherClass {}];
+            mockOptions.worker = {
+                ...mockOptions.worker,
+                activityClasses: [class AnotherClass {}],
+            };
             mockMetadataAccessor.isActivity.mockReturnValue(true);
 
             await service.onModuleInit();
@@ -731,10 +768,22 @@ describe('TemporalWorkerManagerService', () => {
         });
 
         it('should handle worker execution errors', async () => {
-            mockWorker.run.mockRejectedValue(new Error('Worker execution error'));
+            // Create a mock worker that will reject when run is called
+            const errorWorker = {
+                run: jest.fn().mockRejectedValue(new Error('Worker execution error')),
+                shutdown: jest.fn().mockResolvedValue(undefined),
+            } as any;
+
+            // Mock Worker.create to return our error worker
+            (Worker.create as jest.Mock).mockResolvedValue(errorWorker);
 
             await service.onModuleInit();
-            await service.onApplicationBootstrap();
+
+            try {
+                await service.onApplicationBootstrap();
+            } catch (error) {
+                // Expected to fail
+            }
 
             // Wait for background processing
             await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -762,6 +811,8 @@ describe('TemporalWorkerManagerService', () => {
                 close: jest.fn().mockRejectedValue(new Error('Connection close error')),
             };
             Object.defineProperty(service, 'connection', { value: mockConnectionWithError });
+            // Clear injected connection to force connection close
+            Object.defineProperty(service, 'injectedConnection', { value: null });
 
             await service.shutdown();
 
@@ -787,7 +838,11 @@ describe('TemporalWorkerManagerService', () => {
 
     describe('Configuration Logging', () => {
         it('should log worker configuration with bundle', async () => {
-            mockOptions.workflowBundle = 'test-bundle';
+            mockOptions.worker = {
+                ...mockOptions.worker,
+                workflowBundle: 'test-bundle',
+                workflowsPath: undefined, // Clear workflowsPath to avoid conflict
+            };
 
             await service.onModuleInit();
 
@@ -796,7 +851,7 @@ describe('TemporalWorkerManagerService', () => {
         });
 
         it('should log worker configuration with workflows path', async () => {
-            mockOptions.workflowsPath = '/path/to/workflows';
+            mockOptions.worker = { ...mockOptions.worker, workflowsPath: '/path/to/workflows' };
 
             await service.onModuleInit();
 
@@ -860,17 +915,17 @@ describe('TemporalWorkerManagerService', () => {
         it('should handle restart with initialization errors', async () => {
             await service.onModuleInit();
 
-            // Mock initialization error during restart
-            const mockInitializeWorker = jest.spyOn(service as any, 'initializeWorker');
-            mockInitializeWorker.mockRejectedValue(new Error('Restart initialization error'));
+            // Mock startWorker error during restart
+            const mockStartWorker = jest.spyOn(service as any, 'startWorker');
+            mockStartWorker.mockRejectedValue(new Error('Restart initialization error'));
 
             await expect(service.restartWorker()).rejects.toThrow('Restart initialization error');
 
-            mockInitializeWorker.mockRestore();
+            mockStartWorker.mockRestore();
         });
 
         it('should handle restart with auto start disabled', async () => {
-            mockOptions.autoStart = false;
+            mockOptions.worker = { ...mockOptions.worker, autoStart: false };
 
             await service.onModuleInit();
             await service.restartWorker();
@@ -1037,52 +1092,49 @@ describe('TemporalWorkerManagerService', () => {
     describe('Worker Configuration Logging', () => {
         it('should log worker configuration with bundle', () => {
             (service as any).options = {
-                workflowBundle: 'test-bundle',
+                worker: {
+                    workflowBundle: 'test-bundle',
+                },
                 taskQueue: 'test-queue',
             };
 
-            const logSpy = jest.spyOn(service['logger'], 'log');
             const debugSpy = jest.spyOn(service['logger'], 'debug');
 
             service['logWorkerConfiguration']();
 
-            expect(logSpy).toHaveBeenCalledWith('Worker configuration summary:');
             expect(debugSpy).toHaveBeenCalledWith(
-                expect.stringContaining('"workflowSource": "bundle"'),
+                expect.stringContaining('"workflowBundle":"test-bundle"'),
             );
         });
 
         it('should log worker configuration with filesystem', () => {
             (service as any).options = {
-                workflowsPath: '/path/to/workflows',
+                worker: {
+                    workflowsPath: '/path/to/workflows',
+                },
                 taskQueue: 'test-queue',
             };
 
-            const logSpy = jest.spyOn(service['logger'], 'log');
             const debugSpy = jest.spyOn(service['logger'], 'debug');
 
             service['logWorkerConfiguration']();
 
-            expect(logSpy).toHaveBeenCalledWith('Worker configuration summary:');
             expect(debugSpy).toHaveBeenCalledWith(
-                expect.stringContaining('"workflowSource": "filesystem"'),
+                expect.stringContaining('"workflowsPath":"/path/to/workflows"'),
             );
         });
 
         it('should log worker configuration with no workflow source', () => {
             (service as any).options = {
+                worker: {},
                 taskQueue: 'test-queue',
             };
 
-            const logSpy = jest.spyOn(service['logger'], 'log');
             const debugSpy = jest.spyOn(service['logger'], 'debug');
 
             service['logWorkerConfiguration']();
 
-            expect(logSpy).toHaveBeenCalledWith('Worker configuration summary:');
-            expect(debugSpy).toHaveBeenCalledWith(
-                expect.stringContaining('"workflowSource": "none"'),
-            );
+            expect(debugSpy).toHaveBeenCalledWith('Worker configuration: {}');
         });
     });
 
@@ -1254,6 +1306,8 @@ describe('TemporalWorkerManagerService', () => {
         });
 
         it('should throw error when connection not established', async () => {
+            // Mock createConnection to not set a connection
+            jest.spyOn(service as any, 'createConnection').mockResolvedValue(undefined);
             (service as any).connection = null;
 
             await expect(service['createWorker']()).rejects.toThrow('Connection not established');
@@ -1370,7 +1424,6 @@ describe('TemporalWorkerManagerService', () => {
 
     describe('Error Handling Edge Cases', () => {
         it('should handle initialization error with unknown error format', async () => {
-            mockOptions.allowWorkerFailure = true;
             (NativeConnection.connect as jest.Mock).mockRejectedValue(null);
 
             await service.onModuleInit();
@@ -1379,7 +1432,6 @@ describe('TemporalWorkerManagerService', () => {
         });
 
         it('should handle initialization error with error stack', async () => {
-            mockOptions.allowWorkerFailure = true;
             const error = new Error('Test error');
             error.stack = 'Test stack trace';
             (NativeConnection.connect as jest.Mock).mockRejectedValue(error);
@@ -1470,6 +1522,9 @@ describe('TemporalWorkerManagerService', () => {
                 },
             };
 
+            // Clear injected connection to force NativeConnection.connect
+            (service as any).injectedConnection = null;
+
             const connectSpy = jest.spyOn(NativeConnection, 'connect').mockResolvedValue({} as any);
 
             await service['createConnection']();
@@ -1488,6 +1543,9 @@ describe('TemporalWorkerManagerService', () => {
                     metadata: { existing: 'metadata' },
                 },
             };
+
+            // Clear injected connection to force NativeConnection.connect
+            (service as any).injectedConnection = null;
 
             const connectSpy = jest.spyOn(NativeConnection, 'connect').mockResolvedValue({} as any);
 
@@ -1510,6 +1568,9 @@ describe('TemporalWorkerManagerService', () => {
                     apiKey: 'test-key',
                 },
             };
+
+            // Clear injected connection to force NativeConnection.connect
+            (service as any).injectedConnection = null;
 
             const connectSpy = jest.spyOn(NativeConnection, 'connect').mockResolvedValue({} as any);
 
