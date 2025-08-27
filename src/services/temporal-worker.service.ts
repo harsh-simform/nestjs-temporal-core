@@ -441,6 +441,9 @@ export class TemporalWorkerManagerService
         // Validate configuration first
         this.validateConfiguration();
 
+        // Ensure connection is established
+        await this.createConnection();
+
         // Discover and register activities
         await this.discoverActivities();
 
