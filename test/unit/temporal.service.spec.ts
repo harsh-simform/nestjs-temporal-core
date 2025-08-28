@@ -1074,6 +1074,78 @@ describe('TemporalService', () => {
         });
     });
 
+    describe('service readiness and initialization', () => {
+        it('should handle service readiness timeout', async () => {
+            // Mock a service that never becomes ready
+            workerManager.isWorkerInitialized.mockReturnValue(false);
+            workerManager.getWorkerHealth.mockReturnValue({ status: 'initializing' });
+            
+            const spy = jest.spyOn(service as any, 'waitForServicesReady');
+            await service.onModuleInit();
+            
+            expect(spy).toHaveBeenCalled();
+        });
+
+        it('should handle initialization errors', async () => {
+            const logSpy = jest.spyOn(service as any, 'logInitializationSummary').mockImplementation(() => {
+                throw new Error('Init error');
+            });
+
+            await expect(service.onModuleInit()).rejects.toThrow('Init error');
+        });
+    });
+
+    describe('shutdown handling', () => {
+        it('should perform graceful shutdown', async () => {
+            workerManager.isWorkerRunning.mockReturnValue(true);
+            workerManager.stopWorker.mockResolvedValue(undefined);
+
+            await service.onModuleDestroy();
+            
+            expect(workerManager.stopWorker).toHaveBeenCalled();
+        });
+
+        it('should handle shutdown errors', async () => {
+            workerManager.isWorkerRunning.mockReturnValue(true);
+            workerManager.stopWorker.mockRejectedValue(new Error('Shutdown error'));
+
+            // Should not throw even if shutdown has errors
+            await service.onModuleDestroy();
+        });
+
+        it('should handle shutdown when worker service is not available', async () => {
+            const serviceWithoutWorker = new TemporalService(
+                clientService,
+                discoveryService,
+                undefined as any, // No worker service
+                scheduleService,
+                activityService,
+                metadataAccessor,
+                options,
+            );
+
+            await serviceWithoutWorker.onModuleDestroy();
+        });
+    });
+
+    describe('error handling utilities', () => {
+        it('should extract error messages', () => {
+            const error = new Error('Test error');
+            const message = service['extractErrorMessage'](error);
+            expect(message).toBe('Test error');
+        });
+
+        it('should handle non-Error objects', () => {
+            const message = service['extractErrorMessage']('String error');
+            expect(message).toBe('String error');
+        });
+
+        it('should handle null/undefined errors', () => {
+            const message = service['extractErrorMessage'](null);
+            expect(message).toBe('Unknown error');
+        });
+    });
+
     describe('private methods', () => {
         describe('enhanceWorkflowOptions', () => {
             it('should use provided task queue', async () => {

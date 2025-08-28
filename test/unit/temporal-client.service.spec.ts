@@ -54,6 +54,7 @@ describe('TemporalClientService', () => {
         }).compile();
 
         service = module.get<TemporalClientService>(TemporalClientService);
+        await service.onModuleInit();
     });
 
     afterEach(() => {
@@ -201,7 +202,7 @@ describe('TemporalClientService', () => {
 
             await service.signalWorkflow(workflowId, signalName, args);
 
-            expect(mockWorkflowClient.getHandle).toHaveBeenCalledWith(workflowId);
+            expect(mockWorkflowClient.getHandle).toHaveBeenCalledWith(workflowId, undefined);
             expect(mockWorkflowHandle.signal).toHaveBeenCalledWith(signalName, 'arg1', 'arg2');
         });
 
@@ -242,7 +243,7 @@ describe('TemporalClientService', () => {
             );
 
             await expect(service.signalWorkflow('workflowId', 'signal')).rejects.toThrow(
-                "Failed to send signal 'signal' to workflow workflowId: Handle failed",
+                "Failed to send signal 'signal' to workflow workflowId: Failed to get workflow handle for workflowId: Handle failed",
             );
         });
     });
@@ -255,7 +256,7 @@ describe('TemporalClientService', () => {
 
             const result = await service.queryWorkflow(workflowId, queryName, args);
 
-            expect(mockWorkflowClient.getHandle).toHaveBeenCalledWith(workflowId);
+            expect(mockWorkflowClient.getHandle).toHaveBeenCalledWith(workflowId, undefined);
             expect(mockWorkflowHandle.query).toHaveBeenCalledWith(queryName, 'arg1', 'arg2');
             expect(result).toBe('query-result');
         });
@@ -307,7 +308,7 @@ describe('TemporalClientService', () => {
 
             await service.terminateWorkflow(workflowId, reason);
 
-            expect(mockWorkflowClient.getHandle).toHaveBeenCalledWith(workflowId);
+            expect(mockWorkflowClient.getHandle).toHaveBeenCalledWith(workflowId, undefined);
             expect(mockWorkflowHandle.terminate).toHaveBeenCalledWith(reason);
         });
 
@@ -356,7 +357,7 @@ describe('TemporalClientService', () => {
 
             await service.cancelWorkflow(workflowId);
 
-            expect(mockWorkflowClient.getHandle).toHaveBeenCalledWith(workflowId);
+            expect(mockWorkflowClient.getHandle).toHaveBeenCalledWith(workflowId, undefined);
             expect(mockWorkflowHandle.cancel).toHaveBeenCalled();
         });
 
@@ -449,6 +450,92 @@ describe('TemporalClientService', () => {
 
             await expect(service.describeWorkflow('workflowId')).rejects.toThrow(
                 'Failed to describe workflow workflowId: Describe failed',
+            );
+        });
+    });
+
+    describe('getWorkflowResult', () => {
+        it('should get workflow result', async () => {
+            const workflowId = 'test-workflow-id';
+            mockWorkflowHandle.result = jest.fn().mockResolvedValue('test-result');
+
+            const result = await service.getWorkflowResult(workflowId);
+
+            expect(mockWorkflowClient.getHandle).toHaveBeenCalledWith(workflowId, undefined);
+            expect(mockWorkflowHandle.result).toHaveBeenCalled();
+            expect(result).toBe('test-result');
+        });
+
+        it('should get workflow result with run ID', async () => {
+            const workflowId = 'test-workflow-id';
+            const runId = 'test-run-id';
+            mockWorkflowHandle.result = jest.fn().mockResolvedValue('test-result');
+
+            await service.getWorkflowResult(workflowId, runId);
+
+            expect(mockWorkflowClient.getHandle).toHaveBeenCalledWith(workflowId, runId);
+        });
+
+        it('should handle result errors', async () => {
+            mockWorkflowHandle.result = jest.fn().mockRejectedValue(new Error('Result failed'));
+
+            await expect(service.getWorkflowResult('workflowId')).rejects.toThrow(
+                'Result failed',
+            );
+        });
+    });
+
+    describe('signalWorkflowHandle', () => {
+        it('should send signal using workflow handle', async () => {
+            const signalName = 'testSignal';
+            const args = ['arg1', 'arg2'];
+
+            await service.signalWorkflowHandle(mockWorkflowHandle, signalName, args);
+
+            expect(mockWorkflowHandle.signal).toHaveBeenCalledWith(signalName, 'arg1', 'arg2');
+        });
+
+        it('should send signal using workflow handle without args', async () => {
+            const signalName = 'testSignal';
+
+            await service.signalWorkflowHandle(mockWorkflowHandle, signalName);
+
+            expect(mockWorkflowHandle.signal).toHaveBeenCalledWith(signalName);
+        });
+
+        it('should handle signal errors', async () => {
+            mockWorkflowHandle.signal.mockRejectedValue(new Error('Signal failed'));
+
+            await expect(
+                service.signalWorkflowHandle(mockWorkflowHandle, 'signal'),
+            ).rejects.toThrow('Signal failed');
+        });
+    });
+
+    describe('queryWorkflowHandle', () => {
+        it('should query workflow using handle', async () => {
+            const queryName = 'testQuery';
+            const args = ['arg1', 'arg2'];
+
+            const result = await service.queryWorkflowHandle(mockWorkflowHandle, queryName, args);
+
+            expect(mockWorkflowHandle.query).toHaveBeenCalledWith(queryName, 'arg1', 'arg2');
+            expect(result).toBe('query-result');
+        });
+
+        it('should query workflow using handle without args', async () => {
+            const queryName = 'testQuery';
+
+            await service.queryWorkflowHandle(mockWorkflowHandle, queryName);
+
+            expect(mockWorkflowHandle.query).toHaveBeenCalledWith(queryName);
+        });
+
+        it('should handle query errors', async () => {
+            mockWorkflowHandle.query.mockRejectedValue(new Error('Query failed'));
+
+            await expect(service.queryWorkflowHandle(mockWorkflowHandle, 'query')).rejects.toThrow(
+                'Query failed',
             );
         });
     });
@@ -588,6 +675,40 @@ describe('TemporalClientService', () => {
         });
     });
 
+    describe('getHealth', () => {
+        it('should return healthy status when client is available', () => {
+            const result = service.getHealth();
+
+            expect(result).toEqual({
+                status: 'healthy',
+            });
+        });
+
+        it('should return unhealthy status when client is not available', async () => {
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    TemporalClientService,
+                    {
+                        provide: TEMPORAL_CLIENT,
+                        useValue: null,
+                    },
+                    {
+                        provide: TEMPORAL_MODULE_OPTIONS,
+                        useValue: mockOptions,
+                    },
+                ],
+            }).compile();
+
+            const serviceWithoutClient = module.get<TemporalClientService>(TemporalClientService);
+            await serviceWithoutClient.onModuleInit();
+            const result = serviceWithoutClient.getHealth();
+
+            expect(result).toEqual({
+                status: 'unhealthy',
+            });
+        });
+    });
+
     describe('getStatus', () => {
         it('should return status with healthy client', () => {
             const result = service.getStatus();
@@ -595,6 +716,9 @@ describe('TemporalClientService', () => {
             expect(result).toEqual({
                 available: true,
                 healthy: true,
+                initialized: true,
+                lastHealthCheck: expect.any(Date),
+                namespace: 'default',
             });
         });
 
@@ -614,11 +738,15 @@ describe('TemporalClientService', () => {
             }).compile();
 
             const serviceWithoutClient = module.get<TemporalClientService>(TemporalClientService);
+            await serviceWithoutClient.onModuleInit();
             const result = serviceWithoutClient.getStatus();
 
             expect(result).toEqual({
                 available: false,
                 healthy: false,
+                initialized: false,
+                lastHealthCheck: null,
+                namespace: 'default',
             });
         });
     });
