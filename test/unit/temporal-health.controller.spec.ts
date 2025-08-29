@@ -199,8 +199,9 @@ describe('TemporalHealthController', () => {
             expect(result.uptime).toBeGreaterThanOrEqual(0);
             expect(result.version).toBeDefined();
             expect(result.components.client).toEqual({
-                status: 'connected',
+                status: 'healthy',
                 healthy: true,
+                available: true,
                 details: {
                     connected: true,
                     healthy: true,
@@ -285,7 +286,9 @@ describe('TemporalHealthController', () => {
             const mockClientStatus = {
                 available: true,
                 healthy: true,
-                connectionTime: 1234,
+                initialized: true,
+                lastHealthCheck: new Date(),
+                namespace: 'default',
             };
 
             clientService.isHealthy.mockReturnValue(true);
@@ -302,7 +305,9 @@ describe('TemporalHealthController', () => {
                     rawClientAvailable: true,
                     available: true,
                     healthy: true,
-                    connectionTime: 1234,
+                    initialized: true,
+                    lastHealthCheck: expect.any(Date),
+                    namespace: 'default',
                 },
             });
 
@@ -315,7 +320,9 @@ describe('TemporalHealthController', () => {
             const mockClientStatus = {
                 available: false,
                 healthy: false,
-                lastError: 'Connection failed',
+                initialized: false,
+                lastHealthCheck: null,
+                namespace: 'default',
             };
 
             clientService.isHealthy.mockReturnValue(false);
@@ -332,7 +339,9 @@ describe('TemporalHealthController', () => {
                     rawClientAvailable: false,
                     available: false,
                     healthy: false,
-                    lastError: 'Connection failed',
+                    initialized: false,
+                    lastHealthCheck: null,
+                    namespace: 'default',
                 },
             });
         });
@@ -349,7 +358,7 @@ describe('TemporalHealthController', () => {
                 status: 'healthy' as const,
                 details: mockWorkerStatus,
                 activities: {
-                    total: jest.fn().mockReturnValue(2),
+                    total: 2,
                     registered: {
                         activity1: jest.fn(),
                         activity2: jest.fn(),
@@ -463,6 +472,8 @@ describe('TemporalHealthController', () => {
                 discoveredItems: mockDiscoveryStats,
                 isComplete: true,
                 lastDiscovery: new Date(),
+                discoveryDuration: 100,
+                totalComponents: 5,
             };
 
             temporalService.getDiscoveryStats.mockReturnValue(mockDiscoveryStats);
@@ -493,6 +504,8 @@ describe('TemporalHealthController', () => {
                 discoveredItems: inactiveStats,
                 isComplete: false,
                 lastDiscovery: null,
+                discoveryDuration: null,
+                totalComponents: 0,
             };
 
             temporalService.getDiscoveryStats.mockReturnValue(inactiveStats);

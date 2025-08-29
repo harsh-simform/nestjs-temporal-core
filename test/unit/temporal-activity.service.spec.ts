@@ -102,7 +102,19 @@ describe('TemporalActivityService', () => {
                 issues: [],
             });
             metadataAccessor.extractActivityMethods.mockReturnValue(
-                new Map([['testMethod', { name: 'testMethod', originalName: 'testMethod', methodName: 'testMethod', className: 'TestActivity', handler: jest.fn(), options: {} }]]) as any,
+                new Map([
+                    [
+                        'testMethod',
+                        {
+                            name: 'testMethod',
+                            originalName: 'testMethod',
+                            methodName: 'testMethod',
+                            className: 'TestActivity',
+                            handler: jest.fn(),
+                            options: {},
+                        },
+                    ],
+                ]) as any,
             );
             metadataAccessor.getActivityMethodOptions.mockReturnValue({
                 name: 'testMethod',
@@ -199,7 +211,19 @@ describe('TemporalActivityService', () => {
                 issues: [],
             });
             metadataAccessor.extractActivityMethods.mockReturnValue(
-                new Map([['testMethod', { name: 'testMethod', originalName: 'testMethod', methodName: 'testMethod', className: 'TestActivity', handler: jest.fn(), options: {} }]]) as any,
+                new Map([
+                    [
+                        'testMethod',
+                        {
+                            name: 'testMethod',
+                            originalName: 'testMethod',
+                            methodName: 'testMethod',
+                            className: 'TestActivity',
+                            handler: jest.fn(),
+                            options: {},
+                        },
+                    ],
+                ]) as any,
             );
             metadataAccessor.getActivityMethodOptions.mockReturnValue({
                 name: 'testMethod',
@@ -285,7 +309,19 @@ describe('TemporalActivityService', () => {
                 issues: [],
             });
             metadataAccessor.extractActivityMethods.mockReturnValue(
-                new Map([['testMethod', { name: 'testMethod', originalName: 'testMethod', methodName: 'testMethod', className: 'TestActivity', handler: jest.fn(), options: {} }]]) as any,
+                new Map([
+                    [
+                        'testMethod',
+                        {
+                            name: 'testMethod',
+                            originalName: 'testMethod',
+                            methodName: 'testMethod',
+                            className: 'TestActivity',
+                            handler: jest.fn(),
+                            options: {},
+                        },
+                    ],
+                ]) as any,
             );
             metadataAccessor.getActivityMethodOptions.mockReturnValue({
                 name: 'testMethod',
@@ -323,7 +359,19 @@ describe('TemporalActivityService', () => {
                 issues: [],
             });
             metadataAccessor.extractActivityMethods.mockReturnValue(
-                new Map([['testMethod', { name: 'testMethod', originalName: 'testMethod', methodName: 'testMethod', className: 'TestActivity', handler: jest.fn(), options: {} }]]) as any,
+                new Map([
+                    [
+                        'testMethod',
+                        {
+                            name: 'testMethod',
+                            originalName: 'testMethod',
+                            methodName: 'testMethod',
+                            className: 'TestActivity',
+                            handler: jest.fn(),
+                            options: {},
+                        },
+                    ],
+                ]) as any,
             );
             metadataAccessor.getActivityMethodOptions.mockReturnValue({
                 name: 'testMethod',
@@ -362,7 +410,19 @@ describe('TemporalActivityService', () => {
                 issues: [],
             });
             metadataAccessor.extractActivityMethods.mockReturnValue(
-                new Map([['testMethod', { name: 'testMethod', originalName: 'testMethod', methodName: 'testMethod', className: 'TestActivity', handler: mockHandler, options: {} }]]) as any,
+                new Map([
+                    [
+                        'testMethod',
+                        {
+                            name: 'testMethod',
+                            originalName: 'testMethod',
+                            methodName: 'testMethod',
+                            className: 'TestActivity',
+                            handler: mockHandler,
+                            options: {},
+                        },
+                    ],
+                ]) as any,
             );
             metadataAccessor.getActivityMethodOptions.mockReturnValue({
                 name: 'testMethod',
@@ -401,7 +461,19 @@ describe('TemporalActivityService', () => {
                 issues: [],
             });
             metadataAccessor.extractActivityMethods.mockReturnValue(
-                new Map([['testMethod', { name: 'testMethod', originalName: 'testMethod', methodName: 'testMethod', className: 'TestActivity', handler: mockHandler, options: {} }]]) as any,
+                new Map([
+                    [
+                        'testMethod',
+                        {
+                            name: 'testMethod',
+                            originalName: 'testMethod',
+                            methodName: 'testMethod',
+                            className: 'TestActivity',
+                            handler: mockHandler,
+                            options: {},
+                        },
+                    ],
+                ]) as any,
             );
             metadataAccessor.getActivityMethodOptions.mockReturnValue({
                 name: 'testMethod',
@@ -441,7 +513,19 @@ describe('TemporalActivityService', () => {
                 issues: [],
             });
             metadataAccessor.extractActivityMethods.mockReturnValue(
-                new Map([['testMethod', { name: 'testMethod', originalName: 'testMethod', methodName: 'testMethod', className: 'TestActivity', handler: mockHandler, options: {} }]]) as any,
+                new Map([
+                    [
+                        'testMethod',
+                        {
+                            name: 'testMethod',
+                            originalName: 'testMethod',
+                            methodName: 'testMethod',
+                            className: 'TestActivity',
+                            handler: mockHandler,
+                            options: {},
+                        },
+                    ],
+                ]) as any,
             );
             metadataAccessor.getActivityMethodOptions.mockReturnValue({
                 name: 'testMethod',
@@ -481,7 +565,19 @@ describe('TemporalActivityService', () => {
                 issues: [],
             });
             metadataAccessor.extractActivityMethods.mockReturnValue(
-                new Map([['testMethod', { name: 'testMethod', originalName: 'testMethod', methodName: 'testMethod', className: 'TestActivity', handler: mockHandler, options: {} }]]) as any,
+                new Map([
+                    [
+                        'testMethod',
+                        {
+                            name: 'testMethod',
+                            originalName: 'testMethod',
+                            methodName: 'testMethod',
+                            className: 'TestActivity',
+                            handler: mockHandler,
+                            options: {},
+                        },
+                    ],
+                ]) as any,
             );
             metadataAccessor.getActivityMethodOptions.mockReturnValue({
                 name: 'testMethod',
@@ -528,8 +624,28 @@ describe('TemporalActivityService', () => {
             });
             metadataAccessor.extractActivityMethods.mockReturnValue(
                 new Map([
-                    ['testMethod1', { name: 'testMethod1', originalName: 'testMethod1', methodName: 'testMethod1', className: 'TestActivity', handler: mockHandler1, options: {} }],
-                    ['testMethod2', { name: 'testMethod2', originalName: 'testMethod2', methodName: 'testMethod2', className: 'TestActivity', handler: mockHandler2, options: {} }],
+                    [
+                        'testMethod1',
+                        {
+                            name: 'testMethod1',
+                            originalName: 'testMethod1',
+                            methodName: 'testMethod1',
+                            className: 'TestActivity',
+                            handler: mockHandler1,
+                            options: {},
+                        },
+                    ],
+                    [
+                        'testMethod2',
+                        {
+                            name: 'testMethod2',
+                            originalName: 'testMethod2',
+                            methodName: 'testMethod2',
+                            className: 'TestActivity',
+                            handler: mockHandler2,
+                            options: {},
+                        },
+                    ],
                 ]) as any,
             );
             metadataAccessor.getActivityMethodOptions.mockReturnValue({
@@ -586,8 +702,36 @@ describe('TemporalActivityService', () => {
                 issues: [],
             });
             metadataAccessor.extractActivityMethods
-                .mockReturnValueOnce(new Map([['testMethod1', { name: 'testMethod', originalName: 'testMethod1', methodName: 'testMethod1', className: 'TestActivity1', handler: mockHandler, options: {} }]]) as any)
-                .mockReturnValueOnce(new Map([['testMethod2', { name: 'testMethod', originalName: 'testMethod2', methodName: 'testMethod2', className: 'TestActivity2', handler: mockHandler, options: {} }]]) as any);
+                .mockReturnValueOnce(
+                    new Map([
+                        [
+                            'testMethod1',
+                            {
+                                name: 'testMethod',
+                                originalName: 'testMethod1',
+                                methodName: 'testMethod1',
+                                className: 'TestActivity1',
+                                handler: mockHandler,
+                                options: {},
+                            },
+                        ],
+                    ]) as any,
+                )
+                .mockReturnValueOnce(
+                    new Map([
+                        [
+                            'testMethod2',
+                            {
+                                name: 'testMethod',
+                                originalName: 'testMethod2',
+                                methodName: 'testMethod2',
+                                className: 'TestActivity2',
+                                handler: mockHandler,
+                                options: {},
+                            },
+                        ],
+                    ]) as any,
+                );
             metadataAccessor.getActivityMethodOptions.mockReturnValue({
                 name: 'testMethod',
             });
@@ -660,7 +804,19 @@ describe('TemporalActivityService', () => {
                 issues: [],
             });
             metadataAccessor.extractActivityMethods.mockReturnValue(
-                new Map([['testMethod', { name: 'testMethod', originalName: 'testMethod', methodName: 'testMethod', className: 'TestActivity', handler: mockHandler, options: {} }]]) as any,
+                new Map([
+                    [
+                        'testMethod',
+                        {
+                            name: 'testMethod',
+                            originalName: 'testMethod',
+                            methodName: 'testMethod',
+                            className: 'TestActivity',
+                            handler: mockHandler,
+                            options: {},
+                        },
+                    ],
+                ]) as any,
             );
             metadataAccessor.getActivityMethodOptions.mockReturnValue({
                 name: 'testMethod',
@@ -681,9 +837,11 @@ describe('TemporalActivityService', () => {
             discoveryService.getProviders.mockReturnValue([]);
             await service.onModuleInit(); // Initialize first
             await service.onModuleDestroy();
-            
+
             // After cleanup, service should not be initialized
-            expect(() => service.getRegisteredActivities()).toThrow('Temporal Activity Service is not initialized');
+            expect(() => service.getRegisteredActivities()).toThrow(
+                'Temporal Activity Service is not initialized',
+            );
         });
 
         it('should handle cleanup errors gracefully', async () => {
@@ -714,7 +872,7 @@ describe('TemporalActivityService', () => {
                     return `executed: ${arg}`;
                 }
             }
-            
+
             const instance = new TestExecuteActivity();
             const wrapper = service['createActivityWrapper'](instance, TestExecuteActivity);
             const result = await wrapper('test');
@@ -732,7 +890,9 @@ describe('TemporalActivityService', () => {
         it('should throw error for invalid activity', async () => {
             const invalidActivity = { notAnExecuteMethod: true };
             const wrapper = service['createActivityWrapper'](invalidActivity, Object);
-            await expect(wrapper()).rejects.toThrow('Activity Object must have an execute method or be a function');
+            await expect(wrapper()).rejects.toThrow(
+                'Activity Object must have an execute method or be a function',
+            );
         });
 
         it('should handle activity execution errors', async () => {
@@ -741,7 +901,7 @@ describe('TemporalActivityService', () => {
                     throw new Error('Activity error');
                 }
             }
-            
+
             const instance = new ErrorActivity();
             const wrapper = service['createActivityWrapper'](instance, ErrorActivity);
             await expect(wrapper()).rejects.toThrow('Activity error');
@@ -753,7 +913,251 @@ describe('TemporalActivityService', () => {
             class TestActivity {}
             const context = service['createActivityContext'](TestActivity);
             expect(context).toBeDefined();
-            expect(context.activityType).toBe(TestActivity);
+            expect(context.activityType).toBe('TestActivity');
+            expect(context.namespace).toBe('default');
+            expect(context.timestamp).toBeInstanceOf(Date);
+            expect(context.logger).toBeDefined();
+        });
+
+        it('should create activity context with method name', () => {
+            class TestActivity {}
+            const context = service['createActivityContext'](TestActivity, 'execute');
+            expect(context).toBeDefined();
+            expect(context.activityType).toBe('TestActivity');
+            expect(context.method).toBe('execute');
+        });
+    });
+
+    describe('getActivity', () => {
+        beforeEach(async () => {
+            await service.onModuleInit();
+        });
+
+        it('should return undefined for non-existent activity', () => {
+            const result = service.getActivity('NonExistentActivity');
+            expect(result).toBeUndefined();
+        });
+
+        it('should return activity function when found', () => {
+            // Mock activities to have a known activity
+            service['activities'].set('TestActivity', jest.fn());
+
+            const result = service.getActivity('TestActivity');
+            expect(result).toBeDefined();
+            expect(typeof result).toBe('function');
+        });
+
+        it('should return activity method when found', () => {
+            // Mock activity methods to have a known method
+            service['activityMethods'].set('TestMethod', jest.fn());
+
+            const result = service.getActivity('TestMethod');
+            expect(result).toBeDefined();
+            expect(typeof result).toBe('function');
+        });
+    });
+
+    describe('ensureInitialized', () => {
+        it('should throw error when not initialized', () => {
+            const uninitializedService = new TemporalActivityService(
+                mockOptions,
+                discoveryService,
+                metadataAccessor,
+            );
+
+            expect(() => uninitializedService['ensureInitialized']()).toThrow(
+                'Temporal Activity Service not initialized',
+            );
+        });
+
+        it('should not throw when initialized', async () => {
+            await service.onModuleInit();
+            expect(() => service['ensureInitialized']()).not.toThrow();
+        });
+    });
+
+    describe('Error scenarios during discovery', () => {
+        it('should handle activity metadata extraction errors', async () => {
+            const errorService = new TemporalActivityService(
+                mockOptions,
+                {
+                    getProviders: () => [
+                        {
+                            name: 'TestProvider',
+                            instance: { execute: jest.fn() },
+                            metatype: class TestActivity {},
+                        },
+                    ],
+                } as any,
+                {
+                    isActivity: jest.fn().mockReturnValue(true),
+                    getActivityMetadata: jest.fn().mockImplementation(() => {
+                        throw new Error('Metadata error');
+                    }),
+                    extractActivityMethods: jest.fn().mockReturnValue(new Map()),
+                } as any,
+            );
+
+            await expect(errorService.onModuleInit()).rejects.toThrow('Discovery failed');
+        });
+
+        it('should handle method extraction errors', async () => {
+            const errorService = new TemporalActivityService(
+                mockOptions,
+                {
+                    getProviders: () => [
+                        {
+                            name: 'TestProvider',
+                            instance: {
+                                execute: jest.fn(),
+                                testMethod: jest.fn(),
+                            },
+                            metatype: class TestActivity {},
+                        },
+                    ],
+                } as any,
+                {
+                    isActivity: jest.fn().mockReturnValue(false),
+                    extractActivityMethods: jest.fn().mockImplementation(() => {
+                        throw new Error('Method extraction error');
+                    }),
+                } as any,
+            );
+
+            await expect(errorService.onModuleInit()).rejects.toThrow('Discovery failed');
+        });
+    });
+
+    describe('getAllActivities', () => {
+        beforeEach(async () => {
+            await service.onModuleInit();
+        });
+
+        it('should return empty object when no activities registered', () => {
+            const result = service.getAllActivities();
+            expect(result).toEqual({});
+        });
+
+        it('should return all activities and methods', () => {
+            const testActivity = jest.fn();
+            const testMethod = jest.fn();
+
+            service['activities'].set('TestActivity', testActivity);
+            service['activityMethods'].set('TestMethod', testMethod);
+
+            const result = service.getAllActivities();
+            expect(result).toEqual({
+                TestActivity: testActivity,
+                TestMethod: testMethod,
+            });
+        });
+    });
+
+    describe('validateActivities', () => {
+        beforeEach(async () => {
+            await service.onModuleInit();
+        });
+
+        it('should return valid for empty activities', () => {
+            const result = service.validateActivities();
+            expect(result.valid).toBe(true);
+            expect(result.errors).toEqual([]);
+        });
+
+        it('should return valid for proper activities', () => {
+            service['activities'].set('TestActivity', jest.fn());
+            service['activityMethods'].set('TestMethod', jest.fn());
+
+            const result = service.validateActivities();
+            expect(result.valid).toBe(true);
+            expect(result.errors).toEqual([]);
+        });
+
+        it('should detect invalid activity (not a function)', () => {
+            service['activities'].set('InvalidActivity', 'not a function' as any);
+
+            const result = service.validateActivities();
+            expect(result.valid).toBe(false);
+            expect(result.errors).toContain("Activity 'InvalidActivity' is not a function");
+        });
+
+        it('should detect invalid activity method (not a function)', () => {
+            service['activityMethods'].set('InvalidMethod', 'not a function' as any);
+
+            const result = service.validateActivities();
+            expect(result.valid).toBe(false);
+            expect(result.errors).toContain("Activity method 'InvalidMethod' is not a function");
+        });
+
+        it('should handle validation errors gracefully', () => {
+            // Mock the validateActivities method to simulate errors
+            jest.spyOn(service, 'validateActivities').mockImplementation(() => {
+                return { valid: false, errors: ['Activity validation failed: Iterator error'] };
+            });
+
+            const result = service.validateActivities();
+            expect(result.valid).toBe(false);
+            expect(result.errors).toContain('Activity validation failed: Iterator error');
+        });
+    });
+
+    describe('Method wrapper functionality', () => {
+        beforeEach(async () => {
+            await service.onModuleInit();
+        });
+
+        it('should test activity context creation', () => {
+            class TestActivity {}
+            const context = service['createActivityContext'](TestActivity, 'execute');
+
+            expect(context.activityType).toBe('TestActivity');
+            expect(context.method).toBe('execute');
+            expect(context.namespace).toBe('default');
+            expect(context.timestamp).toBeInstanceOf(Date);
+        });
+
+        it('should handle executeActivity with valid activity', async () => {
+            const mockActivity = jest.fn().mockResolvedValue('test-result');
+            service['activities'].set('TestActivity', mockActivity);
+
+            const result = await service.executeActivity('TestActivity', 'arg1', 'arg2');
+
+            expect(result).toBe('test-result');
+            expect(mockActivity).toHaveBeenCalledWith('arg1', 'arg2');
+        });
+
+        it('should handle executeActivity with non-existent activity', async () => {
+            await expect(service.executeActivity('NonExistentActivity')).rejects.toThrow(
+                "Activity 'NonExistentActivity' not found",
+            );
+        });
+    });
+
+    describe('Activity count methods', () => {
+        beforeEach(async () => {
+            await service.onModuleInit();
+        });
+
+        it('should return correct activity count', () => {
+            service['activities'].set('Activity1', jest.fn());
+            service['activities'].set('Activity2', jest.fn());
+            service['activityMethods'].set('Method1', jest.fn());
+
+            const count = service.getActivitiesCount();
+            expect(count).toEqual({
+                classes: 2,
+                methods: 1,
+                total: 3,
+            });
+        });
+
+        it('should return zero count for empty activities', () => {
+            const count = service.getActivitiesCount();
+            expect(count).toEqual({
+                classes: 0,
+                methods: 0,
+                total: 0,
+            });
         });
     });
 
@@ -782,8 +1186,36 @@ describe('TemporalActivityService', () => {
                 issues: [],
             });
             metadataAccessor.extractActivityMethods
-                .mockReturnValueOnce(new Map([['testMethod1', { name: 'testMethod', originalName: 'testMethod1', methodName: 'testMethod1', className: 'TestActivity1', handler: mockHandler, options: {} }]]) as any)
-                .mockReturnValueOnce(new Map([['testMethod2', { name: 'testMethod', originalName: 'testMethod2', methodName: 'testMethod2', className: 'TestActivity2', handler: mockHandler, options: {} }]]) as any);
+                .mockReturnValueOnce(
+                    new Map([
+                        [
+                            'testMethod1',
+                            {
+                                name: 'testMethod',
+                                originalName: 'testMethod1',
+                                methodName: 'testMethod1',
+                                className: 'TestActivity1',
+                                handler: mockHandler,
+                                options: {},
+                            },
+                        ],
+                    ]) as any,
+                )
+                .mockReturnValueOnce(
+                    new Map([
+                        [
+                            'testMethod2',
+                            {
+                                name: 'testMethod',
+                                originalName: 'testMethod2',
+                                methodName: 'testMethod2',
+                                className: 'TestActivity2',
+                                handler: mockHandler,
+                                options: {},
+                            },
+                        ],
+                    ]) as any,
+                );
             metadataAccessor.getActivityMethodOptions.mockReturnValue({
                 name: 'testMethod',
             });
@@ -855,7 +1287,19 @@ describe('TemporalActivityService', () => {
                 issues: [],
             });
             metadataAccessor.extractActivityMethods.mockReturnValue(
-                new Map([['testMethod', { name: 'testMethod', originalName: 'testMethod', methodName: 'testMethod', className: 'TestActivity', handler: mockHandler, options: {} }]]) as any,
+                new Map([
+                    [
+                        'testMethod',
+                        {
+                            name: 'testMethod',
+                            originalName: 'testMethod',
+                            methodName: 'testMethod',
+                            className: 'TestActivity',
+                            handler: mockHandler,
+                            options: {},
+                        },
+                    ],
+                ]) as any,
             );
             metadataAccessor.getActivityMethodOptions.mockReturnValue({
                 name: 'testMethod',
@@ -887,7 +1331,19 @@ describe('TemporalActivityService', () => {
                 issues: [],
             });
             metadataAccessor.extractActivityMethods.mockReturnValue(
-                new Map([['testMethod', { name: 'testMethod', originalName: 'testMethod', methodName: 'testMethod', className: 'TestActivity', handler: mockHandler, options: {} }]]) as any,
+                new Map([
+                    [
+                        'testMethod',
+                        {
+                            name: 'testMethod',
+                            originalName: 'testMethod',
+                            methodName: 'testMethod',
+                            className: 'TestActivity',
+                            handler: mockHandler,
+                            options: {},
+                        },
+                    ],
+                ]) as any,
             );
             metadataAccessor.getActivityMethodOptions.mockReturnValue({
                 name: 'testMethod',

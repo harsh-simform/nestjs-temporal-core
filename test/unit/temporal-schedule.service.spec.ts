@@ -1557,4 +1557,83 @@ describe('TemporalScheduleService', () => {
             );
         });
     });
+
+    describe('Module Destruction', () => {
+        it('should handle module destruction gracefully', async () => {
+            await service.onModuleInit();
+            
+            // Add some schedules to clear
+            service['scheduleHandles'].set('test1', {} as any);
+            service['scheduleHandles'].set('test2', {} as any);
+            
+            await service.onModuleDestroy();
+            
+            expect(service['scheduleHandles'].size).toBe(0);
+            expect(service['isInitialized']).toBe(false);
+        });
+
+        it('should handle errors during module destruction', async () => {
+            await service.onModuleInit();
+            
+            // Mock logger to throw error
+            const loggerSpy = jest.spyOn(service as any, 'logger', 'get').mockReturnValue({
+                log: jest.fn().mockImplementation(() => {
+                    throw new Error('Cleanup error');
+                }),
+                error: jest.fn(),
+            });
+            
+            // Should not throw even with error
+            await expect(service.onModuleDestroy()).resolves.not.toThrow();
+            
+            loggerSpy.mockRestore();
+        });
+    });
+
+    describe('Initialization Error Scenarios', () => {
+        it('should handle initialization errors and rethrow them', async () => {
+            const errorService = new TemporalScheduleService(
+                mockOptions,
+                mockClient,
+                {
+                    getProviders: jest.fn().mockImplementation(() => {
+                        throw new Error('Discovery error');
+                    }),
+                    getControllers: jest.fn().mockReturnValue([]),
+                } as any,
+                {
+                    extractActivityMethods: jest.fn().mockReturnValue(new Map()),
+                    isActivity: jest.fn().mockReturnValue(false),
+                } as any,
+            );
+
+            await expect(errorService.onModuleInit()).rejects.toThrow('Discovery error');
+        });
+    });
+
+    describe('Edge Cases for Schedule Operations', () => {
+        beforeEach(async () => {
+            await service.onModuleInit();
+        });
+
+        it('should handle resume schedule with unpause operation', async () => {
+            const mockHandle = {
+                update: jest.fn().mockResolvedValue(undefined),
+            };
+            (service as any).scheduleClient = {
+                getHandle: jest.fn().mockResolvedValue(mockHandle),
+            };
+
+            await service.resumeSchedule('test-schedule', 'Custom resume note');
+
+            expect(mockHandle.update).toHaveBeenCalledWith(expect.any(Function));
+        });
+
+        it('should handle schedule state checking', () => {
+            expect(service.isHealthy()).toBe(true);
+            
+            service['isInitialized'] = false;
+            expect(service.isHealthy()).toBe(false);
+        });
+    });
 });

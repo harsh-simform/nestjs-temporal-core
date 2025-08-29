@@ -19,7 +19,6 @@ describe('Main Index Module', () => {
             expect(typeof TemporalCore.TemporalClientService).toBe('function');
         });
 
-
         it('should export TemporalWorkerManagerService', () => {
             expect(TemporalCore.TemporalWorkerManagerService).toBeDefined();
             expect(typeof TemporalCore.TemporalWorkerManagerService).toBe('function');
@@ -69,7 +68,6 @@ describe('Main Index Module', () => {
     });
 
     describe('Utility Exports', () => {
-
         it('should export metadata utilities', () => {
             expect(TemporalCore.isActivity).toBeDefined();
             expect(typeof TemporalCore.isActivity).toBe('function');
@@ -99,7 +97,6 @@ describe('Main Index Module', () => {
                 expect(TemporalService).toBeDefined();
             }).not.toThrow();
         });
-
 
         it('should provide working metadata functions', () => {
             const TestClass = class {};

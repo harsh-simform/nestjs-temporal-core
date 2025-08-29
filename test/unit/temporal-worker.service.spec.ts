@@ -55,6 +55,7 @@ describe('TemporalWorkerManagerService', () => {
     let mockWorker: jest.Mocked<Worker>;
     let mockConnection: jest.Mocked<NativeConnection>;
     let mockOptions: TemporalOptions;
+    let mockActivityService: any;
 
     beforeEach(async () => {
         // Reset mocks
@@ -95,6 +96,14 @@ describe('TemporalWorkerManagerService', () => {
             getControllers: jest.fn().mockReturnValue([]),
             getProviders: jest.fn().mockReturnValue([]),
         } as any;
+
+        // Create mock activity service
+        mockActivityService = {
+            getActivityNames: jest.fn().mockReturnValue([]),
+            getDiscoveredActivities: jest.fn().mockReturnValue([]),
+            isHealthy: jest.fn().mockReturnValue(true),
+            getActivityHandlers: jest.fn().mockReturnValue({}),
+        };
 
         // Create mock metadata accessor
         mockMetadataAccessor = {
@@ -1798,6 +1807,275 @@ describe('TemporalWorkerManagerService', () => {
             }
 
             expect((service as any).lastError).toBe(null);
+        });
+    });
+
+    describe('Advanced Coverage Tests for 95%+ Coverage', () => {
+        describe('Worker configuration edge cases (lines 60-63)', () => {
+            it('should skip worker initialization when no worker config provided', async () => {
+                const optionsWithoutWorker = {
+                    ...mockOptions,
+                    worker: undefined,
+                };
+
+                const serviceNoWorker = new TemporalWorkerManagerService(
+                    mockDiscoveryService,
+                    mockMetadataAccessor,
+                    optionsWithoutWorker,
+                    null, // injectedConnection
+                );
+
+                const mockLoggerObj = {
+                    info: jest.fn(),
+                    error: jest.fn(),
+                    warn: jest.fn(),
+                };
+                const loggerSpy = jest.spyOn(serviceNoWorker as any, 'logger', 'get').mockReturnValue(mockLoggerObj);
+
+                await serviceNoWorker.onModuleInit();
+
+                expect(mockLoggerObj.info).toHaveBeenCalledWith(
+                    'Worker initialization skipped - no worker configuration provided',
+                );
+            });
+        });
+
+        describe('Worker already running scenarios (lines 96-97)', () => {
+            it('should warn when trying to start already running worker', async () => {
+                await service.onModuleInit();
+                await service.onApplicationBootstrap();
+                
+                // Worker should now be running
+                expect(service.isWorkerRunning()).toBe(true);
+
+                const loggerSpy = jest.spyOn(service as any, 'logger', 'get').mockReturnValue({
+                    info: jest.fn(),
+                    error: jest.fn(),
+                    warn: jest.fn(),
+                });
+
+                // Try to start worker again
+                await (service as any).startWorker();
+
+                const mockLoggerObj = (service as any).logger;
+                expect(mockLoggerObj.warn).toHaveBeenCalledWith('Worker is already running');
+            });
+        });
+
+        describe('Worker start error scenarios (lines 112-115)', () => {
+            it('should handle worker start errors and update state correctly', async () => {
+                const faultyService = new TemporalWorkerManagerService(
+                    mockDiscoveryService,
+                    mockMetadataAccessor,
+                    mockOptions,
+                    null, // injectedConnection
+                );
+
+                // Mock worker creation to throw
+                jest.spyOn(faultyService as any, 'createWorker').mockImplementation(() => {
+                    throw new Error('Worker creation failed');
+                });
+
+                await faultyService.onModuleInit();
+
+                expect(async () => {
+                    await (faultyService as any).startWorker();
+                }).rejects.toThrow('Worker creation failed');
+
+                expect((faultyService as any).isRunning).toBe(false);
+                expect((faultyService as any).lastError).toBe('Worker creation failed');
+            });
+        });
+
+        describe('Worker initialization edge cases (line 137)', () => {
+            it('should handle initialization completion correctly', async () => {
+                const service = new TemporalWorkerManagerService(
+                    mockDiscoveryService,
+                    mockMetadataAccessor,
+                    mockOptions,
+                    null, // injectedConnection
+                );
+
+                await service.onModuleInit();
+
+                expect((service as any).isInitialized).toBe(true);
+            });
+        });
+
+        describe('Worker loop error handling (lines 172-175)', () => {
+            it('should handle errors in worker run loop', async () => {
+                const mockWorker = {
+                    run: jest.fn().mockRejectedValue(new Error('Worker run error')),
+                };
+
+                const service = new TemporalWorkerManagerService(
+                    mockDiscoveryService,
+                    mockMetadataAccessor,
+                    mockOptions,
+                    null, // injectedConnection
+                );
+
+                const loggerSpy = jest.spyOn(service as any, 'logger', 'get').mockReturnValue({
+                    error: jest.fn(),
+                    info: jest.fn(),
+                    warn: jest.fn(),
+                });
+
+                // Call the worker run loop directly
+                await (service as any).runWorkerLoop(mockWorker);
+
+                const mockLoggerObj = (service as any).logger;
+                expect(mockLoggerObj.error).toHaveBeenCalledWith('Worker execution failed', expect.any(Error));
+                expect((service as any).lastError).toBe('Worker run error');
+                expect((service as any).isRunning).toBe(false);
+            });
+        });
+
+        describe('Advanced worker configuration scenarios (lines 264-271)', () => {
+            it('should handle worker options building with edge cases', () => {
+                const service = new TemporalWorkerManagerService(
+                    mockDiscoveryService,
+                    mockMetadataAccessor,
+                    mockOptions,
+                    null, // injectedConnection
+                );
+
+                // Test building worker options with various configurations
+                const options1 = (service as any).buildWorkerOptions();
+                expect(options1).toBeDefined();
+
+                const options2 = (service as any).buildWorkerOptions({
+                    maxConcurrentActivityTaskExecutions: 10,
+                });
+                expect(options2.maxConcurrentActivityTaskExecutions).toBe(10);
+            });
+        });
+
+        describe('Connection creation edge cases (lines 307, 321, 335)', () => {
+            it('should handle connection creation with various configurations', async () => {
+                const service = new TemporalWorkerManagerService(
+                    mockDiscoveryService,
+                    mockMetadataAccessor,
+                    mockOptions,
+                    null, // injectedConnection
+                );
+
+                // Test connection creation paths
+                const connection = await (service as any).createConnection();
+                expect(connection).toBeDefined();
+            });
+        });
+
+        describe('Validation edge cases (line 418)', () => {
+            it('should handle configuration validation edge cases', () => {
+                const service = new TemporalWorkerManagerService(
+                    mockDiscoveryService,
+                    mockMetadataAccessor,
+                    mockOptions,
+                    null, // injectedConnection
+                );
+
+                // Test validation with edge case configurations
+                const validation = (service as any).validateConfiguration({
+                    connection: {
+                        address: '',
+                    },
+                });
+
+                expect(validation).toBeDefined();
+            });
+        });
+
+        describe('Activity discovery edge cases (lines 487-488, 504)', () => {
+            it('should handle activity discovery with complex scenarios', async () => {
+                const complexActivityService = {
+                    getAllActivities: jest.fn().mockReturnValue({
+                        'TestActivity1': jest.fn(),
+                        'TestActivity2': jest.fn(),
+                        'TestMethod1': jest.fn(),
+                    }),
+                    validateActivities: jest.fn().mockReturnValue({
+                        valid: true,
+                        errors: [],
+                    }),
+                };
+
+                const service = new TemporalWorkerManagerService(
+                    mockDiscoveryService,
+                    mockMetadataAccessor,
+                    mockOptions,
+                    null, // injectedConnection
+                );
+
+                await service.onModuleInit();
+
+                const activities = (service as any).discoverActivities();
+                expect(activities).toBeDefined();
+                expect(Object.keys(activities)).toContain('TestActivity1');
+                expect(Object.keys(activities)).toContain('TestActivity2');
+                expect(Object.keys(activities)).toContain('TestMethod1');
+            });
+        });
+
+        describe('Worker shutdown edge cases (lines 573, 605, 612)', () => {
+            it('should handle worker shutdown with timeout scenarios', async () => {
+                const mockWorker = {
+                    shutdown: jest.fn().mockImplementation(() => 
+                        new Promise(resolve => setTimeout(resolve, 100))
+                    ),
+                };
+
+                const service = new TemporalWorkerManagerService(
+                    mockDiscoveryService,
+                    mockMetadataAccessor,
+                    mockOptions,
+                    null, // injectedConnection
+                );
+
+                // Set the worker
+                (service as any).worker = mockWorker;
+                (service as any).isRunning = true;
+
+                // Test shutdown
+                await service.onModuleDestroy();
+
+                expect(mockWorker.shutdown).toHaveBeenCalled();
+            });
+        });
+
+        describe('Environment and logging edge cases (lines 649, 666)', () => {
+            it('should handle environment-specific configurations', () => {
+                process.env.NODE_ENV = 'test';
+                
+                const service = new TemporalWorkerManagerService(
+                    mockDiscoveryService,
+                    mockMetadataAccessor,
+                    mockOptions,
+                    null, // injectedConnection
+                );
+
+                const envDefaults = (service as any).getEnvironmentDefaults();
+                expect(envDefaults).toBeDefined();
+            });
+
+            it('should handle workflow source logging edge cases', () => {
+                const service = new TemporalWorkerManagerService(
+                    mockDiscoveryService,
+                    mockMetadataAccessor,
+                    mockOptions,
+                    null, // injectedConnection
+                );
+
+                const loggerSpy = jest.spyOn(service as any, 'logger', 'get').mockReturnValue({
+                    info: jest.fn(),
+                    error: jest.fn(),
+                    warn: jest.fn(),
+                });
+
+                // Test workflow source determination
+                const workflowSource = (service as any).getWorkflowSource();
+                expect(workflowSource).toBeDefined();
+            });
         });
     });
 });

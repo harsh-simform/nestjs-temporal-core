@@ -579,14 +579,20 @@ describe('TemporalLogger', () => {
             const config = { name: 'TestService', version: '1.0.0' };
             LoggerUtils.logServiceInit(logger, 'TestService', config);
 
-            expect(mockNestLogger.log).toHaveBeenCalledWith('Initializing TestService...', 'test-context');
+            expect(mockNestLogger.log).toHaveBeenCalledWith(
+                'Initializing TestService...',
+                'test-context',
+            );
             expect(mockNestLogger.debug).not.toHaveBeenCalled(); // Default level is 'info', debug won't be called
         });
 
         it('should log service initialization without config', () => {
             LoggerUtils.logServiceInit(logger, 'TestService');
 
-            expect(mockNestLogger.log).toHaveBeenCalledWith('Initializing TestService...', 'test-context');
+            expect(mockNestLogger.log).toHaveBeenCalledWith(
+                'Initializing TestService...',
+                'test-context',
+            );
             expect(mockNestLogger.debug).not.toHaveBeenCalled();
         });
 
@@ -596,9 +602,9 @@ describe('TemporalLogger', () => {
                 enableLogger: true,
                 logLevel: 'debug',
             });
-            
+
             const config = { name: 'TestService', version: '1.0.0' };
-            
+
             LoggerUtils.logServiceInit(debugLogger, 'TestService', config);
 
             expect(debugLogger.getLogLevel()).toBe('debug');
@@ -607,7 +613,10 @@ describe('TemporalLogger', () => {
         it('should log service shutdown', () => {
             LoggerUtils.logServiceShutdown(logger, 'TestService');
 
-            expect(mockNestLogger.log).toHaveBeenCalledWith('Shutting down TestService...', 'test-context');
+            expect(mockNestLogger.log).toHaveBeenCalledWith(
+                'Shutting down TestService...',
+                'test-context',
+            );
         });
 
         it('should log connection success', () => {
@@ -729,7 +738,7 @@ describe('TemporalLogger', () => {
 
             // Verify it falls back to 'info' level (index 2)
             expect(unknownLevelLogger.getLogLevel()).toBe('info');
-            
+
             // Verify that currentLevelIndex was set to 2 (the fallback)
             const currentLevelIndex = (unknownLevelLogger as any).currentLevelIndex;
             expect(currentLevelIndex).toBe(2);
@@ -738,20 +747,19 @@ describe('TemporalLogger', () => {
         it('should handle corrupted LEVEL_INDICES and use fallback index', () => {
             // Save original LEVEL_INDICES
             const originalLevelIndices = (TemporalLogger as any).LEVEL_INDICES;
-            
+
             try {
                 // Temporarily corrupt the LEVEL_INDICES map to trigger line 111 fallback
                 const corruptedMap = new Map(originalLevelIndices);
                 corruptedMap.delete('info'); // Remove 'info' from the map
                 (TemporalLogger as any).LEVEL_INDICES = corruptedMap;
-                
+
                 // Create logger with 'info' level that's no longer in the map
                 const logger = new TemporalLogger('test', { logLevel: 'info' });
-                
+
                 // Should use fallback index 2 from line 111
                 const currentLevelIndex = (logger as any).currentLevelIndex;
                 expect(currentLevelIndex).toBe(2);
-                
             } finally {
                 // Restore original LEVEL_INDICES
                 (TemporalLogger as any).LEVEL_INDICES = originalLevelIndices;

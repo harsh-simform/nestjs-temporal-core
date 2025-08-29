@@ -551,7 +551,7 @@ describe('Activity Decorator', () => {
                     // Both globalThis.proxyActivities and imported proxyActivities are falsy
                     const hasGlobalProxy = false; // globalThis.proxyActivities is undefined
                     const hasImportedProxy = false; // imported proxyActivities is undefined
-                    
+
                     if (!hasGlobalProxy && !hasImportedProxy) {
                         throw new Error('proxyActivities is not available');
                     }

@@ -1,9 +1,5 @@
 import * as Decorators from '../../src/decorators';
-import {
-    SignalMethod,
-    QueryMethod,
-    ChildWorkflow,
-} from '../../src/decorators/workflow.decorator';
+import { SignalMethod, QueryMethod, ChildWorkflow } from '../../src/decorators/workflow.decorator';
 
 describe('Decorators Index Module', () => {
     describe('Activity Decorators', () => {
@@ -139,7 +135,7 @@ describe('Decorators Index Module', () => {
             activityDecorators.forEach((decorator) => {
                 expect(Decorators).toHaveProperty(decorator);
             });
-            
+
             // Note: Scheduling decorators removed due to static configuration issues
         });
     });

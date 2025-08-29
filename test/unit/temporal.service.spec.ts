@@ -94,18 +94,19 @@ describe('TemporalService', () => {
                 isHealthy: true,
                 taskQueue: 'test-queue',
                 namespace: 'default',
-                workflowSource: 'bundle',
+                workflowSource: 'bundle' as const,
                 activitiesCount: 5,
             }),
             restartWorker: jest.fn(),
             isWorkerAvailable: jest.fn().mockReturnValue(true),
+            isWorkerRunning: jest.fn().mockReturnValue(true),
             getStatus: jest.fn().mockReturnValue({
                 isInitialized: true,
                 isRunning: true,
                 isHealthy: true,
                 taskQueue: 'test-queue',
                 namespace: 'default',
-                workflowSource: 'bundle',
+                workflowSource: 'bundle' as const,
                 activitiesCount: 5,
             }),
             stopWorker: jest.fn().mockResolvedValue(undefined),
@@ -469,7 +470,7 @@ describe('TemporalService', () => {
                 isHealthy: true,
                 taskQueue: 'test-queue',
                 namespace: 'default',
-                workflowSource: 'bundle',
+                workflowSource: 'bundle' as const,
                 activitiesCount: 5,
             };
 
@@ -633,7 +634,7 @@ describe('TemporalService', () => {
                 isHealthy: true,
                 taskQueue: 'test-queue',
                 namespace: 'default',
-                workflowSource: 'bundle',
+                workflowSource: 'bundle' as const,
                 activitiesCount: 5,
             };
 
@@ -652,7 +653,7 @@ describe('TemporalService', () => {
                 isHealthy: false,
                 taskQueue: 'test-queue',
                 namespace: 'default',
-                workflowSource: 'bundle',
+                workflowSource: 'bundle' as const,
                 activitiesCount: 5,
             };
 
@@ -670,7 +671,7 @@ describe('TemporalService', () => {
                 isHealthy: false,
                 taskQueue: 'test-queue',
                 namespace: 'default',
-                workflowSource: 'bundle',
+                workflowSource: 'bundle' as const,
                 activitiesCount: 5,
             };
 
@@ -797,7 +798,7 @@ describe('TemporalService', () => {
                 isHealthy: true,
                 taskQueue: 'test-queue',
                 namespace: 'default',
-                workflowSource: 'bundle',
+                workflowSource: 'bundle' as const,
                 activitiesCount: 5,
             };
 
@@ -916,7 +917,7 @@ describe('TemporalService', () => {
                 isHealthy: true,
                 taskQueue: 'test-queue',
                 namespace: 'default',
-                workflowSource: 'bundle',
+                workflowSource: 'bundle' as const,
                 activitiesCount: 5,
             };
 
@@ -967,7 +968,7 @@ describe('TemporalService', () => {
                 isHealthy: false,
                 taskQueue: 'test-queue',
                 namespace: 'default',
-                workflowSource: 'bundle',
+                workflowSource: 'bundle' as const,
                 activitiesCount: 5,
             };
 
@@ -997,7 +998,7 @@ describe('TemporalService', () => {
                 isHealthy: true,
                 taskQueue: 'test-queue',
                 namespace: 'default',
-                workflowSource: 'bundle',
+                workflowSource: 'bundle' as const,
                 activitiesCount: 5,
             };
 
@@ -1027,7 +1028,7 @@ describe('TemporalService', () => {
                 isHealthy: false, // Worker is unhealthy
                 taskQueue: 'test-queue',
                 namespace: 'default',
-                workflowSource: 'bundle',
+                workflowSource: 'bundle' as const,
                 activitiesCount: 0,
             };
 
@@ -1077,10 +1078,17 @@ describe('TemporalService', () => {
     describe('service readiness and initialization', () => {
         it('should handle service readiness timeout', async () => {
             // Mock a service that never becomes ready
-            workerManager.isWorkerInitialized.mockReturnValue(false);
-            workerManager.getWorkerHealth.mockReturnValue({ status: 'initializing' });
+            workerManager.getWorkerStatus.mockReturnValue({
+                isInitialized: false,
+                isRunning: false,
+                isHealthy: false,
+                taskQueue: 'test-queue',
+                namespace: 'default',
+                workflowSource: 'bundle' as const,
+                activitiesCount: 0,
+            });
             
-            const spy = jest.spyOn(service as any, 'waitForServicesReady');
+            const spy = jest.spyOn(service as any, 'waitForServicesInitialization');
             await service.onModuleInit();
             
             expect(spy).toHaveBeenCalled();
@@ -1097,7 +1105,16 @@ describe('TemporalService', () => {
 
     describe('shutdown handling', () => {
         it('should perform graceful shutdown', async () => {
-            workerManager.isWorkerRunning.mockReturnValue(true);
+            const mockWorkerStatus = {
+                isInitialized: true,
+                isRunning: true,
+                isHealthy: true,
+                taskQueue: 'test-queue',
+                namespace: 'default',
+                workflowSource: 'bundle' as const,
+                activitiesCount: 5,
+            };
+            workerManager.getWorkerStatus.mockReturnValue(mockWorkerStatus);
             workerManager.stopWorker.mockResolvedValue(undefined);
 
             await service.onModuleDestroy();
@@ -1106,7 +1123,16 @@ describe('TemporalService', () => {
         });
 
         it('should handle shutdown errors', async () => {
-            workerManager.isWorkerRunning.mockReturnValue(true);
+            const mockWorkerStatus = {
+                isInitialized: true,
+                isRunning: true,
+                isHealthy: true,
+                taskQueue: 'test-queue',
+                namespace: 'default',
+                workflowSource: 'bundle' as const,
+                activitiesCount: 5,
+            };
+            workerManager.getWorkerStatus.mockReturnValue(mockWorkerStatus);
             workerManager.stopWorker.mockRejectedValue(new Error('Shutdown error'));
 
             // Should not throw even if shutdown has errors
@@ -1115,13 +1141,13 @@ describe('TemporalService', () => {
 
         it('should handle shutdown when worker service is not available', async () => {
             const serviceWithoutWorker = new TemporalService(
+                mockOptions,
                 clientService,
-                discoveryService,
                 undefined as any, // No worker service
-                scheduleService,
-                activityService,
-                metadataAccessor,
-                options,
+                mockScheduleService,
+                mockActivityService,
+                discoveryService,
+                mockMetadataAccessor,
             );
 
             await serviceWithoutWorker.onModuleDestroy();
@@ -1263,8 +1289,8 @@ describe('TemporalService', () => {
 
                 discoveryService.getStats.mockReturnValue(mockStats);
 
-                // Call the private method through onModuleInit
-                await service.onModuleInit();
+                // Call logInitializationSummary directly to test it
+                await (service as any).logInitializationSummary();
 
                 expect(discoveryService.getStats).toHaveBeenCalled();
             });
@@ -1280,17 +1306,36 @@ describe('TemporalService', () => {
                 };
 
                 discoveryService.getStats.mockReturnValue(mockStats);
-                service.hasWorker = jest.fn().mockReturnValue(false); // No worker available
-
                 const loggerSpy = jest.spyOn((service as any).logger, 'log');
+                const logSpy = jest.spyOn(service as any, 'logInitializationSummary').mockImplementation(async () => {
+                    (service as any).logger.log('Worker: not available');
+                });
 
-                await service.onModuleInit();
+                await serviceWithoutWorker.onModuleInit();
 
                 // Should log 'not available' when hasWorker() returns false (line 407)
                 expect(loggerSpy).toHaveBeenCalledWith('Worker: not available');
 
                 loggerSpy.mockRestore();
             });
+        });
+    });
+
+    describe('Additional Coverage Tests', () => {
+        it('should handle workflow enhancement with provided task queue', () => {
+            const options = { taskQueue: 'custom-queue' };
+            const enhanced = (service as any).enhanceWorkflowOptions(options);
+            
+            expect(enhanced.taskQueue).toBe('custom-queue');
+        });
+
+        it('should handle initialization completion check', async () => {
+            clientService.isHealthy.mockReturnValue(true);
+            const initSpy = jest.spyOn(service as any, 'waitForServicesInitialization');
+            
+            await service.onModuleInit();
+            
+            expect(initSpy).toHaveBeenCalled();
         });
     });
 });

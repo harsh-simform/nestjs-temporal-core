@@ -796,4 +796,170 @@ describe('TemporalDiscoveryService', () => {
             expect(stats.queries).toBe(0);
         });
     });
+
+    describe('Additional Coverage Tests', () => {
+        beforeEach(() => {
+            const mockMetadataScanner = {
+                scanFromPrototype: jest.fn().mockReturnValue([]),
+            };
+            discoveryService.getProviders.mockReturnValue([]);
+            discoveryService.getControllers.mockReturnValue([]);
+            metadataScanner = mockMetadataScanner as any;
+        });
+
+        describe('getScheduleIds', () => {
+            it('should return empty array', () => {
+                const scheduleIds = service.getScheduleIds();
+                expect(scheduleIds).toEqual([]);
+            });
+        });
+
+        describe('getWorkflowInfo', () => {
+            it('should return null for any workflow name', () => {
+                const workflowInfo = service.getWorkflowInfo('TestWorkflow');
+                expect(workflowInfo).toBeNull();
+            });
+        });
+
+        describe('rediscover', () => {
+            it('should perform complete re-discovery', async () => {
+                await service.onModuleInit(); // Initial discovery
+
+                const initialTime = service['lastDiscoveryTime'];
+                const clearSpy = jest.spyOn(service as any, 'clearDiscoveredComponents');
+                const discoverSpy = jest.spyOn(service as any, 'discoverComponents');
+                const logSpy = jest.spyOn(service as any, 'logDiscoveryResults');
+
+                // Wait a bit to ensure time difference
+                await new Promise((resolve) => setTimeout(resolve, 10));
+
+                await service.rediscover();
+
+                expect(clearSpy).toHaveBeenCalled();
+                expect(discoverSpy).toHaveBeenCalled();
+                expect(logSpy).toHaveBeenCalled();
+                expect(service['lastDiscoveryTime']).not.toEqual(initialTime);
+            });
+        });
+
+        describe('getHealthStatus', () => {
+            it('should return degraded status when no components discovered', async () => {
+                await service.onModuleInit();
+
+                const healthStatus = service.getHealthStatus();
+
+                expect(healthStatus.status).toBe('degraded');
+                expect(healthStatus.discoveredItems).toBeDefined();
+                expect(healthStatus.isComplete).toBe(true);
+                expect(healthStatus.lastDiscovery).toBeInstanceOf(Date);
+                expect(healthStatus.discoveryDuration).toBeGreaterThanOrEqual(0);
+            });
+
+            it('should return healthy status when components are discovered', async () => {
+                // Mock some discovered components
+                const mockProvider = {
+                    name: 'TestProvider',
+                    instance: { testMethod: jest.fn() },
+                    metatype: class TestClass {},
+                };
+
+                discoveryService.getProviders.mockReturnValue([mockProvider as any]);
+                metadataScanner.scanFromPrototype.mockReturnValue([
+                    { methodName: 'testMethod', descriptor: { value: jest.fn() } },
+                ]);
+
+                await service.onModuleInit();
+
+                const healthStatus = service.getHealthStatus();
+
+                expect(healthStatus.status).toBe('healthy');
+                expect(healthStatus.discoveredItems.methods).toBeGreaterThan(0);
+            });
+
+            it('should handle missing discovery times', () => {
+                service['discoveryStartTime'] = null;
+                service['lastDiscoveryTime'] = null;
+
+                const healthStatus = service.getHealthStatus();
+
+                expect(healthStatus.discoveryDuration).toBeNull();
+                expect(healthStatus.lastDiscovery).toBeNull();
+            });
+        });
+
+        describe('Error handling scenarios', () => {
+            it('should handle discovery errors gracefully', async () => {
+                const errorProvider = {
+                    name: 'ErrorProvider',
+                    instance: {},
+                    metatype: class ErrorClass {},
+                };
+
+                discoveryService.getProviders.mockReturnValue([errorProvider as any]);
+                metadataScanner.scanFromPrototype.mockImplementation(() => {
+                    throw new Error('Scan failed');
+                });
+
+                // Should not throw despite scanning error
+                await service.onModuleInit();
+
+                const stats = service.getStats();
+                expect(stats).toBeDefined();
+            });
+
+            it('should handle provider without metatype', async () => {
+                const providerWithoutMetatype = {
+                    name: 'NoMetatypeProvider',
+                    instance: {},
+                    metatype: undefined,
+                };
+
+                discoveryService.getProviders.mockReturnValue([providerWithoutMetatype as any]);
+
+                await service.onModuleInit();
+
+                const stats = service.getStats();
+                expect(stats.methods).toBe(0);
+            });
+
+            it('should handle method discovery with null descriptors', async () => {
+                const mockProvider = {
+                    name: 'TestProvider',
+                    instance: { testMethod: jest.fn() },
+                    metatype: class TestClass {},
+                };
+
+                discoveryService.getProviders.mockReturnValue([mockProvider as any]);
+                metadataScanner.scanFromPrototype.mockReturnValue([
+                    { methodName: 'testMethod', descriptor: null },
+                ]);
+
+                await service.onModuleInit();
+
+                const stats = service.getStats();
+                expect(stats).toBeDefined();
+            });
+        });
+
+        describe('Discovery completion tracking', () => {
+            it('should track discovery completion correctly', async () => {
+                expect(service['isDiscoveryComplete']).toBe(false);
+
+                await service.onModuleInit();
+
+                expect(service['isDiscoveryComplete']).toBe(true);
+            });
+
+            it('should reset completion status on rediscovery', async () => {
+                await service.onModuleInit();
+                expect(service['isDiscoveryComplete']).toBe(true);
+
+                const rediscoverPromise = service.rediscover();
+                expect(service['isDiscoveryComplete']).toBe(false);
+
+                await rediscoverPromise;
+                expect(service['isDiscoveryComplete']).toBe(true);
+            });
+        });
+    });
 });
