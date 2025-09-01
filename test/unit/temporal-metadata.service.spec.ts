@@ -28,68 +28,75 @@ describe('TemporalMetadataAccessor', () => {
         service = module.get<TemporalMetadataAccessor>(TemporalMetadataAccessor);
 
         // Mock Reflect.getMetadata to match how the decorators actually store metadata
-        jest.spyOn(Reflect, 'getMetadata').mockImplementation((key: string, target: any, propertyKey?: string | symbol) => {
-            // Handle activity class metadata
-            if (key === TEMPORAL_ACTIVITY && target === TestActivity) {
-                return { name: 'TestActivity' };
-            }
-            if (key === TEMPORAL_ACTIVITY && target === TestActivity.prototype) {
-                return { name: 'TestActivity' };
-            }
-            
-            // Handle activity method metadata on prototype
-            if (key === TEMPORAL_ACTIVITY_METHOD && target === TestActivity.prototype) {
-                if (propertyKey === 'testMethod') {
-                    return { name: 'testMethod' };
+        jest.spyOn(Reflect, 'getMetadata').mockImplementation(
+            (key: string, target: any, propertyKey?: string | symbol) => {
+                // Handle activity class metadata
+                if (key === TEMPORAL_ACTIVITY && target === TestActivity) {
+                    return { name: 'TestActivity' };
                 }
-                if (propertyKey === 'methodWithoutName') {
-                    return {};
+                if (key === TEMPORAL_ACTIVITY && target === TestActivity.prototype) {
+                    return { name: 'TestActivity' };
                 }
-                if (propertyKey === 'regularMethod') {
-                    return undefined; // Explicitly return undefined for regularMethod
+
+                // Handle activity method metadata on prototype
+                if (key === TEMPORAL_ACTIVITY_METHOD && target === TestActivity.prototype) {
+                    if (propertyKey === 'testMethod') {
+                        return { name: 'testMethod' };
+                    }
+                    if (propertyKey === 'methodWithoutName') {
+                        return {};
+                    }
+                    if (propertyKey === 'regularMethod') {
+                        return undefined; // Explicitly return undefined for regularMethod
+                    }
+                    // Return the object with all method metadata like the real decorator does
+                    return {
+                        testMethod: { name: 'testMethod' },
+                        methodWithoutName: {},
+                    };
                 }
-                // Return the object with all method metadata like the real decorator does
-                return {
-                    testMethod: { name: 'testMethod' },
-                    methodWithoutName: {}
-                };
-            }
-            
-            // Handle individual method metadata
-            if (key === TEMPORAL_ACTIVITY_METHOD && propertyKey) {
-                if (propertyKey === 'testMethod') {
-                    return { name: 'testMethod' };
+
+                // Handle individual method metadata
+                if (key === TEMPORAL_ACTIVITY_METHOD && propertyKey) {
+                    if (propertyKey === 'testMethod') {
+                        return { name: 'testMethod' };
+                    }
+                    if (propertyKey === 'methodWithoutName') {
+                        return {};
+                    }
+                    if (propertyKey === 'regularMethod') {
+                        return undefined; // Explicitly return undefined for regularMethod
+                    }
                 }
-                if (propertyKey === 'methodWithoutName') {
-                    return {};
-                }
-                if (propertyKey === 'regularMethod') {
-                    return undefined; // Explicitly return undefined for regularMethod
-                }
-            }
-            
-            return undefined;
-        });
-        
+
+                return undefined;
+            },
+        );
+
         // Mock Reflect.hasMetadata to match the getMetadata mock
-        jest.spyOn(Reflect, 'hasMetadata').mockImplementation((key: string, target: any, propertyKey?: string | symbol) => {
-            if (key === TEMPORAL_ACTIVITY && (target === TestActivity || target === TestActivity.prototype)) {
-                return true;
-            }
-            if (key === TEMPORAL_ACTIVITY_METHOD && target === TestActivity.prototype) {
-                // Only return true for methods that actually have metadata
-                if (propertyKey === 'testMethod' || propertyKey === 'methodWithoutName') {
+        jest.spyOn(Reflect, 'hasMetadata').mockImplementation(
+            (key: string, target: any, propertyKey?: string | symbol) => {
+                if (
+                    key === TEMPORAL_ACTIVITY &&
+                    (target === TestActivity || target === TestActivity.prototype)
+                ) {
                     return true;
                 }
-                if (propertyKey === 'regularMethod') {
-                    return false; // Explicitly return false for regularMethod
+                if (key === TEMPORAL_ACTIVITY_METHOD && target === TestActivity.prototype) {
+                    // Only return true for methods that actually have metadata
+                    if (propertyKey === 'testMethod' || propertyKey === 'methodWithoutName') {
+                        return true;
+                    }
+                    if (propertyKey === 'regularMethod') {
+                        return false; // Explicitly return false for regularMethod
+                    }
+                    // Return true if no propertyKey (asking for general metadata) - this means there are activity methods
+                    return !propertyKey;
                 }
-                // Return true if no propertyKey (asking for general metadata) - this means there are activity methods
-                return !propertyKey;
-            }
-            return false;
-        });
-        
+                return false;
+            },
+        );
+
         // Mock Object.getOwnPropertyNames for prototype inspection
         const originalGetOwnPropertyNames = Object.getOwnPropertyNames;
         jest.spyOn(Object, 'getOwnPropertyNames').mockImplementation((target: any) => {
@@ -99,11 +106,17 @@ describe('TemporalMetadataAccessor', () => {
             // Return original implementation for other objects
             return originalGetOwnPropertyNames(target);
         });
-        
+
         // Add function properties to TestActivity prototype to simulate real methods
-        TestActivity.prototype.testMethod = function() { return 'test'; };
-        TestActivity.prototype.methodWithoutName = function() { return 'without name'; };
-        TestActivity.prototype.regularMethod = function() { return 'regular'; };
+        TestActivity.prototype.testMethod = function () {
+            return 'test';
+        };
+        TestActivity.prototype.methodWithoutName = function () {
+            return 'without name';
+        };
+        TestActivity.prototype.regularMethod = function () {
+            return 'regular';
+        };
     });
 
     afterEach(() => {
@@ -137,7 +150,7 @@ describe('TemporalMetadataAccessor', () => {
         it('should use cache for subsequent calls', () => {
             const spy = jest.spyOn(Reflect, 'hasMetadata');
             spy.mockClear();
-            
+
             service.isActivity(TestActivity);
             service.isActivity(TestActivity);
 
@@ -166,7 +179,7 @@ describe('TemporalMetadataAccessor', () => {
         it('should use cache for subsequent calls', () => {
             const spy = jest.spyOn(Reflect, 'getMetadata');
             spy.mockClear();
-            
+
             service.getActivityOptions(TestActivity);
             service.getActivityOptions(TestActivity);
 
@@ -201,7 +214,10 @@ describe('TemporalMetadataAccessor', () => {
         });
 
         it('should return null for methods without name in metadata', () => {
-            const result = service.getActivityMethodName(TestActivity.prototype, 'methodWithoutName');
+            const result = service.getActivityMethodName(
+                TestActivity.prototype,
+                'methodWithoutName',
+            );
             expect(result).toBe('methodWithoutName');
         });
 
@@ -224,12 +240,18 @@ describe('TemporalMetadataAccessor', () => {
         });
 
         it('should return empty object for methods without options', () => {
-            const result = service.getActivityMethodOptions(TestActivity.prototype, 'methodWithoutName');
+            const result = service.getActivityMethodOptions(
+                TestActivity.prototype,
+                'methodWithoutName',
+            );
             expect(result).toEqual({});
         });
 
         it('should return null for non-activity methods', () => {
-            const result = service.getActivityMethodOptions(TestActivity.prototype, 'regularMethod');
+            const result = service.getActivityMethodOptions(
+                TestActivity.prototype,
+                'regularMethod',
+            );
             expect(result).toBeNull();
         });
 
@@ -298,6 +320,8 @@ describe('TemporalMetadataAccessor', () => {
 
         it('should return null for non-existent method', () => {
             const instance = new TestActivity();
+            // Clear any cached methods first
+            service.clearCache();
             const result = service.getActivityMethodMetadata(instance, 'nonExistent');
             expect(result).toBeNull();
         });
@@ -402,12 +426,14 @@ describe('TemporalMetadataAccessor', () => {
             };
             Object.defineProperty(target, 'prototype', { value: prototype });
 
-            jest.spyOn(Reflect, 'hasMetadata').mockImplementation((key: string, target: any, propertyKey?: string | symbol) => {
-                if (key === TEMPORAL_ACTIVITY_METHOD && propertyKey === 'testMethod') {
-                    return true;
-                }
-                return false;
-            });
+            jest.spyOn(Reflect, 'hasMetadata').mockImplementation(
+                (key: string, target: any, propertyKey?: string | symbol) => {
+                    if (key === TEMPORAL_ACTIVITY_METHOD && propertyKey === 'testMethod') {
+                        return true;
+                    }
+                    return false;
+                },
+            );
 
             const result = service.getActivityMethodNames(target);
             expect(result).toContain('testMethod');
@@ -423,21 +449,21 @@ describe('TemporalMetadataAccessor', () => {
 
         it('should return null when cached methods not found', () => {
             const instance = { constructor: { name: 'TestClass' } };
-            
+
             const result = service.getActivityMethodMetadata(instance, 'testMethod');
             expect(result).toBeNull();
         });
 
         it('should return null when metadata not found in cache', () => {
             const instance = { constructor: { name: 'TestClass' } };
-            
+
             const result = service.getActivityMethodMetadata(instance, 'testMethod');
             expect(result).toBeNull();
         });
 
         it('should return null when original name does not match', () => {
             const instance = { constructor: { name: 'TestClass' } };
-            
+
             const result = service.getActivityMethodMetadata(instance, 'testMethod');
             expect(result).toBeNull();
         });
@@ -489,12 +515,15 @@ describe('TemporalMetadataAccessor', () => {
         it('should handle metadata access errors', () => {
             const instance = { constructor: { name: 'TestClass' } };
 
-            // Mock to throw error during method processing
-            jest.spyOn(Object, 'getOwnPropertyNames').mockImplementation(() => {
-                throw new Error('Property access error');
-            });
+            // Create an instance that will cause an error during metadata access
+            const problematicInstance = {
+                constructor: TestActivity,
+                get prototype() {
+                    throw new Error('Property access error');
+                },
+            } as any;
 
-            const result = service.extractActivityMethods(instance);
+            const result = service.extractActivityMethods(problematicInstance);
             expect(result.size).toBe(0);
         });
     });
@@ -591,11 +620,15 @@ describe('TemporalMetadataAccessor', () => {
         it('should handle method extraction errors gracefully', () => {
             const instance = new TestActivity();
 
-            jest.spyOn(Object, 'getOwnPropertyNames').mockImplementation(() => {
-                throw new Error('Property error');
-            });
+            // Create an instance that will cause an error during metadata access
+            const problematicInstance = {
+                constructor: TestActivity,
+                get prototype() {
+                    throw new Error('Property error');
+                },
+            } as any;
 
-            const result = service.extractActivityMethods(instance);
+            const result = service.extractActivityMethods(problematicInstance);
             expect(result).toBeInstanceOf(Map);
             expect(result.size).toBe(0);
         });
@@ -989,15 +1022,44 @@ describe('TemporalMetadataAccessor', () => {
                 originalMethod() {}
             }
 
-            jest.spyOn(Reflect, 'getMetadata').mockImplementation((key: string, target: any) => {
-                if (key === TEMPORAL_ACTIVITY && target === TestActivityWithCustomName) {
-                    return { name: 'TestActivityWithCustomName' };
-                }
-                if (key === TEMPORAL_ACTIVITY_METHOD && target.name === 'originalMethod') {
-                    return { name: 'customName' };
-                }
-                return undefined;
-            });
+            // Mock getMetadata to properly return metadata for the class and method
+            jest.spyOn(Reflect, 'getMetadata').mockImplementation(
+                (key: string, target: any, propertyKey?: string | symbol) => {
+                    if (key === TEMPORAL_ACTIVITY && target === TestActivityWithCustomName) {
+                        return { name: 'TestActivityWithCustomName' };
+                    }
+                    if (
+                        key === TEMPORAL_ACTIVITY_METHOD &&
+                        target === TestActivityWithCustomName.prototype
+                    ) {
+                        if (propertyKey === 'originalMethod') {
+                            return { name: 'customName' };
+                        }
+                        // Return general metadata indicating there are activity methods
+                        return { originalMethod: { name: 'customName' } };
+                    }
+                    return undefined;
+                },
+            );
+
+            // Mock hasMetadata to return true for the method
+            jest.spyOn(Reflect, 'hasMetadata').mockImplementation(
+                (key: string, target: any, propertyKey?: string | symbol) => {
+                    if (key === TEMPORAL_ACTIVITY && target === TestActivityWithCustomName) {
+                        return true;
+                    }
+                    if (
+                        key === TEMPORAL_ACTIVITY_METHOD &&
+                        target === TestActivityWithCustomName.prototype
+                    ) {
+                        if (propertyKey === 'originalMethod') {
+                            return true;
+                        }
+                        return true; // General metadata exists
+                    }
+                    return false;
+                },
+            );
 
             const instance = new TestActivityWithCustomName();
             const methods = service.extractActivityMethods(instance);
@@ -1050,15 +1112,43 @@ describe('TemporalMetadataAccessor', () => {
             const instance = new TestActivityForLine319();
 
             // Mock getMetadata to return specific metadata for the method
-            jest.spyOn(Reflect, 'getMetadata').mockImplementation((key: string, target: any) => {
-                if (
-                    key === TEMPORAL_ACTIVITY_METHOD &&
-                    target === TestActivityForLine319.prototype.testMethod
-                ) {
-                    return { name: 'customActivityName', timeout: '30s' };
-                }
-                return undefined;
-            });
+            jest.spyOn(Reflect, 'getMetadata').mockImplementation(
+                (key: string, target: any, propertyKey?: string | symbol) => {
+                    if (key === TEMPORAL_ACTIVITY && target === TestActivityForLine319) {
+                        return { name: 'TestActivityForLine319' };
+                    }
+                    if (
+                        key === TEMPORAL_ACTIVITY_METHOD &&
+                        target === TestActivityForLine319.prototype
+                    ) {
+                        if (propertyKey === 'testMethod') {
+                            return { name: 'customActivityName', timeout: '30s' };
+                        }
+                        // Return general metadata indicating there are activity methods
+                        return { testMethod: { name: 'customActivityName', timeout: '30s' } };
+                    }
+                    return undefined;
+                },
+            );
+
+            // Mock hasMetadata to return true for the method
+            jest.spyOn(Reflect, 'hasMetadata').mockImplementation(
+                (key: string, target: any, propertyKey?: string | symbol) => {
+                    if (key === TEMPORAL_ACTIVITY && target === TestActivityForLine319) {
+                        return true;
+                    }
+                    if (
+                        key === TEMPORAL_ACTIVITY_METHOD &&
+                        target === TestActivityForLine319.prototype
+                    ) {
+                        if (propertyKey === 'testMethod') {
+                            return true;
+                        }
+                        return true; // General metadata exists
+                    }
+                    return false;
+                },
+            );
 
             // This should trigger line 319: options: metadata || undefined
             const methods = service.extractActivityMethods(instance);

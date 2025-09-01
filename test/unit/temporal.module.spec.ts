@@ -863,9 +863,27 @@ describe('TemporalModule', () => {
         });
 
         it('should throw error for invalid async options configuration', () => {
-            // This test is not needed as the validation happens in validateAsyncOptions
-            // before reaching createAsyncOptionsProvider
-            expect(true).toBe(true);
+            // Test edge case where validation passes but createAsyncOptionsProvider still needs to handle it
+            const options = {
+                useFactory: undefined,
+                useClass: undefined,
+                useExisting: undefined,
+            } as any;
+
+            // Mock the validateAsyncOptions to allow this to pass validation
+            const originalValidateAsyncOptions = (TemporalModule as any).validateAsyncOptions;
+            jest.spyOn(TemporalModule as any, 'validateAsyncOptions').mockImplementation(() => {
+                // Allow this to pass validation
+            });
+
+            try {
+                expect(() => TemporalModule.registerAsync(options)).toThrow(
+                    'Invalid async options configuration',
+                );
+            } finally {
+                // Restore original method
+                (TemporalModule as any).validateAsyncOptions = originalValidateAsyncOptions;
+            }
         });
 
         it('should throw error when useFactory has non-array inject', () => {
@@ -1099,6 +1117,35 @@ describe('TemporalModule', () => {
 
             const module = TemporalModule.registerAsync(options);
             expect(module.imports).toHaveLength(3); // DiscoveryModule + TestModule + DynamicModule
+        });
+
+        it('should handle async module with object imports for full coverage', () => {
+            class TestFactory {
+                createTemporalOptions() {
+                    return {
+                        connection: { address: 'localhost:7233' },
+                        taskQueue: 'test',
+                    };
+                }
+            }
+
+            // Test specifically the object import case to cover line 60
+            // Create an object that is definitely not null and has object type
+            const dynamicModule = Object.create(null);
+            Object.assign(dynamicModule, {
+                module: class DynamicModule {},
+                providers: [],
+                global: false,
+            });
+
+            const options = {
+                useClass: TestFactory,
+                imports: [dynamicModule],
+            };
+
+            const module = TemporalModule.registerAsync(options);
+            expect(module.imports).toHaveLength(2); // DiscoveryModule + DynamicModule
+            expect(module.imports).toContain(dynamicModule);
         });
 
         it('should handle async module without imports', () => {

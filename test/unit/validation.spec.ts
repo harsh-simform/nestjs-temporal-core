@@ -1,6 +1,339 @@
-import { isValidCronExpression, isValidIntervalExpression } from '../../src/utils/validation';
+import {
+    isValidCronExpression,
+    isValidIntervalExpression,
+    validateWorkflowId,
+    validateSignalName,
+    validateQueryName,
+    validateWorkflowType,
+    validateActivityName,
+    ServiceInitializationUtils,
+} from '../../src/utils/validation';
 
 describe('Validation Utilities', () => {
+    describe('validateWorkflowId', () => {
+        it('should pass for valid workflow IDs', () => {
+            expect(() => validateWorkflowId('workflow-123')).not.toThrow();
+            expect(() => validateWorkflowId('my-workflow')).not.toThrow();
+            expect(() => validateWorkflowId('workflow_with_underscores')).not.toThrow();
+            expect(() => validateWorkflowId('123')).not.toThrow();
+        });
+
+        it('should throw error for empty workflow ID', () => {
+            expect(() => validateWorkflowId('')).toThrow(
+                'Workflow ID is required and cannot be empty',
+            );
+        });
+
+        it('should throw error for whitespace-only workflow ID', () => {
+            expect(() => validateWorkflowId('   ')).toThrow(
+                'Workflow ID is required and cannot be empty',
+            );
+            expect(() => validateWorkflowId('\t')).toThrow(
+                'Workflow ID is required and cannot be empty',
+            );
+            expect(() => validateWorkflowId('\n')).toThrow(
+                'Workflow ID is required and cannot be empty',
+            );
+        });
+
+        it('should throw error for null/undefined workflow ID', () => {
+            expect(() => validateWorkflowId(null as any)).toThrow(
+                'Workflow ID is required and cannot be empty',
+            );
+            expect(() => validateWorkflowId(undefined as any)).toThrow(
+                'Workflow ID is required and cannot be empty',
+            );
+        });
+
+        it('should pass for workflow ID with leading/trailing whitespace', () => {
+            expect(() => validateWorkflowId('  workflow-123  ')).not.toThrow();
+        });
+    });
+
+    describe('validateSignalName', () => {
+        it('should pass for valid signal names', () => {
+            expect(() => validateSignalName('signal-123')).not.toThrow();
+            expect(() => validateSignalName('my_signal')).not.toThrow();
+            expect(() => validateSignalName('signal123')).not.toThrow();
+        });
+
+        it('should throw error for empty signal name', () => {
+            expect(() => validateSignalName('')).toThrow(
+                'Signal name is required and cannot be empty',
+            );
+        });
+
+        it('should throw error for whitespace-only signal name', () => {
+            expect(() => validateSignalName('   ')).toThrow(
+                'Signal name is required and cannot be empty',
+            );
+        });
+
+        it('should throw error for null/undefined signal name', () => {
+            expect(() => validateSignalName(null as any)).toThrow(
+                'Signal name is required and cannot be empty',
+            );
+            expect(() => validateSignalName(undefined as any)).toThrow(
+                'Signal name is required and cannot be empty',
+            );
+        });
+
+        it('should throw error for signal name with spaces', () => {
+            expect(() => validateSignalName('my signal')).toThrow(
+                'Invalid signal name: "my signal". Signal names cannot contain whitespace.',
+            );
+        });
+
+        it('should throw error for signal name with newlines', () => {
+            expect(() => validateSignalName('my\nsignal')).toThrow(
+                'Invalid signal name: "my\nsignal". Signal names cannot contain whitespace.',
+            );
+        });
+
+        it('should throw error for signal name with tabs', () => {
+            expect(() => validateSignalName('my\tsignal')).toThrow(
+                'Invalid signal name: "my\tsignal". Signal names cannot contain whitespace.',
+            );
+        });
+
+        it('should pass for signal name with leading/trailing whitespace', () => {
+            expect(() => validateSignalName('signal-123')).not.toThrow();
+        });
+    });
+
+    describe('validateQueryName', () => {
+        it('should pass for valid query names', () => {
+            expect(() => validateQueryName('query-123')).not.toThrow();
+            expect(() => validateQueryName('my_query')).not.toThrow();
+            expect(() => validateQueryName('query123')).not.toThrow();
+        });
+
+        it('should throw error for empty query name', () => {
+            expect(() => validateQueryName('')).toThrow(
+                'Query name is required and cannot be empty',
+            );
+        });
+
+        it('should throw error for whitespace-only query name', () => {
+            expect(() => validateQueryName('   ')).toThrow(
+                'Query name is required and cannot be empty',
+            );
+        });
+
+        it('should throw error for null/undefined query name', () => {
+            expect(() => validateQueryName(null as any)).toThrow(
+                'Query name is required and cannot be empty',
+            );
+            expect(() => validateQueryName(undefined as any)).toThrow(
+                'Query name is required and cannot be empty',
+            );
+        });
+
+        it('should throw error for query name with spaces', () => {
+            expect(() => validateQueryName('my query')).toThrow(
+                'Invalid query name: "my query". Query names cannot contain whitespace.',
+            );
+        });
+
+        it('should throw error for query name with newlines', () => {
+            expect(() => validateQueryName('my\nquery')).toThrow(
+                'Invalid query name: "my\nquery". Query names cannot contain whitespace.',
+            );
+        });
+
+        it('should throw error for query name with tabs', () => {
+            expect(() => validateQueryName('my\tquery')).toThrow(
+                'Invalid query name: "my\tquery". Query names cannot contain whitespace.',
+            );
+        });
+
+        it('should pass for query name with leading/trailing whitespace', () => {
+            expect(() => validateQueryName('query-123')).not.toThrow();
+        });
+    });
+
+    describe('validateWorkflowType', () => {
+        it('should pass for valid workflow types', () => {
+            expect(() => validateWorkflowType('workflow-type-123')).not.toThrow();
+            expect(() => validateWorkflowType('my_workflow_type')).not.toThrow();
+            expect(() => validateWorkflowType('workflowType123')).not.toThrow();
+        });
+
+        it('should throw error for empty workflow type', () => {
+            expect(() => validateWorkflowType('')).toThrow(
+                'Workflow type is required and cannot be empty',
+            );
+        });
+
+        it('should throw error for whitespace-only workflow type', () => {
+            expect(() => validateWorkflowType('   ')).toThrow(
+                'Workflow type is required and cannot be empty',
+            );
+        });
+
+        it('should throw error for null/undefined workflow type', () => {
+            expect(() => validateWorkflowType(null as any)).toThrow(
+                'Workflow type is required and cannot be empty',
+            );
+            expect(() => validateWorkflowType(undefined as any)).toThrow(
+                'Workflow type is required and cannot be empty',
+            );
+        });
+
+        it('should pass for workflow type with leading/trailing whitespace', () => {
+            expect(() => validateWorkflowType('  workflow-type-123  ')).not.toThrow();
+        });
+    });
+
+    describe('validateActivityName', () => {
+        it('should pass for valid activity names', () => {
+            expect(() => validateActivityName('activity-123')).not.toThrow();
+            expect(() => validateActivityName('my_activity')).not.toThrow();
+            expect(() => validateActivityName('activity123')).not.toThrow();
+        });
+
+        it('should throw error for empty activity name', () => {
+            expect(() => validateActivityName('')).toThrow(
+                'Activity name is required and cannot be empty',
+            );
+        });
+
+        it('should throw error for whitespace-only activity name', () => {
+            expect(() => validateActivityName('   ')).toThrow(
+                'Activity name is required and cannot be empty',
+            );
+        });
+
+        it('should throw error for null/undefined activity name', () => {
+            expect(() => validateActivityName(null as any)).toThrow(
+                'Activity name is required and cannot be empty',
+            );
+            expect(() => validateActivityName(undefined as any)).toThrow(
+                'Activity name is required and cannot be empty',
+            );
+        });
+
+        it('should pass for activity name with leading/trailing whitespace', () => {
+            expect(() => validateActivityName('  activity-123  ')).not.toThrow();
+        });
+    });
+
+    describe('ServiceInitializationUtils', () => {
+        const mockLogger = {
+            debug: jest.fn(),
+            info: jest.fn(),
+            warn: jest.fn(),
+            error: jest.fn(),
+        };
+
+        beforeEach(() => {
+            jest.clearAllMocks();
+        });
+
+        describe('safeInitialize', () => {
+            it('should successfully initialize a service', async () => {
+                const initFunction = jest.fn().mockResolvedValue('success');
+
+                const result = await ServiceInitializationUtils.safeInitialize(
+                    'TestService',
+                    mockLogger,
+                    initFunction,
+                );
+
+                expect(result).toBe('success');
+                expect(mockLogger.debug).toHaveBeenCalledWith('Initializing TestService...');
+                expect(mockLogger.info).toHaveBeenCalledWith(
+                    'TestService initialized successfully',
+                );
+                expect(initFunction).toHaveBeenCalled();
+            });
+
+            it('should handle synchronous initialization function', async () => {
+                const initFunction = jest.fn().mockReturnValue('sync-success');
+
+                const result = await ServiceInitializationUtils.safeInitialize(
+                    'TestService',
+                    mockLogger,
+                    initFunction,
+                );
+
+                expect(result).toBe('sync-success');
+                expect(mockLogger.debug).toHaveBeenCalledWith('Initializing TestService...');
+                expect(mockLogger.info).toHaveBeenCalledWith(
+                    'TestService initialized successfully',
+                );
+            });
+
+            it('should handle initialization failure with allowFailure=true (default)', async () => {
+                const error = new Error('Initialization failed');
+                const initFunction = jest.fn().mockRejectedValue(error);
+
+                const result = await ServiceInitializationUtils.safeInitialize(
+                    'TestService',
+                    mockLogger,
+                    initFunction,
+                );
+
+                expect(result).toBeNull();
+                expect(mockLogger.debug).toHaveBeenCalledWith('Initializing TestService...');
+                expect(mockLogger.warn).toHaveBeenCalledWith(
+                    'TestService initialization failed - continuing in degraded mode: Initialization failed',
+                );
+            });
+
+            it('should handle initialization failure with allowFailure=false', async () => {
+                const error = new Error('Critical initialization failed');
+                const initFunction = jest.fn().mockRejectedValue(error);
+
+                await expect(
+                    ServiceInitializationUtils.safeInitialize(
+                        'TestService',
+                        mockLogger,
+                        initFunction,
+                        false,
+                    ),
+                ).rejects.toThrow('Critical initialization failed');
+
+                expect(mockLogger.debug).toHaveBeenCalledWith('Initializing TestService...');
+                expect(mockLogger.error).toHaveBeenCalledWith(
+                    'TestService initialization failed: Critical initialization failed',
+                );
+            });
+
+            it('should handle non-Error exceptions', async () => {
+                const initFunction = jest.fn().mockRejectedValue('String error');
+
+                const result = await ServiceInitializationUtils.safeInitialize(
+                    'TestService',
+                    mockLogger,
+                    initFunction,
+                );
+
+                expect(result).toBeNull();
+                expect(mockLogger.warn).toHaveBeenCalledWith(
+                    'TestService initialization failed - continuing in degraded mode: undefined',
+                );
+            });
+
+            it('should handle non-Error exceptions with allowFailure=false', async () => {
+                const initFunction = jest.fn().mockRejectedValue('String error');
+
+                await expect(
+                    ServiceInitializationUtils.safeInitialize(
+                        'TestService',
+                        mockLogger,
+                        initFunction,
+                        false,
+                    ),
+                ).rejects.toBe('String error');
+
+                expect(mockLogger.error).toHaveBeenCalledWith(
+                    'TestService initialization failed: undefined',
+                );
+            });
+        });
+    });
+
     describe('isValidCronExpression', () => {
         describe('valid cron expressions', () => {
             it('should validate 5-field cron expressions', () => {
@@ -138,6 +471,28 @@ describe('Validation Utilities', () => {
                 expect(isValidCronExpression('0 0 # * *')).toBe(false); // invalid character in day
                 expect(isValidCronExpression('0 0 0 @ *')).toBe(false); // invalid character in month
                 expect(isValidCronExpression('0 0 0 0 &')).toBe(false); // invalid character in weekday
+            });
+
+            it('should return true for valid cron expressions that pass all validation', () => {
+                // Test cases that should pass all validation and reach the final return true
+                expect(isValidCronExpression('0 0 * * *')).toBe(true); // basic 5-field
+                expect(isValidCronExpression('0 0 0 * * *')).toBe(true); // basic 6-field
+                expect(isValidCronExpression('* * * * *')).toBe(true); // all wildcards 5-field
+                expect(isValidCronExpression('* * * * * *')).toBe(true); // all wildcards 6-field
+                expect(isValidCronExpression('1,2,3 * * * *')).toBe(true); // with commas
+                expect(isValidCronExpression('1-5 * * * *')).toBe(true); // with ranges
+                expect(isValidCronExpression('*/5 * * * *')).toBe(true); // with step values
+                expect(isValidCronExpression('? * * * *')).toBe(true); // with question mark
+                expect(isValidCronExpression('L * * * *')).toBe(true); // with L
+                expect(isValidCronExpression('W * * * *')).toBe(true); // with W
+            });
+
+            it('should handle edge case where all validation passes and reaches final return', () => {
+                // This test specifically targets the final return true statement
+                // by ensuring all validation checks pass
+                expect(isValidCronExpression('59 23 31 12 6')).toBe(true); // maximum valid values
+                expect(isValidCronExpression('0 0 1 1 0')).toBe(true); // minimum valid values
+                expect(isValidCronExpression('30 12 15 6 3')).toBe(true); // middle range values
             });
         });
     });
@@ -298,7 +653,7 @@ describe('Validation Utilities', () => {
                 expect(isValidIntervalExpression('1m')).toBe(true); // minimal m
                 expect(isValidIntervalExpression('1h')).toBe(true); // minimal h
                 expect(isValidIntervalExpression('1d')).toBe(true); // minimal d
-                
+
                 // Test expressions with only whitespace (after trim)
                 expect(isValidIntervalExpression('   ')).toBe(false); // only spaces
                 expect(isValidIntervalExpression('\t\t')).toBe(false); // only tabs

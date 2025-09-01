@@ -15,7 +15,7 @@ describe('TemporalService', () => {
     let clientService: jest.Mocked<TemporalClientService>;
     let discoveryService: jest.Mocked<TemporalDiscoveryService>;
     let workerManager: jest.Mocked<TemporalWorkerManagerService>;
-    
+
     // Cache for special service instances to avoid recreating modules
     let serviceWithoutWorker: TemporalService;
     let mockScheduleService: any;
@@ -58,7 +58,7 @@ describe('TemporalService', () => {
             extractActivityMethods: jest.fn(),
             extractActivityMethodsFromClass: jest.fn(),
         };
-        
+
         const mockClientService = {
             startWorkflow: jest.fn(),
             signalWorkflow: jest.fn(),
@@ -81,9 +81,9 @@ describe('TemporalService', () => {
             hasWorkflow: jest
                 .fn()
                 .mockImplementation((workflowType: string) => workflowType === 'TestWorkflow'),
-            getHealthStatus: jest.fn().mockReturnValue({ 
-                status: 'healthy', 
-                isComplete: true // This is critical for service initialization
+            getHealthStatus: jest.fn().mockReturnValue({
+                status: 'healthy',
+                isComplete: true, // This is critical for service initialization
             }),
         };
 
@@ -156,7 +156,7 @@ describe('TemporalService', () => {
 
         // Initialize the service
         await service.onModuleInit();
-        
+
         // Set up service without worker (used by multiple tests)
         const moduleWithoutWorker: TestingModule = await Test.createTestingModule({
             providers: [
@@ -1087,19 +1087,22 @@ describe('TemporalService', () => {
                 workflowSource: 'bundle' as const,
                 activitiesCount: 0,
             });
-            
+
             const spy = jest.spyOn(service as any, 'waitForServicesInitialization');
             await service.onModuleInit();
-            
+
             expect(spy).toHaveBeenCalled();
         });
 
         it('should handle initialization errors', async () => {
-            const logSpy = jest.spyOn(service as any, 'logInitializationSummary').mockImplementation(() => {
-                throw new Error('Init error');
-            });
+            // Mock the waitForServicesInitialization method to throw an error
+            const waitSpy = jest
+                .spyOn(service as any, 'waitForServicesInitialization')
+                .mockRejectedValue(new Error('Init error'));
 
             await expect(service.onModuleInit()).rejects.toThrow('Init error');
+
+            waitSpy.mockRestore();
         });
     });
 
@@ -1118,7 +1121,7 @@ describe('TemporalService', () => {
             workerManager.stopWorker.mockResolvedValue(undefined);
 
             await service.onModuleDestroy();
-            
+
             expect(workerManager.stopWorker).toHaveBeenCalled();
         });
 
@@ -1175,6 +1178,9 @@ describe('TemporalService', () => {
     describe('private methods', () => {
         describe('enhanceWorkflowOptions', () => {
             it('should use provided task queue', async () => {
+                // Initialize the service first
+                await service.onModuleInit();
+
                 clientService.startWorkflow.mockResolvedValue({
                     result: Promise.resolve('test'),
                     workflowId: 'test-id',
@@ -1190,6 +1196,9 @@ describe('TemporalService', () => {
             });
 
             it('should use module task queue when not provided', async () => {
+                // Initialize the service first
+                await service.onModuleInit();
+
                 clientService.startWorkflow.mockResolvedValue({
                     result: Promise.resolve('test'),
                     workflowId: 'test-id',
@@ -1306,10 +1315,22 @@ describe('TemporalService', () => {
                 };
 
                 discoveryService.getStats.mockReturnValue(mockStats);
-                const loggerSpy = jest.spyOn((service as any).logger, 'log');
-                const logSpy = jest.spyOn(service as any, 'logInitializationSummary').mockImplementation(async () => {
-                    (service as any).logger.log('Worker: not available');
-                });
+
+                // Create a service without worker and mock the hasWorker method to return false
+                const serviceWithoutWorker = new TemporalService(
+                    mockOptions,
+                    clientService,
+                    undefined as any, // No worker service
+                    mockScheduleService,
+                    mockActivityService,
+                    discoveryService,
+                    mockMetadataAccessor,
+                );
+
+                // Mock the hasWorker method to return false
+                jest.spyOn(serviceWithoutWorker as any, 'hasWorker').mockReturnValue(false);
+
+                const loggerSpy = jest.spyOn((serviceWithoutWorker as any).logger, 'log');
 
                 await serviceWithoutWorker.onModuleInit();
 
@@ -1325,16 +1346,16 @@ describe('TemporalService', () => {
         it('should handle workflow enhancement with provided task queue', () => {
             const options = { taskQueue: 'custom-queue' };
             const enhanced = (service as any).enhanceWorkflowOptions(options);
-            
+
             expect(enhanced.taskQueue).toBe('custom-queue');
         });
 
         it('should handle initialization completion check', async () => {
             clientService.isHealthy.mockReturnValue(true);
             const initSpy = jest.spyOn(service as any, 'waitForServicesInitialization');
-            
+
             await service.onModuleInit();
-            
+
             expect(initSpy).toHaveBeenCalled();
         });
     });

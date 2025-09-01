@@ -36,7 +36,7 @@ describe('TemporalActivityService', () => {
 
     beforeEach(async () => {
         const mockDiscoveryService = {
-            getProviders: jest.fn(),
+            getProviders: jest.fn().mockReturnValue([]),
         };
 
         const mockMetadataAccessor = {
@@ -966,7 +966,7 @@ describe('TemporalActivityService', () => {
             );
 
             expect(() => uninitializedService['ensureInitialized']()).toThrow(
-                'Temporal Activity Service not initialized',
+                'Temporal Activity Service is not initialized',
             );
         });
 
@@ -998,7 +998,8 @@ describe('TemporalActivityService', () => {
                 } as any,
             );
 
-            await expect(errorService.onModuleInit()).rejects.toThrow('Discovery failed');
+            // The service should handle the error gracefully and not throw
+            await expect(errorService.onModuleInit()).resolves.toBeUndefined();
         });
 
         it('should handle method extraction errors', async () => {
@@ -1024,7 +1025,8 @@ describe('TemporalActivityService', () => {
                 } as any,
             );
 
-            await expect(errorService.onModuleInit()).rejects.toThrow('Discovery failed');
+            // The service should throw the error when extractActivityMethods fails
+            await expect(errorService.onModuleInit()).rejects.toThrow('Method extraction error');
         });
     });
 

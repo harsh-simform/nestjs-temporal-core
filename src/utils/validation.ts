@@ -153,12 +153,7 @@ export function isValidCronExpression(expression: string): boolean {
         return false;
     }
 
-    // 2. Check for truly missing fields by looking for cases where we have
-    // too few parts when splitting normally (indicating missing fields)
-    // But skip this check if we already know it's a valid multi-space format
-    if (parts.length < 5) {
-        return false; // Already handled above but just to be explicit
-    }
+    // Note: The check for parts.length < 5 is already handled above on line 140
 
     // Check for invalid characters (basic validation)
     // Allow digits, *, -, , /, ?, L, W for advanced cron features (but not # as it's too advanced)

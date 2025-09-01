@@ -97,6 +97,9 @@ export class TemporalMetadataAccessor {
             const metadata = Reflect.getMetadata(TEMPORAL_ACTIVITY_METHOD, prototype, methodName);
             if (!metadata) return null;
 
+            // Check if the method actually exists on the prototype
+            if (!(methodName in prototype)) return null;
+
             return {
                 name: metadata.name || methodName,
                 originalName: methodName,

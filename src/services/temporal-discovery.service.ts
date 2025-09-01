@@ -4,8 +4,8 @@ import { TEMPORAL_MODULE_OPTIONS } from '../constants';
 import {
     TemporalOptions,
     DiscoveryStats,
-    SignalMethodInfo,
-    QueryMethodInfo,
+    ExtendedSignalMethodInfo as SignalMethodInfo,
+    ExtendedQueryMethodInfo as QueryMethodInfo,
     ChildWorkflowInfo,
 } from '../interfaces';
 import { createLogger, TemporalLogger } from '../utils/logger';

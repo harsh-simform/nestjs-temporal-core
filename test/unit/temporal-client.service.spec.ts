@@ -827,9 +827,14 @@ describe('TemporalClientService', () => {
                     warn: jest.fn(),
                     error: jest.fn(),
                 };
-                const loggerSpy = jest
-                    .spyOn(serviceWithoutWorkflow as any, 'logger', 'get')
-                    .mockReturnValue(mockLogger);
+                // Mock the logger methods directly
+                const originalWarn = serviceWithoutWorkflow['logger'].warn;
+                const originalError = serviceWithoutWorkflow['logger'].error;
+                serviceWithoutWorkflow['logger'].warn = mockLogger.warn;
+                serviceWithoutWorkflow['logger'].error = mockLogger.error;
+
+                // Initialize the service first
+                await serviceWithoutWorkflow.onModuleInit();
 
                 // Trigger health check
                 await (serviceWithoutWorkflow as any).performHealthCheck();
@@ -837,15 +842,17 @@ describe('TemporalClientService', () => {
                 expect(mockLogger.warn).toHaveBeenCalledWith(
                     'Client health check failed - workflow property not available',
                 );
+
+                // Restore original methods
+                serviceWithoutWorkflow['logger'].warn = originalWarn;
+                serviceWithoutWorkflow['logger'].error = originalError;
             });
 
             it('should handle health check errors (lines 396-397)', async () => {
                 const faultyClient = {
-                    workflow: {
-                        // Mock workflow to throw error during health check
-                        getHandle: jest.fn().mockImplementation(() => {
-                            throw new Error('Handle error');
-                        }),
+                    get workflow() {
+                        // Make the workflow property throw an error when accessed
+                        throw new Error('Workflow access error');
                     },
                 } as any;
 
@@ -869,9 +876,14 @@ describe('TemporalClientService', () => {
                     warn: jest.fn(),
                     error: jest.fn(),
                 };
-                const loggerSpy = jest
-                    .spyOn(serviceWithFaultyClient as any, 'logger', 'get')
-                    .mockReturnValue(mockLogger);
+                // Mock the logger methods directly
+                const originalWarn = serviceWithFaultyClient['logger'].warn;
+                const originalError = serviceWithFaultyClient['logger'].error;
+                serviceWithFaultyClient['logger'].warn = mockLogger.warn;
+                serviceWithFaultyClient['logger'].error = mockLogger.error;
+
+                // Initialize the service first
+                await serviceWithFaultyClient.onModuleInit();
 
                 // Trigger health check that will fail
                 await (serviceWithFaultyClient as any).performHealthCheck();
@@ -880,6 +892,10 @@ describe('TemporalClientService', () => {
                     'Client health check failed',
                     expect.any(Error),
                 );
+
+                // Restore original methods
+                serviceWithFaultyClient['logger'].warn = originalWarn;
+                serviceWithFaultyClient['logger'].error = originalError;
             });
 
             it('should handle scheduled health check error (lines 344-345)', (done) => {
@@ -906,21 +922,7 @@ describe('TemporalClientService', () => {
             });
         });
 
-        describe('Edge Case Coverage for lines 421-424', () => {
-            it('should handle namespace resolution edge cases', () => {
-                // Test the ensureNamespace method edge cases
-                const serviceInstance = service as any;
-
-                // Test with various namespace scenarios to cover lines 421-424
-                const result1 = serviceInstance.ensureNamespace();
-                expect(result1).toBe('default');
-
-                const result2 = serviceInstance.ensureNamespace('custom-namespace');
-                expect(result2).toBe('custom-namespace');
-
-                const result3 = serviceInstance.ensureNamespace('');
-                expect(result3).toBe('default');
-            });
-        });
+        // Note: Lines 421-424 are covered by other tests that use namespace resolution
+        // The ensureNamespace method doesn't exist in the current implementation
     });
 });

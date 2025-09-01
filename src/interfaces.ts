@@ -661,7 +661,7 @@ export interface ActivityInfo {
  * Extended information about signal methods with class context.
  * Used internally for signal method management.
  */
-export interface SignalMethodInfo {
+export interface ExtendedSignalMethodInfo {
     className: string;
     signalName: string;
     methodName: string;
@@ -673,12 +673,13 @@ export interface SignalMethodInfo {
  * Extended information about query methods with class context.
  * Used internally for query method management.
  */
-export interface QueryMethodInfo {
+export interface ExtendedQueryMethodInfo {
     className: string;
     queryName: string;
     methodName: string;
     handler: (...args: unknown[]) => unknown | Promise<unknown>;
     instance: object;
+    options?: Record<string, unknown>;
 }
 
 /**
