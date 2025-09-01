@@ -1166,7 +1166,7 @@ describe('TemporalModule', () => {
             expect(module.imports).toHaveLength(1); // Only DiscoveryModule
         });
 
-        it('should handle async module with null/undefined imports', () => {
+        it('should handle async module with null in imports array', () => {
             class TestFactory {
                 createTemporalOptions() {
                     return {
@@ -1178,11 +1178,11 @@ describe('TemporalModule', () => {
 
             const options = {
                 useClass: TestFactory,
-                imports: null as any,
+                imports: [null],
             };
 
             const module = TemporalModule.registerAsync(options);
-            expect(module.imports).toHaveLength(1); // Only DiscoveryModule
+            expect(module.imports).toHaveLength(1); // Only DiscoveryModule, null is ignored
         });
 
         it('should handle useExisting with factory method execution', async () => {
