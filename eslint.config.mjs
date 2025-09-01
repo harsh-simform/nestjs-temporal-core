@@ -26,7 +26,7 @@ export default [
         },
         plugins: {
             '@typescript-eslint': typescript,
-            prettier: prettier,
+            prettier,
         },
         rules: {
             // Base ESLint rules
