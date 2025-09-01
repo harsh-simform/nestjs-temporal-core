@@ -2,6 +2,7 @@ import {
     SignalMethod,
     QueryMethod,
     ChildWorkflow,
+    InjectWorkflowClient,
 } from '../../src/decorators/workflow.decorator';
 import {
     TEMPORAL_SIGNAL_METHOD,
@@ -60,6 +61,77 @@ describe('Workflow Decorator', () => {
                 }
             }).toThrow('Signal name cannot be empty');
         });
+
+        it('should handle error when Reflect.defineMetadata fails', () => {
+            const originalDefineMetadata = Reflect.defineMetadata;
+            Reflect.defineMetadata = jest.fn().mockImplementation(() => {
+                throw new Error('Metadata storage failed');
+            });
+
+            expect(() => {
+                class TestWorkflow {
+                    @SignalMethod('testSignal')
+                    async handleSignal(): Promise<void> {}
+                }
+            }).toThrow('Metadata storage failed');
+
+            Reflect.defineMetadata = originalDefineMetadata;
+        });
+
+        it('should handle validation error from validateSignalName with empty string', () => {
+            const originalValidateSignalName =
+                require('../../src/utils/validation').validateSignalName;
+            require('../../src/utils/validation').validateSignalName = jest
+                .fn()
+                .mockImplementation((name: string) => {
+                    if (name === '') {
+                        throw new Error('Signal name cannot be empty');
+                    }
+                });
+
+            expect(() => {
+                class TestWorkflow {
+                    @SignalMethod('')
+                    async handleSignal(): Promise<void> {}
+                }
+            }).toThrow('Signal name cannot be empty');
+
+            require('../../src/utils/validation').validateSignalName = originalValidateSignalName;
+        });
+
+        it('should throw error for signal name with whitespace', () => {
+            expect(() => {
+                class TestWorkflow {
+                    @SignalMethod('my signal')
+                    async handleSignal(): Promise<void> {
+                        // Implementation
+                    }
+                }
+            }).toThrow('Invalid signal name: "my signal". Signal names cannot contain whitespace.');
+        });
+
+        it('should handle validation error from validateQueryName with empty string', () => {
+            const originalValidateQueryName =
+                require('../../src/utils/validation').validateQueryName;
+            require('../../src/utils/validation').validateQueryName = jest
+                .fn()
+                .mockImplementation((name: string) => {
+                    if (name === '') {
+                        throw new Error('Query name cannot be empty');
+                    }
+                });
+
+            expect(() => {
+                class TestWorkflow {
+                    @QueryMethod('')
+                    getStatus(): string {
+                        return 'active';
+                    }
+                }
+            }).toThrow('Query name cannot be empty');
+
+            require('../../src/utils/validation').validateQueryName = originalValidateQueryName;
+        });
     });
 
     describe('@QueryMethod', () => {
@@ -95,10 +167,14 @@ describe('Workflow Decorator', () => {
             expect(() => {
                 class TestWorkflow {
                     @QueryMethod('duplicate')
-                    query1(): string { return 'test'; }
+                    query1(): string {
+                        return 'test';
+                    }
 
                     @QueryMethod('duplicate')
-                    query2(): string { return 'test'; }
+                    query2(): string {
+                        return 'test';
+                    }
                 }
             }).toThrow('Duplicate query name "duplicate" found');
         });
@@ -113,19 +189,62 @@ describe('Workflow Decorator', () => {
                 }
             }).toThrow('Query name cannot be empty');
         });
+
+        it('should handle error when Reflect.defineMetadata fails', () => {
+            const originalDefineMetadata = Reflect.defineMetadata;
+            Reflect.defineMetadata = jest.fn().mockImplementation(() => {
+                throw new Error('Metadata storage failed');
+            });
+
+            expect(() => {
+                class TestWorkflow {
+                    @QueryMethod('testQuery')
+                    getStatus(): string {
+                        return 'active';
+                    }
+                }
+            }).toThrow('Metadata storage failed');
+
+            Reflect.defineMetadata = originalDefineMetadata;
+        });
+
+        it('should handle validation error from validateQueryName', () => {
+            const originalValidateQueryName =
+                require('../../src/utils/validation').validateQueryName;
+            require('../../src/utils/validation').validateQueryName = jest
+                .fn()
+                .mockImplementation(() => {
+                    throw new Error('Invalid query name');
+                });
+
+            expect(() => {
+                class TestWorkflow {
+                    @QueryMethod('invalid-query')
+                    getStatus(): string {
+                        return 'active';
+                    }
+                }
+            }).toThrow('Invalid query name');
+
+            require('../../src/utils/validation').validateQueryName = originalValidateQueryName;
+        });
     });
 
     describe('@ChildWorkflow', () => {
         it('should mark property with child workflow metadata', () => {
             class PaymentWorkflow {}
-            
+
             class TestWorkflow {
                 @ChildWorkflow(PaymentWorkflow)
                 private paymentWorkflow: PaymentWorkflow;
             }
 
             const instance = new TestWorkflow();
-            const metadata = Reflect.getMetadata(TEMPORAL_CHILD_WORKFLOW, instance, 'paymentWorkflow');
+            const metadata = Reflect.getMetadata(
+                TEMPORAL_CHILD_WORKFLOW,
+                instance,
+                'paymentWorkflow',
+            );
             expect(metadata).toBeDefined();
             expect(metadata.workflowType).toBe(PaymentWorkflow);
             expect(metadata.workflowName).toBe('PaymentWorkflow');
@@ -134,14 +253,18 @@ describe('Workflow Decorator', () => {
 
         it('should accept workflow options', () => {
             class PaymentWorkflow {}
-            
+
             class TestWorkflow {
                 @ChildWorkflow(PaymentWorkflow, { taskQueue: 'payments' })
                 private paymentWorkflow: PaymentWorkflow;
             }
 
             const instance = new TestWorkflow();
-            const metadata = Reflect.getMetadata(TEMPORAL_CHILD_WORKFLOW, instance, 'paymentWorkflow');
+            const metadata = Reflect.getMetadata(
+                TEMPORAL_CHILD_WORKFLOW,
+                instance,
+                'paymentWorkflow',
+            );
             expect(metadata).toBeDefined();
             expect(metadata.options).toEqual({ taskQueue: 'payments' });
         });
@@ -163,12 +286,189 @@ describe('Workflow Decorator', () => {
                 }
             }).toThrow('Child workflow type must be a class constructor');
         });
+
+        it('should handle error when Reflect.defineMetadata fails', () => {
+            const originalDefineMetadata = Reflect.defineMetadata;
+            Reflect.defineMetadata = jest.fn().mockImplementation(() => {
+                throw new Error('Metadata storage failed');
+            });
+
+            expect(() => {
+                class PaymentWorkflow {}
+
+                class TestWorkflow {
+                    @ChildWorkflow(PaymentWorkflow)
+                    private paymentWorkflow: PaymentWorkflow;
+                }
+            }).toThrow('Metadata storage failed');
+
+            Reflect.defineMetadata = originalDefineMetadata;
+        });
+
+        it('should trigger getter fallback for child workflow proxy', () => {
+            class PaymentWorkflow {}
+
+            class TestWorkflow {
+                @ChildWorkflow(PaymentWorkflow)
+                private paymentWorkflow: PaymentWorkflow;
+            }
+
+            const instance = new TestWorkflow();
+
+            // Access the property to trigger the getter
+            expect(() => {
+                const value = (instance as any).paymentWorkflow;
+            }).toThrow('Child workflow PaymentWorkflow not initialized');
+        });
+
+        it('should trigger setter error for child workflow proxy', () => {
+            class PaymentWorkflow {}
+
+            class TestWorkflow {
+                @ChildWorkflow(PaymentWorkflow)
+                private paymentWorkflow: PaymentWorkflow;
+            }
+
+            const instance = new TestWorkflow();
+
+            // Try to set the property to trigger the setter
+            expect(() => {
+                (instance as any).paymentWorkflow = 'test';
+            }).toThrow('Child workflow proxy is read-only');
+        });
+    });
+
+    describe('@InjectWorkflowClient', () => {
+        it('should inject workflow client when getWorkflowClient is available', () => {
+            // Mock getWorkflowClient
+            const mockClient = { start: jest.fn() };
+            const originalGlobalGetWorkflowClient = (globalThis as any).getWorkflowClient;
+            (globalThis as any).getWorkflowClient = jest.fn().mockReturnValue(mockClient);
+
+            class TestService {
+                @InjectWorkflowClient()
+                workflowClient: any;
+            }
+
+            const instance = new TestService();
+            expect(instance.workflowClient).toBe(mockClient);
+
+            // Restore
+            (globalThis as any).getWorkflowClient = originalGlobalGetWorkflowClient;
+        });
+
+        it('should throw error when getWorkflowClient is not available', () => {
+            // Remove both global and module getWorkflowClient
+            const originalGlobalGetWorkflowClient = (globalThis as any).getWorkflowClient;
+            delete (globalThis as any).getWorkflowClient;
+
+            // Mock @temporalio/client to not export getWorkflowClient
+            jest.doMock('@temporalio/client', () => ({}), { virtual: true });
+
+            class TestService {
+                @InjectWorkflowClient()
+                workflowClient: any;
+            }
+
+            const instance = new TestService();
+
+            // Access the property to trigger the getter
+            expect(() => {
+                const value = instance.workflowClient;
+            }).toThrow('No WorkflowClient instance available');
+
+            // Restore
+            (globalThis as any).getWorkflowClient = originalGlobalGetWorkflowClient;
+            jest.resetModules();
+        });
+
+        it('should throw error when getWorkflowClient is not a function', () => {
+            // Set getWorkflowClient to a non-function value
+            const originalGlobalGetWorkflowClient = (globalThis as any).getWorkflowClient;
+            (globalThis as any).getWorkflowClient = 'not a function';
+
+            class TestService {
+                @InjectWorkflowClient()
+                workflowClient: any;
+            }
+
+            const instance = new TestService();
+
+            // Access the property to trigger the getter
+            expect(() => {
+                const value = instance.workflowClient;
+            }).toThrow('No WorkflowClient instance available');
+
+            // Restore
+            (globalThis as any).getWorkflowClient = originalGlobalGetWorkflowClient;
+        });
+
+        it('should handle error when getWorkflowClient throws', () => {
+            // Mock getWorkflowClient to throw an error
+            const originalGlobalGetWorkflowClient = (globalThis as any).getWorkflowClient;
+            (globalThis as any).getWorkflowClient = jest.fn().mockImplementation(() => {
+                throw new Error('Connection failed');
+            });
+
+            class TestService {
+                @InjectWorkflowClient()
+                workflowClient: any;
+            }
+
+            const instance = new TestService();
+
+            // Access the property to trigger the getter
+            expect(() => {
+                const value = instance.workflowClient;
+            }).toThrow('No WorkflowClient instance available');
+
+            // Restore
+            (globalThis as any).getWorkflowClient = originalGlobalGetWorkflowClient;
+        });
+
+        it('should create non-writable property', () => {
+            // Mock getWorkflowClient
+            const mockClient = { start: jest.fn() };
+            const originalGlobalGetWorkflowClient = (globalThis as any).getWorkflowClient;
+            (globalThis as any).getWorkflowClient = jest.fn().mockReturnValue(mockClient);
+
+            class TestService {
+                @InjectWorkflowClient()
+                workflowClient: any;
+            }
+
+            const instance = new TestService();
+
+            // Try to set the property
+            expect(() => {
+                instance.workflowClient = 'test';
+            }).toThrow();
+
+            // Restore
+            (globalThis as any).getWorkflowClient = originalGlobalGetWorkflowClient;
+        });
+
+        it('should handle error when Reflect.defineMetadata fails', () => {
+            const originalDefineMetadata = Reflect.defineMetadata;
+            Reflect.defineMetadata = jest.fn().mockImplementation(() => {
+                throw new Error('Metadata storage failed');
+            });
+
+            expect(() => {
+                class TestService {
+                    @InjectWorkflowClient()
+                    workflowClient: any;
+                }
+            }).toThrow('Metadata storage failed');
+
+            Reflect.defineMetadata = originalDefineMetadata;
+        });
     });
 
     describe('Integration Tests', () => {
         it('should work with multiple decorators on same class', () => {
             class PaymentWorkflow {}
-            
+
             class TestWorkflow {
                 @ChildWorkflow(PaymentWorkflow)
                 private paymentWorkflow: PaymentWorkflow;
@@ -178,24 +478,74 @@ describe('Workflow Decorator', () => {
 
                 @QueryMethod('getStatus')
                 getStatus(): string {
-                    return 'active';  
+                    return 'active';
                 }
             }
 
             const instance = new TestWorkflow();
             const proto = TestWorkflow.prototype;
-            
+
             // Check child workflow
-            const childMeta = Reflect.getMetadata(TEMPORAL_CHILD_WORKFLOW, instance, 'paymentWorkflow');
+            const childMeta = Reflect.getMetadata(
+                TEMPORAL_CHILD_WORKFLOW,
+                instance,
+                'paymentWorkflow',
+            );
             expect(childMeta).toBeDefined();
-            
+
             // Check signal
             const signals = Reflect.getMetadata(TEMPORAL_SIGNAL_METHOD, proto);
             expect(signals['updateStatus']).toBe('updateStatus');
-            
+
             // Check query
             const queries = Reflect.getMetadata(TEMPORAL_QUERY_METHOD, proto);
             expect(queries['getStatus']).toBe('getStatus');
+        });
+
+        it('should handle multiple signals and queries on same class', () => {
+            class TestWorkflow {
+                @SignalMethod('signal1')
+                async signal1(): Promise<void> {}
+
+                @SignalMethod('signal2')
+                async signal2(): Promise<void> {}
+
+                @QueryMethod('query1')
+                query1(): string {
+                    return 'test1';
+                }
+
+                @QueryMethod('query2')
+                query2(): string {
+                    return 'test2';
+                }
+            }
+
+            const proto = TestWorkflow.prototype;
+            const signals = Reflect.getMetadata(TEMPORAL_SIGNAL_METHOD, proto);
+            const queries = Reflect.getMetadata(TEMPORAL_QUERY_METHOD, proto);
+
+            expect(signals).toBeDefined();
+            expect(signals['signal1']).toBe('signal1');
+            expect(signals['signal2']).toBe('signal2');
+
+            expect(queries).toBeDefined();
+            expect(queries['query1']).toBe('query1');
+            expect(queries['query2']).toBe('query2');
+        });
+
+        it('should throw error when @SignalMethod descriptor is invalid', () => {
+            const mockDescriptor: PropertyDescriptor = { value: 'not a function' as unknown };
+            expect(() => {
+                SignalMethod()({} as object, 'testMethod', mockDescriptor);
+            }).toThrow('@SignalMethod can only be applied to methods');
+        });
+
+        it('should throw error when @QueryMethod descriptor is invalid', () => {
+            const mockDescriptor: PropertyDescriptor = { value: 'not a function' as unknown };
+            expect(() => {
+                QueryMethod()({} as object, 'testMethod', mockDescriptor);
+            }).toThrow('@QueryMethod can only be applied to methods');
         });
     });
 });
