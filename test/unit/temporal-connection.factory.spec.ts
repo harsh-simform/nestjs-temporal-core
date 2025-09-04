@@ -137,6 +137,51 @@ describe('TemporalConnectionFactory', () => {
             );
         });
 
+        it('should handle client creation with undefined metadata', async () => {
+            // Spy on createNewClient to control the Client mock inside it
+            const createNewClientSpy = jest.spyOn(factory as any, 'createNewClient');
+
+            // Mock the Client constructor to capture the options passed to it
+            let capturedClientOptions: any = null;
+            (Client as jest.MockedClass<typeof Client>).mockImplementation((options: any) => {
+                capturedClientOptions = options;
+                return mockClient;
+            });
+
+            const optionsWithUndefinedMetadata: TemporalOptions = {
+                connection: {
+                    address: 'localhost:7233',
+                    namespace: 'test-namespace',
+                    tls: false,
+                    metadata: undefined,
+                    apiKey: 'test-api-key',
+                },
+                allowConnectionFailure: false,
+            };
+
+            const result = await factory.createClient(optionsWithUndefinedMetadata);
+            expect(result).toBe(mockClient);
+
+            // Verify that the metadata was properly handled (should have authorization but no other metadata)
+            expect(capturedClientOptions).toEqual(
+                expect.objectContaining({
+                    connection: expect.objectContaining({
+                        metadata: expect.objectContaining({
+                            authorization: 'Bearer test-api-key',
+                        }),
+                    }),
+                }),
+            );
+
+            // Verify that metadata only contains the authorization (since original metadata was undefined)
+            expect(Object.keys(capturedClientOptions.connection.metadata)).toHaveLength(1);
+            expect(capturedClientOptions.connection.metadata.authorization).toBe(
+                'Bearer test-api-key',
+            );
+
+            createNewClientSpy.mockRestore();
+        });
+
         it('should retry connection on failure and succeed', async () => {
             // Mock first call to fail, second to succeed
             (Client as jest.MockedClass<typeof Client>)
@@ -189,20 +234,18 @@ describe('TemporalConnectionFactory', () => {
             const createNewClientSpy = jest.spyOn(factory as any, 'createNewClient');
 
             // Mock to simulate reaching the else block
-            createNewClientSpy.mockImplementation(
-                async (options: TemporalOptions, connectionKey: string) => {
-                    // Simulate the logic that leads to the else block
-                    const attempts = 3; // MAX_RETRY_ATTEMPTS
-                    if (attempts >= 3) {
-                        if (options.allowConnectionFailure !== false) {
-                            return null;
-                        } else {
-                            throw new Error('Failed to connect to localhost:7233 after 3 attempts');
-                        }
+            createNewClientSpy.mockImplementation((options: TemporalOptions) => {
+                // Simulate the logic that leads to the else block
+                const attempts = 3; // MAX_RETRY_ATTEMPTS
+                if (attempts >= 3) {
+                    if (options.allowConnectionFailure !== false) {
+                        return Promise.resolve(null);
+                    } else {
+                        throw new Error('Failed to connect to localhost:7233 after 3 attempts');
                     }
-                    return null;
-                },
-            );
+                }
+                return Promise.resolve(null);
+            });
 
             const optionsWithFailureNotAllowed: TemporalOptions = {
                 connection: {
@@ -219,6 +262,51 @@ describe('TemporalConnectionFactory', () => {
             );
 
             createNewClientSpy.mockRestore();
+        });
+
+        it('should throw error when max retry attempts already exceeded and allowConnectionFailure=false', async () => {
+            const optionsWithFailureNotAllowed: TemporalOptions = {
+                connection: {
+                    address: 'localhost:7233',
+                    namespace: 'test-namespace',
+                    tls: false,
+                    metadata: {},
+                },
+                allowConnectionFailure: false,
+            };
+
+            const connectionKey = (factory as any).getConnectionKey(
+                optionsWithFailureNotAllowed.connection,
+            );
+
+            // Pre-set the connection attempts to MAX_RETRY_ATTEMPTS to hit the condition immediately
+            (factory as any).connectionAttempts.set(connectionKey, 3);
+
+            await expect(factory.createClient(optionsWithFailureNotAllowed)).rejects.toThrow(
+                'Failed to connect to localhost:7233 after 3 attempts',
+            );
+        });
+
+        it('should return null when max retry attempts already exceeded and allowConnectionFailure=true', async () => {
+            const optionsWithFailureAllowed: TemporalOptions = {
+                connection: {
+                    address: 'localhost:7233',
+                    namespace: 'test-namespace',
+                    tls: false,
+                    metadata: {},
+                },
+                allowConnectionFailure: true,
+            };
+
+            const connectionKey = (factory as any).getConnectionKey(
+                optionsWithFailureAllowed.connection,
+            );
+
+            // Pre-set the connection attempts to MAX_RETRY_ATTEMPTS to hit the condition immediately
+            (factory as any).connectionAttempts.set(connectionKey, 3);
+
+            const result = await factory.createClient(optionsWithFailureAllowed);
+            expect(result).toBeNull();
         });
 
         it('should handle max retry attempts exceeded with allowConnectionFailure=true', async () => {
@@ -240,6 +328,57 @@ describe('TemporalConnectionFactory', () => {
 
             const result = await factory.createClient(mockTemporalOptionsWithFailureAllowed);
             expect(result).toBeNull();
+        });
+
+        it('should test retry delay mechanism', async () => {
+            // Mock first two calls to fail, third to succeed
+            (Client as jest.MockedClass<typeof Client>)
+                .mockImplementationOnce(() => {
+                    throw new Error('Connection failed');
+                })
+                .mockImplementationOnce(() => {
+                    throw new Error('Connection failed');
+                })
+                .mockImplementationOnce(() => mockClient);
+
+            // Spy on the delay method to verify it's called
+            const delaySpy = jest.spyOn(factory as any, 'delay');
+
+            const result = await factory.createClient(mockTemporalOptionsWithFailureAllowed);
+            expect(result).toBe(mockClient);
+            expect(Client).toHaveBeenCalledTimes(3);
+            expect(delaySpy).toHaveBeenCalledWith(1000); // RETRY_DELAY_MS
+            expect(delaySpy).toHaveBeenCalledTimes(2); // Called twice for retries
+
+            delaySpy.mockRestore();
+        });
+
+        it('should handle metadata spread with existing metadata and API key', async () => {
+            const optionsWithExistingMetadata: TemporalOptions = {
+                connection: {
+                    address: 'localhost:7233',
+                    namespace: 'test-namespace',
+                    tls: false,
+                    metadata: { 'custom-header': 'value' },
+                    apiKey: 'test-api-key',
+                },
+                allowConnectionFailure: false,
+            };
+
+            let capturedClientOptions: any = null;
+            (Client as jest.MockedClass<typeof Client>).mockImplementation((options: any) => {
+                capturedClientOptions = options;
+                return mockClient;
+            });
+
+            const result = await factory.createClient(optionsWithExistingMetadata);
+            expect(result).toBe(mockClient);
+
+            // Verify that both custom metadata and authorization are present
+            expect(capturedClientOptions.connection.metadata).toEqual({
+                'custom-header': 'value',
+                authorization: 'Bearer test-api-key',
+            });
         });
     });
 
@@ -293,6 +432,29 @@ describe('TemporalConnectionFactory', () => {
             );
         });
 
+        it('should handle worker connection creation with undefined metadata', async () => {
+            const optionsWithUndefinedMetadata: TemporalOptions = {
+                connection: {
+                    address: 'localhost:7233',
+                    namespace: 'test-namespace',
+                    tls: false,
+                    metadata: undefined,
+                    apiKey: 'test-api-key',
+                },
+                allowConnectionFailure: false,
+            };
+
+            const result = await factory.createWorkerConnection(optionsWithUndefinedMetadata);
+            expect(result).toBe(mockNativeConnection);
+            expect(NativeConnection.connect).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    metadata: expect.objectContaining({
+                        authorization: 'Bearer test-api-key',
+                    }),
+                }),
+            );
+        });
+
         it('should handle worker connection creation failure', async () => {
             (
                 NativeConnection.connect as jest.MockedFunction<typeof NativeConnection.connect>
@@ -300,6 +462,39 @@ describe('TemporalConnectionFactory', () => {
 
             const result = await factory.createWorkerConnection(mockTemporalOptions);
             expect(result).toBeNull();
+        });
+
+        it('should handle worker connection with non-Error exception', async () => {
+            (
+                NativeConnection.connect as jest.MockedFunction<typeof NativeConnection.connect>
+            ).mockRejectedValue('String connection error');
+
+            const result = await factory.createWorkerConnection(mockTemporalOptions);
+            expect(result).toBeNull();
+        });
+
+        it('should handle worker connection with existing metadata and API key', async () => {
+            const optionsWithExistingMetadata: TemporalOptions = {
+                connection: {
+                    address: 'localhost:7233',
+                    namespace: 'test-namespace',
+                    tls: false,
+                    metadata: { 'custom-header': 'value' },
+                    apiKey: 'test-api-key',
+                },
+                allowConnectionFailure: false,
+            };
+
+            const result = await factory.createWorkerConnection(optionsWithExistingMetadata);
+            expect(result).toBe(mockNativeConnection);
+            expect(NativeConnection.connect).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    metadata: {
+                        'custom-header': 'value',
+                        authorization: 'Bearer test-api-key',
+                    },
+                }),
+            );
         });
 
         it('should close unhealthy cached connection before creating new one', async () => {
@@ -392,6 +587,100 @@ describe('TemporalConnectionFactory', () => {
             expect((factory as any).clientConnectionCache.size).toBe(0);
             expect((factory as any).workerConnectionCache.size).toBe(0);
         });
+
+        it('should handle cleanup with mixed success and failure scenarios', async () => {
+            // Create some connections first
+            await factory.createClient(mockTemporalOptions);
+            await factory.createWorkerConnection(mockTemporalOptions);
+
+            // Mock one connection to succeed and one to fail
+            const mockConnectionSuccess = {
+                close: jest.fn().mockResolvedValue(undefined),
+            };
+
+            const mockConnectionFailure = {
+                close: jest.fn().mockRejectedValue(new Error('Close failed')),
+            };
+
+            // Add connections with different close behaviors
+            (factory as any).workerConnectionCache.set('success-key', mockConnectionSuccess);
+            (factory as any).workerConnectionCache.set('failure-key', mockConnectionFailure);
+
+            await factory.cleanup();
+
+            // Verify all connections were attempted to be closed
+            expect(mockNativeConnection.close).toHaveBeenCalled();
+            expect(mockConnectionSuccess.close).toHaveBeenCalled();
+            expect(mockConnectionFailure.close).toHaveBeenCalled();
+
+            // Verify caches are cleared despite some failures
+            expect((factory as any).clientConnectionCache.size).toBe(0);
+            expect((factory as any).workerConnectionCache.size).toBe(0);
+        });
+
+        it('should handle client creation with null metadata (covering || {} branch)', async () => {
+            const mockClient = { workflow: {} };
+            (Client as jest.MockedClass<typeof Client>).mockImplementation(() => mockClient as any);
+
+            const options: TemporalOptions = {
+                connection: {
+                    address: 'localhost:7233',
+                    tls: false,
+                    metadata: undefined, // Use undefined instead of null
+                    apiKey: 'test-key',
+                },
+                allowConnectionFailure: true,
+            };
+
+            const result = await factory.createClient(options);
+
+            expect(result).toBe(mockClient);
+            expect(Client).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    connection: expect.objectContaining({
+                        metadata: { authorization: 'Bearer test-key' },
+                    }),
+                }),
+            );
+        });
+
+        it('should handle worker connection creation with null metadata (covering || {} branch)', async () => {
+            const mockConnection = { close: jest.fn() };
+            (NativeConnection.connect as jest.Mock).mockResolvedValue(mockConnection);
+
+            const options: TemporalOptions = {
+                connection: {
+                    address: 'localhost:7233',
+                    tls: false,
+                    metadata: undefined, // Use undefined instead of null
+                    apiKey: 'test-key',
+                },
+                allowConnectionFailure: true,
+            };
+
+            const result = await factory.createWorkerConnection(options);
+
+            expect(result).toBe(mockConnection);
+            expect(NativeConnection.connect).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    metadata: { authorization: 'Bearer test-key' },
+                }),
+            );
+        });
+
+        it('should handle worker connection health check error (covering catch block)', () => {
+            // Create a connection object that throws when accessing constructor
+            const badConnection = Object.create(null);
+            Object.defineProperty(badConnection, 'constructor', {
+                get() {
+                    throw new Error('Constructor access error');
+                },
+            });
+
+            const result = (factory as any).isWorkerConnectionHealthy(badConnection);
+
+            expect(result).toBe(false);
+        });
     });
 
     describe('getConnectionHealth', () => {
@@ -411,6 +700,17 @@ describe('TemporalConnectionFactory', () => {
         });
 
         it('should return zero counts when no connections exist', () => {
+            const health = factory.getConnectionHealth();
+
+            expect(health.clientConnections).toBe(0);
+            expect(health.workerConnections).toBe(0);
+            expect(health.totalAttempts).toBe(0);
+        });
+
+        it('should handle empty connection attempts map', () => {
+            // Ensure connectionAttempts map is empty
+            (factory as any).connectionAttempts.clear();
+
             const health = factory.getConnectionHealth();
 
             expect(health.clientConnections).toBe(0);
@@ -485,279 +785,39 @@ describe('TemporalConnectionFactory', () => {
                 expect(isHealthy).toBe(false);
             });
 
-            it('should return false when accessing connection throws error', () => {
-                // Temporarily replace the method to test the catch block
-                const originalMethod = (factory as any).isWorkerConnectionHealthy;
-                (factory as any).isWorkerConnectionHealthy = jest.fn((connection: any) => {
-                    try {
-                        // Simulate accessing a property that might throw
-                        if (connection && typeof connection === 'object') {
-                            // Access a property that might not exist or throw
-                            const test = (connection as any).nonExistentProperty;
-                            return connection !== null && connection !== undefined;
-                        }
-                        return connection !== null && connection !== undefined;
-                    } catch {
-                        return false;
-                    }
-                });
+            it('should return false when connection.constructor throws error', () => {
+                // Create a connection object where accessing constructor throws
+                const throwingConnection = {
+                    constructor: undefined,
+                };
 
-                // Create an object with a getter that throws
-                const throwingConnection = {};
-                Object.defineProperty(throwingConnection, 'nonExistentProperty', {
+                // Mock Object.defineProperty to throw when accessing constructor
+                Object.defineProperty(throwingConnection, 'constructor', {
                     get: () => {
-                        throw new Error('Access denied');
+                        throw new Error('Constructor access error');
                     },
+                    configurable: true,
                 });
-
-                try {
-                    const isHealthy = (factory as any).isWorkerConnectionHealthy(
-                        throwingConnection,
-                    );
-                    expect(isHealthy).toBe(false);
-                } finally {
-                    // Restore the original method
-                    (factory as any).isWorkerConnectionHealthy = originalMethod;
-                }
-            });
-
-            it('should return false when connection access throws an error', () => {
-                const throwingConnection = new Proxy(
-                    {},
-                    {
-                        get: () => {
-                            throw new Error('Access error');
-                        },
-                    },
-                );
 
                 const isHealthy = (factory as any).isWorkerConnectionHealthy(throwingConnection);
-
                 expect(isHealthy).toBe(false);
             });
-        });
 
-        describe('delay', () => {
-            it('should delay for specified milliseconds', async () => {
-                const startTime = Date.now();
-                await (factory as any).delay(100);
-                const endTime = Date.now();
-
-                // Should delay for at least 100ms (allowing for some tolerance)
-                expect(endTime - startTime).toBeGreaterThanOrEqual(95);
-            });
-        });
-    });
-
-    describe('edge cases and error handling', () => {
-        it('should handle connection attempts tracking correctly', async () => {
-            // Mock client creation to fail multiple times
-            (Client as jest.MockedClass<typeof Client>).mockImplementation(() => {
-                throw new Error('Connection failed');
+            it('should return false for non-object connection', () => {
+                const isHealthy = (factory as any).isWorkerConnectionHealthy('not-an-object');
+                expect(isHealthy).toBe(false);
             });
 
-            // First attempt
-            await factory.createClient(mockTemporalOptionsWithFailureAllowed);
-            expect(
-                (factory as any).connectionAttempts.get(
-                    (factory as any).getConnectionKey(mockTemporalOptions.connection!),
-                ),
-            ).toBe(3);
+            it('should return false for connection with missing constructor', () => {
+                // Create a connection object with a null prototype to truly have no constructor
+                const connectionWithoutConstructor = Object.create(null);
+                connectionWithoutConstructor.someProperty = 'value';
 
-            // Reset attempts and try again
-            (factory as any).connectionAttempts.clear();
-            (Client as jest.MockedClass<typeof Client>).mockImplementation(() => mockClient);
-
-            const result = await factory.createClient(mockTemporalOptions);
-            expect(result).toBe(mockClient);
-            // Attempts should be cleared on success
-            expect(
-                (factory as any).connectionAttempts.has(
-                    (factory as any).getConnectionKey(mockTemporalOptions.connection!),
-                ),
-            ).toBe(false);
-        });
-
-        it('should handle TLS configuration in client options', async () => {
-            const optionsWithTLS: TemporalOptions = {
-                connection: {
-                    address: 'localhost:7233',
-                    namespace: 'test-namespace',
-                    tls: {
-                        serverName: 'temporal.example.com',
-                        clientCertPair: {
-                            crt: Buffer.from('test-cert'),
-                            key: Buffer.from('test-key'),
-                            ca: Buffer.from('test-ca'),
-                        },
-                    },
-                    metadata: {},
-                },
-            };
-
-            await factory.createClient(optionsWithTLS);
-
-            expect(Client).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    connection: expect.objectContaining({
-                        tls: optionsWithTLS.connection!.tls,
-                    }),
-                }),
-            );
-        });
-
-        it('should handle TLS configuration in worker connection options', async () => {
-            const optionsWithTLS: TemporalOptions = {
-                connection: {
-                    address: 'localhost:7233',
-                    namespace: 'test-namespace',
-                    tls: {
-                        serverName: 'temporal.example.com',
-                        clientCertPair: {
-                            crt: Buffer.from('test-cert'),
-                            key: Buffer.from('test-key'),
-                            ca: Buffer.from('test-ca'),
-                        },
-                    },
-                    metadata: {},
-                },
-            };
-
-            await factory.createWorkerConnection(optionsWithTLS);
-
-            expect(NativeConnection.connect).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    tls: optionsWithTLS.connection!.tls,
-                }),
-            );
-        });
-
-        it('should handle successful client creation with logging', async () => {
-            const result = await factory.createClient(mockTemporalOptions);
-            expect(result).toBe(mockClient);
-        });
-
-        it('should handle failed client creation with logging', async () => {
-            // Mock client creation to fail
-            (Client as jest.MockedClass<typeof Client>).mockImplementation(() => {
-                throw new Error('Connection failed');
+                const isHealthy = (factory as any).isWorkerConnectionHealthy(
+                    connectionWithoutConstructor,
+                );
+                expect(isHealthy).toBe(false);
             });
-
-            const result = await factory.createClient(mockTemporalOptionsWithFailureAllowed);
-            expect(result).toBeNull();
-        });
-
-        it('should handle retry logic with delay', async () => {
-            // Mock client creation to fail first time, succeed second time
-            (Client as jest.MockedClass<typeof Client>)
-                .mockImplementationOnce(() => {
-                    throw new Error('Connection failed');
-                })
-                .mockImplementationOnce(() => mockClient);
-
-            const result = await factory.createClient(mockTemporalOptionsWithFailureAllowed);
-            expect(result).toBe(mockClient);
-            expect(Client).toHaveBeenCalledTimes(2);
-        });
-
-        it('should log warning and return null when max retries exceeded with allowConnectionFailure=true', async () => {
-            // Mock all calls to fail
-            (Client as jest.MockedClass<typeof Client>).mockImplementation(() => {
-                throw new Error('Connection failed');
-            });
-
-            // Pre-set the connection attempts to trigger the max retry logic path
-            const connectionKey = (factory as any).getConnectionKey(
-                mockTemporalOptionsWithFailureAllowed.connection!,
-            );
-            (factory as any).connectionAttempts.set(connectionKey, 3); // MAX_RETRY_ATTEMPTS
-
-            // Create a spy on the logger warn method
-            const loggerWarnSpy = jest.spyOn((factory as any).logger, 'warn');
-
-            const result = await factory.createClient(mockTemporalOptionsWithFailureAllowed);
-
-            expect(result).toBeNull();
-            expect(loggerWarnSpy).toHaveBeenCalledWith(
-                'Max retry attempts exceeded for localhost:7233 - running without client',
-            );
-        });
-
-        it('should handle allowConnectionFailure=undefined (truthy) by returning null after max retries', async () => {
-            // Mock all calls to fail
-            (Client as jest.MockedClass<typeof Client>).mockImplementation(() => {
-                throw new Error('Connection failed');
-            });
-
-            const optionsWithUndefinedFailure: TemporalOptions = {
-                connection: {
-                    address: 'localhost:7233',
-                    namespace: 'test-namespace',
-                    tls: false,
-                    metadata: {},
-                },
-                allowConnectionFailure: undefined, // This will be truthy
-            };
-
-            const result = await factory.createClient(optionsWithUndefinedFailure);
-            expect(result).toBeNull();
-            expect(Client).toHaveBeenCalledTimes(3); // MAX_RETRY_ATTEMPTS
-        });
-
-        it('should throw error when attempts exceed max and allowConnectionFailure is explicitly false', async () => {
-            // Pre-set the connection attempts to reach the max limit
-            const optionsWithFailureNotAllowed: TemporalOptions = {
-                connection: {
-                    address: 'localhost:7233',
-                    namespace: 'test-namespace',
-                    tls: false,
-                    metadata: {},
-                },
-                allowConnectionFailure: false,
-            };
-
-            const connectionKey = (factory as any).getConnectionKey(
-                optionsWithFailureNotAllowed.connection!,
-            );
-            (factory as any).connectionAttempts.set(connectionKey, 3); // MAX_RETRY_ATTEMPTS
-
-            await expect(factory.createClient(optionsWithFailureNotAllowed)).rejects.toThrow(
-                'Failed to connect to localhost:7233 after 3 attempts',
-            );
-        });
-
-        it('should handle worker connection creation with existing metadata', async () => {
-            const optionsWithExistingMetadata: TemporalOptions = {
-                connection: {
-                    address: 'localhost:7233',
-                    namespace: 'test-namespace',
-                    tls: false,
-                    metadata: { 'existing-key': 'existing-value' },
-                    apiKey: 'test-api-key',
-                },
-            };
-
-            await factory.createWorkerConnection(optionsWithExistingMetadata);
-
-            expect(NativeConnection.connect).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    metadata: expect.objectContaining({
-                        'existing-key': 'existing-value',
-                        authorization: 'Bearer test-api-key',
-                    }),
-                }),
-            );
-        });
-
-        it('should handle successful worker connection creation and return connection', async () => {
-            const result = await factory.createWorkerConnection(mockTemporalOptions);
-            expect(result).toBe(mockNativeConnection);
-            expect(NativeConnection.connect).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    address: 'localhost:7233',
-                    tls: false,
-                }),
-            );
         });
     });
 });

@@ -4,13 +4,11 @@ import {
     TemporalOptions,
     WorkflowStartOptions,
     ServiceHealth,
-    ServiceStats,
     DiscoveryStats,
     WorkerStatus,
     ActivityMethodInfo,
     ScheduleCreateOptions,
     OverlapPolicy,
-    ActivityFunction,
     MetadataInfo,
 } from '../interfaces';
 import { TemporalClientService } from './temporal-client.service';
