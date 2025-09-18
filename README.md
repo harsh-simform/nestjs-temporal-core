@@ -4,7 +4,6 @@ A comprehensive NestJS integration framework for Temporal.io that provides enter
 
 [![npm version](https://badge.fury.io/js/nestjs-temporal-core.svg)](https://badge.fury.io/js/nestjs-temporal-core)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node.js CI](https://github.com/harsh-simform/nestjs-temporal-core/workflows/Node.js%20CI/badge.svg)](https://github.com/harsh-simform/nestjs-temporal-core/actions)
 
 ## Table of Contents
 
