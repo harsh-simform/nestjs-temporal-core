@@ -63,7 +63,27 @@ npm install @nestjs/common @nestjs/core reflect-metadata rxjs
 
 ## Quick Start
 
-### 1. Module Setup
+### 1. Application Setup
+
+First, enable shutdown hooks in your main.ts file for proper Temporal resource cleanup:
+
+```typescript
+// main.ts
+import { NestFactory } from '@nestjs/core';
+import { AppModule } from './app.module';
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  
+  // Enable shutdown hooks for graceful Temporal connection cleanup
+  app.enableShutdownHooks();
+  
+  await app.listen(3000);
+}
+bootstrap();
+```
+
+### 2. Module Setup
 
 Import and configure the `TemporalModule` in your NestJS application:
 
@@ -93,7 +113,7 @@ import { TemporalModule } from 'nestjs-temporal-core';
 export class AppModule {}
 ```
 
-### 2. Define Activities
+### 3. Define Activities
 
 Create activities using the `@Activity` decorator:
 
@@ -132,7 +152,7 @@ export class EmailActivity {
 }
 ```
 
-### 3. Define Workflows
+### 4. Define Workflows
 
 Create workflows and register them as providers:
 
@@ -169,7 +189,7 @@ export class EmailWorkflow {
 }
 ```
 
-### 4. Use in Controllers
+### 5. Use in Controllers
 
 Inject the `TemporalService` to start workflows:
 
@@ -209,7 +229,7 @@ export class EmailController {
 }
 ```
 
-### 5. Register Providers
+### 6. Register Providers
 
 Make sure to register your activities and workflows as providers:
 
