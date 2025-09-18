@@ -109,6 +109,12 @@ describe('TemporalService', () => {
             getAllActivities: jest.fn(),
             hasActivity: jest.fn(),
             isHealthy: jest.fn().mockReturnValue(true),
+            getHealth: jest.fn().mockReturnValue({
+                status: 'healthy',
+                activitiesCount: { classes: 0, methods: 0, total: 0 },
+                isInitialized: true,
+                validation: { valid: true, errors: [] },
+            }),
         };
 
         metadataAccessor = {
@@ -1655,13 +1661,23 @@ describe('TemporalService', () => {
 
     it('should handle activity service health check branches', () => {
         // Test activity service unhealthy
-        activityService.isHealthy.mockReturnValue(false);
+        activityService.getHealth.mockReturnValue({
+            status: 'unhealthy',
+            activitiesCount: { classes: 0, methods: 0, total: 0 },
+            isInitialized: true,
+            validation: { valid: false, errors: ['Test error'] },
+        });
 
         const health = service.getHealth();
         expect(health.services.activity.status).toBe('unhealthy');
 
         // Restore healthy state
-        activityService.isHealthy.mockReturnValue(true);
+        activityService.getHealth.mockReturnValue({
+            status: 'healthy',
+            activitiesCount: { classes: 0, methods: 0, total: 0 },
+            isInitialized: true,
+            validation: { valid: true, errors: [] },
+        });
     });
 
     it('should handle schedule stats error scenarios', () => {
