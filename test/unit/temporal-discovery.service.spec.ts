@@ -90,6 +90,77 @@ describe('TemporalDiscoveryService', () => {
         }
     });
 
+    describe('constructor', () => {
+        it('should use default TemporalMetadataAccessor when not provided (lines 41-43)', () => {
+            // Create a new service instance without providing metadataAccessor to trigger default initialization
+            const mockDiscoveryService = {
+                getProviders: jest.fn(),
+                getControllers: jest.fn(),
+            };
+
+            const mockTemporalOptions: TemporalOptions = {
+                connection: { address: 'localhost:7233' },
+                enableLogger: true,
+                logLevel: 'info',
+            };
+
+            // Test the constructor without providing metadataAccessor (omit the 2nd parameter)
+            // This tests lines 41-43 where the default parameter assignment happens
+            const serviceInstance = new TemporalDiscoveryService(
+                mockDiscoveryService as any,
+                // Explicitly pass undefined to trigger default parameter assignment
+                undefined as any,
+                mockTemporalOptions,
+            );
+
+            // Verify that a default metadataAccessor was created
+            expect((serviceInstance as any).metadataAccessor).toBeDefined();
+            expect((serviceInstance as any).metadataAccessor).toBeInstanceOf(
+                TemporalMetadataAccessor,
+            );
+            expect(typeof (serviceInstance as any).metadataAccessor.isActivity).toBe('function');
+            expect(typeof (serviceInstance as any).metadataAccessor.getSignalMethods).toBe(
+                'function',
+            );
+        });
+
+        it('should initialize with different logger configurations', () => {
+            const mockDiscoveryService = {
+                getProviders: jest.fn(),
+                getControllers: jest.fn(),
+            };
+
+            // Test with enableLogger: false
+            const optionsWithDisabledLogger: TemporalOptions = {
+                connection: { address: 'localhost:7233' },
+                enableLogger: false,
+                logLevel: 'debug',
+            };
+
+            const serviceWithDisabledLogger = new TemporalDiscoveryService(
+                mockDiscoveryService as any,
+                metadataAccessor as any,
+                optionsWithDisabledLogger,
+            );
+
+            expect((serviceWithDisabledLogger as any).logger).toBeDefined();
+
+            // Test with undefined enableLogger and different logLevel
+            const optionsWithUndefinedLogger: TemporalOptions = {
+                connection: { address: 'localhost:7233' },
+                logLevel: 'warn',
+            };
+
+            const serviceWithUndefinedLogger = new TemporalDiscoveryService(
+                mockDiscoveryService as any,
+                metadataAccessor as any,
+                optionsWithUndefinedLogger,
+            );
+
+            expect((serviceWithUndefinedLogger as any).logger).toBeDefined();
+        });
+    });
+
     const setupBasicMocks = (
         providers: any[] = [],
         controllers: any[] = [],
@@ -970,6 +1041,463 @@ describe('TemporalDiscoveryService', () => {
                 // It only clears it and discovers components
                 expect(service['isDiscoveryComplete']).toBe(false);
             });
+        });
+
+        describe('Missing line coverage tests', () => {
+            it('should test getDiscoveredActivities method (line 89)', () => {
+                const activities = service.getDiscoveredActivities();
+                expect(activities).toBeInstanceOf(Map);
+                expect(activities.size).toBe(0);
+            });
+
+            it('should handle wrapper processing errors (line 213)', async () => {
+                const mockWrapper = {
+                    instance: {},
+                    metatype: class TestClass {},
+                };
+
+                discoveryService.getProviders.mockReturnValue([mockWrapper as any]);
+
+                // Mock processWrapper to throw an error
+                jest.spyOn(service as any, 'processWrapper').mockRejectedValueOnce(
+                    new Error('Processing failed'),
+                );
+                const warnSpy = jest.spyOn((service as any).logger, 'warn');
+
+                await service.onModuleInit();
+
+                expect(warnSpy).toHaveBeenCalledWith(
+                    'Failed to process wrapper TestClass',
+                    expect.any(Error),
+                );
+            });
+
+            it('should discover activities when isActivity returns true (line 234)', async () => {
+                const mockInstance = { testActivity: jest.fn() };
+                const mockWrapper = {
+                    instance: mockInstance,
+                    metatype: class ActivityClass {},
+                };
+
+                discoveryService.getProviders.mockReturnValue([mockWrapper as any]);
+                metadataAccessor.isActivity.mockReturnValue(true);
+                metadataAccessor.extractActivityMethods.mockReturnValue(
+                    new Map([['testActivity', mockInstance.testActivity]]),
+                );
+
+                await service.onModuleInit();
+
+                expect(metadataAccessor.extractActivityMethods).toHaveBeenCalledWith(mockInstance);
+            });
+
+            it('should handle undefined method handlers in signal discovery (line 272)', async () => {
+                const mockInstance = {
+                    existingMethod: jest.fn(),
+                    // Missing undefinedMethod to test optional chaining
+                };
+                const mockWrapper = {
+                    instance: mockInstance,
+                    metatype: class SignalClass {},
+                };
+
+                discoveryService.getProviders.mockReturnValue([mockWrapper as any]);
+                metadataAccessor.getSignalMethods.mockReturnValue({
+                    testSignal: 'existingMethod',
+                    nullSignal: 'undefinedMethod', // This method doesn't exist
+                });
+
+                await service.onModuleInit();
+
+                const signals = service.getSignals();
+                expect(signals).toHaveLength(2);
+
+                const existingSignal = signals.find((s) => s.signalName === 'testSignal');
+                const nullSignal = signals.find((s) => s.signalName === 'nullSignal');
+
+                expect(existingSignal?.handler).toBeDefined();
+                expect(nullSignal?.handler).toBeUndefined(); // Tests the optional chaining path
+            });
+
+            it('should handle undefined method handlers in query discovery (line 293)', async () => {
+                const mockInstance = {
+                    existingQuery: jest.fn(),
+                    // Missing undefinedQuery to test optional chaining
+                };
+                const mockWrapper = {
+                    instance: mockInstance,
+                    metatype: class QueryClass {},
+                };
+
+                discoveryService.getProviders.mockReturnValue([mockWrapper as any]);
+                metadataAccessor.getQueryMethods.mockReturnValue({
+                    testQuery: 'existingQuery',
+                    nullQuery: 'undefinedQuery', // This method doesn't exist
+                });
+
+                await service.onModuleInit();
+
+                const queries = service.getQueries();
+                expect(queries).toHaveLength(2);
+
+                const existingQuery = queries.find((q) => q.queryName === 'testQuery');
+                const nullQuery = queries.find((q) => q.queryName === 'nullQuery');
+
+                expect(existingQuery?.handler).toBeDefined();
+                expect(nullQuery?.handler).toBeUndefined(); // Tests the optional chaining path
+            });
+
+            it('should handle wrapper without instance or metatype (line 225)', async () => {
+                const wrapperWithoutInstance = { metatype: class TestClass {} };
+                const wrapperWithoutMetatype = { instance: {} };
+                const wrapperWithNeither = {};
+
+                discoveryService.getProviders.mockReturnValue([
+                    wrapperWithoutInstance as any,
+                    wrapperWithoutMetatype as any,
+                    wrapperWithNeither as any,
+                ]);
+
+                // Should not throw and should complete successfully
+                await service.onModuleInit();
+
+                const stats = service.getStats();
+                expect(stats.controllers).toBe(0);
+                expect(stats.signals).toBe(0);
+                expect(stats.queries).toBe(0);
+            });
+
+            it('should handle discovery duration when times are set (line 186)', async () => {
+                // Set specific times to test the calculation branch
+                const startTime = new Date(2023, 0, 1, 10, 0, 0);
+                const endTime = new Date(2023, 0, 1, 10, 0, 5); // 5 seconds later
+
+                service['discoveryStartTime'] = startTime;
+                service['lastDiscoveryTime'] = endTime;
+
+                const healthStatus = service.getHealthStatus();
+
+                expect(healthStatus.discoveryDuration).toBe(5000); // 5 seconds in milliseconds
+            });
+
+            it('should handle discovery duration when only start time is set', () => {
+                // Set only start time to test the null branch
+                service['discoveryStartTime'] = new Date();
+                service['lastDiscoveryTime'] = null;
+
+                const healthStatus = service.getHealthStatus();
+
+                expect(healthStatus.discoveryDuration).toBeNull();
+            });
+
+            it('should handle discovery duration when only end time is set', () => {
+                // Set only end time to test the null branch
+                service['discoveryStartTime'] = null;
+                service['lastDiscoveryTime'] = new Date();
+
+                const healthStatus = service.getHealthStatus();
+
+                expect(healthStatus.discoveryDuration).toBeNull();
+            });
+
+            it('should cover discoverActivitiesInClass method (lines 244-258)', async () => {
+                const mockInstance = {
+                    testActivity1: jest.fn(),
+                    testActivity2: jest.fn(),
+                };
+                const mockWrapper = {
+                    instance: mockInstance,
+                    metatype: class ActivityClass {},
+                };
+
+                discoveryService.getProviders.mockReturnValue([mockWrapper as any]);
+                metadataAccessor.isActivity.mockReturnValue(true);
+                metadataAccessor.extractActivityMethods.mockReturnValue(
+                    new Map([
+                        ['testActivity1', mockInstance.testActivity1],
+                        ['testActivity2', mockInstance.testActivity2],
+                    ]),
+                );
+
+                const debugSpy = jest.spyOn((service as any).logger, 'debug');
+
+                await service.onModuleInit();
+
+                expect(debugSpy).toHaveBeenCalledWith(
+                    'Discovered activity: ActivityClass.testActivity1',
+                );
+                expect(debugSpy).toHaveBeenCalledWith(
+                    'Discovered activity: ActivityClass.testActivity2',
+                );
+
+                const activities = service.getDiscoveredActivities();
+                expect(activities.size).toBe(2);
+            });
+
+            it('should handle activity discovery errors (lines 244-258)', async () => {
+                const mockInstance = {};
+                const mockWrapper = {
+                    instance: mockInstance,
+                    metatype: class ActivityClass {},
+                };
+
+                discoveryService.getProviders.mockReturnValue([mockWrapper as any]);
+                metadataAccessor.isActivity.mockReturnValue(true);
+                metadataAccessor.extractActivityMethods.mockImplementation(() => {
+                    throw new Error('Activity extraction failed');
+                });
+
+                const warnSpy = jest.spyOn((service as any).logger, 'warn');
+
+                await service.onModuleInit();
+
+                expect(warnSpy).toHaveBeenCalledWith(
+                    'Failed to discover activities in ActivityClass',
+                    expect.any(Error),
+                );
+            });
+
+            it('should handle signal discovery errors (line 279)', async () => {
+                const mockInstance = {};
+                const mockWrapper = {
+                    instance: mockInstance,
+                    metatype: class TestClass {},
+                };
+
+                discoveryService.getProviders.mockReturnValue([mockWrapper as any]);
+                metadataAccessor.getSignalMethods.mockImplementation(() => {
+                    throw new Error('Signal discovery failed');
+                });
+
+                const warnSpy = jest.spyOn((service as any).logger, 'warn');
+
+                await service.onModuleInit();
+
+                expect(warnSpy).toHaveBeenCalledWith(
+                    'Failed to discover signals in TestClass',
+                    expect.any(Error),
+                );
+            });
+
+            it('should handle query discovery errors (line 301)', async () => {
+                const mockInstance = {};
+                const mockWrapper = {
+                    instance: mockInstance,
+                    metatype: class TestClass {},
+                };
+
+                discoveryService.getProviders.mockReturnValue([mockWrapper as any]);
+                metadataAccessor.getQueryMethods.mockImplementation(() => {
+                    throw new Error('Query discovery failed');
+                });
+
+                const warnSpy = jest.spyOn((service as any).logger, 'warn');
+
+                await service.onModuleInit();
+
+                expect(warnSpy).toHaveBeenCalledWith(
+                    'Failed to discover queries in TestClass',
+                    expect.any(Error),
+                );
+            });
+
+            it('should handle child workflow discovery errors (line 330)', async () => {
+                const mockInstance = {};
+                const mockWrapper = {
+                    instance: mockInstance,
+                    metatype: class TestClass {},
+                };
+
+                discoveryService.getProviders.mockReturnValue([mockWrapper as any]);
+                metadataAccessor.getChildWorkflows.mockImplementation(() => {
+                    throw new Error('Child workflow discovery failed');
+                });
+
+                const warnSpy = jest.spyOn((service as any).logger, 'warn');
+
+                await service.onModuleInit();
+
+                expect(warnSpy).toHaveBeenCalledWith(
+                    'Failed to discover child workflows in TestClass',
+                    expect.any(Error),
+                );
+            });
+
+            it('should handle getWrapperName errors (lines 369-373)', async () => {
+                const mockWrapper = {
+                    instance: {},
+                    // metatype will throw an error when accessed
+                    get metatype() {
+                        throw new Error('Metatype access error');
+                    },
+                };
+
+                discoveryService.getProviders.mockReturnValue([mockWrapper as any]);
+
+                // Mock processWrapper to throw, which will trigger getWrapperName
+                jest.spyOn(service as any, 'processWrapper').mockRejectedValueOnce(
+                    new Error('Processing failed'),
+                );
+                const warnSpy = jest.spyOn((service as any).logger, 'warn');
+
+                await service.onModuleInit();
+
+                expect(warnSpy).toHaveBeenCalledWith(
+                    'Failed to process wrapper unknown',
+                    expect.any(Error),
+                );
+            });
+
+            it('should handle getWrapperName method catch block directly (line 371)', () => {
+                // Create a wrapper that will trigger the catch block in getWrapperName
+                const mockWrapper = {
+                    // When trying to access .metatype, it will throw an error
+                    get metatype() {
+                        throw new Error('Property access error');
+                    },
+                };
+
+                // Call getWrapperName directly to trigger the catch block
+                const result = (service as any).getWrapperName(mockWrapper);
+
+                // Should return 'unknown' when an error occurs
+                expect(result).toBe('unknown');
+            });
+
+            it('should log discovered activities (lines 397-398)', async () => {
+                const mockInstance = { testActivity: jest.fn() };
+                const mockWrapper = {
+                    instance: mockInstance,
+                    metatype: class ActivityClass {},
+                };
+
+                discoveryService.getProviders.mockReturnValue([mockWrapper as any]);
+                metadataAccessor.isActivity.mockReturnValue(true);
+                metadataAccessor.extractActivityMethods.mockReturnValue(
+                    new Map([['testActivity', mockInstance.testActivity]]),
+                );
+
+                const debugSpy = jest.spyOn((service as any).logger, 'debug');
+
+                await service.onModuleInit();
+
+                expect(debugSpy).toHaveBeenCalledWith('Discovered activities: [testActivity]');
+            });
+        });
+    });
+
+    describe('Edge Cases and Error Handling', () => {
+        it('should handle default metadataAccessor injection (lines 41-43)', () => {
+            // Test the default constructor case
+            const serviceWithDefaults = new TemporalDiscoveryService(
+                discoveryService,
+                undefined, // metadataAccessor should default
+                {
+                    connection: { address: 'localhost:7233' },
+                    enableLogger: true,
+                },
+            );
+
+            expect(serviceWithDefaults).toBeDefined();
+        });
+
+        it('should handle getWrapperName with no metatype (line 371)', () => {
+            const wrapperWithoutMetatype = { someProperty: 'value' };
+
+            const result = (service as any).getWrapperName(wrapperWithoutMetatype);
+
+            expect(result).toBe('unknown');
+        });
+
+        it('should handle getWrapperName with error (line 373)', () => {
+            // Create a wrapper that will throw an error when accessing metatype
+            const errorWrapper = {
+                get metatype() {
+                    throw new Error('Access error');
+                },
+            };
+
+            const result = (service as any).getWrapperName(errorWrapper);
+
+            expect(result).toBe('unknown');
+        });
+
+        it('should handle getWrapperName with null metatype name', () => {
+            const wrapperWithNullName = {
+                metatype: { name: null },
+            };
+
+            const result = (service as any).getWrapperName(wrapperWithNullName);
+
+            expect(result).toBe('unknown');
+        });
+
+        it('should handle metadataAccessor optional injection', () => {
+            // Test that metadataAccessor can be null/undefined
+            const serviceWithNullAccessor = new TemporalDiscoveryService(
+                discoveryService,
+                null as any,
+                {
+                    connection: { address: 'localhost:7233' },
+                    enableLogger: true,
+                },
+            );
+
+            expect(serviceWithNullAccessor).toBeDefined();
+        });
+
+        it('should warn when no components are discovered (line 385)', async () => {
+            // Mock empty discovery - no providers, no controllers
+            discoveryService.getProviders.mockReturnValue([]);
+            discoveryService.getControllers.mockReturnValue([]);
+
+            const warnSpy = jest.spyOn((service as any).logger, 'warn');
+
+            await service.onModuleInit();
+
+            expect(warnSpy).toHaveBeenCalledWith(
+                'No Temporal components discovered. Ensure decorators are properly applied.',
+            );
+
+            const stats = service.getStats();
+            expect(stats.controllers).toBe(0);
+            expect(stats.methods).toBe(0);
+            expect(stats.signals).toBe(0);
+            expect(stats.queries).toBe(0);
+            expect(stats.workflows).toBe(0);
+            expect(stats.childWorkflows).toBe(0);
+        });
+
+        it('should log discovered components when they exist (lines 396-411)', async () => {
+            const mockInstance = {
+                testActivity: jest.fn(),
+                testSignal: jest.fn(),
+                testQuery: jest.fn(),
+            };
+            const mockWrapper = {
+                instance: mockInstance,
+                metatype: class TestClass {},
+            };
+
+            discoveryService.getProviders.mockReturnValue([mockWrapper as any]);
+            discoveryService.getControllers.mockReturnValue([]); // Add missing mock
+            metadataAccessor.isActivity.mockReturnValue(true);
+            metadataAccessor.extractActivityMethods.mockReturnValue(
+                new Map([['testActivity', mockInstance.testActivity]]),
+            );
+            metadataAccessor.getSignalMethods.mockReturnValue({
+                testSignal: 'testSignal',
+            });
+            metadataAccessor.getQueryMethods.mockReturnValue({
+                testQuery: 'testQuery',
+            });
+
+            const debugSpy = jest.spyOn((service as any).logger, 'debug');
+
+            await service.onModuleInit();
+
+            expect(debugSpy).toHaveBeenCalledWith('Discovered activities: [testActivity]');
+            expect(debugSpy).toHaveBeenCalledWith('Discovered signals: [testSignal]');
+            expect(debugSpy).toHaveBeenCalledWith('Discovered queries: [testQuery]');
         });
     });
 });

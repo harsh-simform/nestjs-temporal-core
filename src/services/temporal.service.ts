@@ -740,8 +740,9 @@ export class TemporalService implements OnModuleInit, OnModuleDestroy {
         status: 'healthy' | 'unhealthy' | 'degraded';
         activitiesCount: { total: number };
     } {
+        const isHealthy = this.activityService.getHealth().status;
         const count = this.activityService.getActivityNames().length;
-        return { status: 'healthy', activitiesCount: { total: count } };
+        return { status: isHealthy ? 'healthy' : 'unhealthy', activitiesCount: { total: count } };
     }
 
     /**

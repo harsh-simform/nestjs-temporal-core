@@ -1,0 +1,33 @@
+coverage:
+  status:
+    project:
+      default:
+        target: 95%
+        threshold: 1%
+    patch:
+      default:
+        target: 95%
+        threshold: 1%
+
+  ignore:
+    - 'dist/'
+    - 'docs/'
+    - 'node_modules/'
+    - 'coverage/'
+    - '*.config.*'
+    - 'test/'
+    - '**/*.spec.ts'
+    - '**/*.test.ts'
+    - '**/*.d.ts'
+
+comment:
+  layout: 'header, diff, flags, files, footer'
+  behavior: default
+  require_changes: true
+
+github_checks:
+  annotations: true
+
+parsers:
+  javascript:
+    enable_partials: yes

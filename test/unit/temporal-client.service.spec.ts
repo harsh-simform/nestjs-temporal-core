@@ -163,6 +163,104 @@ describe('TemporalClientService', () => {
             expect(mockWorkflowHandle.signal).toHaveBeenCalledWith('initSignal');
         });
 
+        it('should start workflow with searchAttributes and memo options', async () => {
+            const workflowType = 'TestWorkflow';
+            const args = ['arg1', 'arg2'];
+            const options = {
+                taskQueue: 'test-queue',
+                searchAttributes: {
+                    CustomKeywordField: 'test-value',
+                    CustomIntField: 42,
+                },
+                memo: {
+                    description: 'test workflow',
+                    priority: 'high',
+                },
+            };
+
+            await service.startWorkflow(workflowType, args, options);
+
+            expect(mockWorkflowClient.start).toHaveBeenCalledWith(
+                workflowType,
+                expect.objectContaining({
+                    taskQueue: 'test-queue',
+                    args,
+                    searchAttributes: options.searchAttributes,
+                    memo: options.memo,
+                }),
+            );
+        });
+
+        it('should start workflow without searchAttributes and memo (undefined check)', async () => {
+            const workflowType = 'TestWorkflow';
+            const args = ['arg1', 'arg2'];
+            const options = {
+                taskQueue: 'test-queue',
+                // Explicitly not setting searchAttributes and memo to test undefined paths
+            };
+
+            await service.startWorkflow(workflowType, args, options);
+
+            expect(mockWorkflowClient.start).toHaveBeenCalledWith(
+                workflowType,
+                expect.objectContaining({
+                    taskQueue: 'test-queue',
+                    args,
+                    searchAttributes: undefined,
+                    memo: undefined,
+                }),
+            );
+        });
+
+        it('should handle workflowId and taskQueue defaults correctly', async () => {
+            const workflowType = 'TestWorkflow';
+            const args = ['arg1', 'arg2'];
+
+            // Test with no options (should use defaults)
+            await service.startWorkflow(workflowType, args);
+
+            const callArgs = mockWorkflowClient.start.mock.calls[0];
+            expect(callArgs[0]).toBe(workflowType);
+            expect(callArgs[1]).toMatchObject({
+                taskQueue: 'test-queue', // from mockOptions.taskQueue
+                args,
+                memo: undefined,
+                searchAttributes: undefined,
+            });
+            expect(callArgs[1].workflowId).toMatch(/^TestWorkflow-\d+/); // generated ID
+        });
+
+        it('should handle namespace fallback to default', async () => {
+            // Test the namespace fallback in the logger debug statement
+            const debugSpy = jest.spyOn((service as any).logger, 'debug');
+
+            // Create service with options that don't have namespace
+            const moduleWithoutNamespace: TestingModule = await Test.createTestingModule({
+                providers: [
+                    TemporalClientService,
+                    {
+                        provide: TEMPORAL_CLIENT,
+                        useValue: mockClient,
+                    },
+                    {
+                        provide: TEMPORAL_MODULE_OPTIONS,
+                        useValue: {
+                            connection: { address: 'localhost:7233' }, // no namespace
+                            taskQueue: 'test-queue',
+                        },
+                    },
+                ],
+            }).compile();
+
+            const serviceWithoutNamespace =
+                moduleWithoutNamespace.get<TemporalClientService>(TemporalClientService);
+            await serviceWithoutNamespace.onModuleInit();
+
+            expect(debugSpy).toHaveBeenCalledWith(
+                expect.stringContaining('Client namespace: default'),
+            );
+        });
+
         it('should throw error when client not initialized', async () => {
             const module: TestingModule = await Test.createTestingModule({
                 providers: [
@@ -922,7 +1020,65 @@ describe('TemporalClientService', () => {
             });
         });
 
-        // Note: Lines 421-424 are covered by other tests that use namespace resolution
-        // The ensureNamespace method doesn't exist in the current implementation
+        it('should handle string error messages (lines 421-424)', () => {
+            // Test the extractErrorMessage private method with string error
+            const mockService = new (TemporalClientService as any)(mockClient, mockOptions);
+
+            // Access the private method
+            const result = mockService.extractErrorMessage('String error message');
+            expect(result).toBe('String error message');
+        });
+
+        it('should handle unknown error types (lines 421-424)', () => {
+            // Test the extractErrorMessage private method with unknown error type
+            const mockService = new (TemporalClientService as any)(mockClient, mockOptions);
+
+            // Access the private method
+            const result = mockService.extractErrorMessage({ customError: true });
+            expect(result).toBe('Unknown error');
+        });
+
+        it('should handle performHealthCheck failure in isHealthy method (lines 344-345)', async () => {
+            // Mock performHealthCheck to throw an error to trigger the catch block
+            const performHealthCheckSpy = jest
+                .spyOn(service, 'performHealthCheck')
+                .mockRejectedValue(new Error('Health check failed'));
+
+            const loggerSpy = jest.spyOn(service['logger'], 'warn').mockImplementation();
+
+            // Set lastHealthCheck to null to trigger health check
+            (service as any).lastHealthCheck = null;
+
+            // Call isHealthy which should trigger performHealthCheck and catch the error
+            const result = service.isHealthy();
+
+            // Give some time for the async catch block to execute
+            await new Promise((resolve) => setTimeout(resolve, 10));
+
+            expect(result).toBe(true); // Should return true because mockClient.workflow exists
+            expect(performHealthCheckSpy).toHaveBeenCalled();
+            expect(loggerSpy).toHaveBeenCalledWith('Health check failed', expect.any(Error));
+
+            performHealthCheckSpy.mockRestore();
+            loggerSpy.mockRestore();
+        });
+
+        it('should trigger health check when lastHealthCheck is old', async () => {
+            // Set an old lastHealthCheck time
+            (service as any).lastHealthCheck = new Date(Date.now() - 7000); // 7 seconds ago
+            (service as any).healthCheckInterval = 5000; // 5 seconds
+
+            const performHealthCheckSpy = jest
+                .spyOn(service, 'performHealthCheck')
+                .mockResolvedValue(undefined);
+
+            // Call isHealthy which should trigger performHealthCheck due to old timestamp
+            const result = service.isHealthy();
+
+            expect(result).toBe(true); // Should return true because mockClient.workflow exists
+            expect(performHealthCheckSpy).toHaveBeenCalled();
+
+            performHealthCheckSpy.mockRestore();
+        });
     });
 });
