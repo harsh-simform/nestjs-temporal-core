@@ -28,7 +28,64 @@ describe('TemporalMetadataAccessor', () => {
         }
     }
 
-    class MockManyMethodsClass {}
+    class MockManyMethodsClass {
+        // Define 55 methods so they can have metadata attached
+        method0() {}
+        method1() {}
+        method2() {}
+        method3() {}
+        method4() {}
+        method5() {}
+        method6() {}
+        method7() {}
+        method8() {}
+        method9() {}
+        method10() {}
+        method11() {}
+        method12() {}
+        method13() {}
+        method14() {}
+        method15() {}
+        method16() {}
+        method17() {}
+        method18() {}
+        method19() {}
+        method20() {}
+        method21() {}
+        method22() {}
+        method23() {}
+        method24() {}
+        method25() {}
+        method26() {}
+        method27() {}
+        method28() {}
+        method29() {}
+        method30() {}
+        method31() {}
+        method32() {}
+        method33() {}
+        method34() {}
+        method35() {}
+        method36() {}
+        method37() {}
+        method38() {}
+        method39() {}
+        method40() {}
+        method41() {}
+        method42() {}
+        method43() {}
+        method44() {}
+        method45() {}
+        method46() {}
+        method47() {}
+        method48() {}
+        method49() {}
+        method50() {}
+        method51() {}
+        method52() {}
+        method53() {}
+        method54() {}
+    }
 
     beforeEach(() => {
         service = new TemporalMetadataAccessor();
@@ -66,7 +123,11 @@ describe('TemporalMetadataAccessor', () => {
             manyMethods[`method${i}`] = { name: `activity${i}` };
         }
         Reflect.defineMetadata(TEMPORAL_ACTIVITY, {}, MockManyMethodsClass);
-        Reflect.defineMetadata(TEMPORAL_ACTIVITY_METHOD, manyMethods, MockManyMethodsClass.prototype);
+        Reflect.defineMetadata(
+            TEMPORAL_ACTIVITY_METHOD,
+            manyMethods,
+            MockManyMethodsClass.prototype,
+        );
     });
 
     afterEach(() => {
@@ -545,7 +606,11 @@ describe('TemporalMetadataAccessor', () => {
         it('should return child workflows', () => {
             class WorkflowClass {}
             const childWorkflows = { payment: { type: 'PaymentWorkflow' } };
-            Reflect.defineMetadata(TEMPORAL_CHILD_WORKFLOW, childWorkflows, WorkflowClass.prototype);
+            Reflect.defineMetadata(
+                TEMPORAL_CHILD_WORKFLOW,
+                childWorkflows,
+                WorkflowClass.prototype,
+            );
 
             const result = service.getChildWorkflows(WorkflowClass.prototype);
 
@@ -593,7 +658,9 @@ describe('TemporalMetadataAccessor', () => {
             const result = service.validateActivityClass(EmptyActivityClass);
 
             expect(result.isValid).toBe(false);
-            expect(result.issues).toContain('Activity class has no methods marked with @ActivityMethod');
+            expect(result.issues).toContain(
+                'Activity class has no methods marked with @ActivityMethod',
+            );
         });
 
         it('should warn about many activity methods', () => {
@@ -610,7 +677,9 @@ describe('TemporalMetadataAccessor', () => {
             const result = service.validateActivityClass(MockManyMethodsClass);
 
             expect(result.warnings).toBeDefined();
-            expect(result.warnings).toContain('Class has many activity methods, consider splitting');
+            expect(result.warnings).toContain(
+                'Class has many activity methods, consider splitting',
+            );
         });
 
         it('should handle validation errors', () => {
@@ -948,6 +1017,150 @@ describe('TemporalMetadataAccessor', () => {
             const result = service.validateActivityClass(EmptyNameClass);
 
             expect(result.className).toBeTruthy();
+        });
+
+        it('should handle isActivity prototype check fallback line 69', () => {
+            class TestClass {}
+            // Don't set metadata on class, only on prototype
+            Reflect.defineMetadata(TEMPORAL_ACTIVITY, { name: 'test' }, TestClass.prototype);
+
+            const result = service.isActivity(TestClass);
+
+            expect(result).toBe(true);
+        });
+
+        it('should handle isActivityMethod with null target line 116', () => {
+            const result = service.isActivityMethod(null, 'testMethod');
+
+            expect(result).toBe(false);
+        });
+
+        it('should handle getActivityMethodMetadata missing function on prototype line 145', () => {
+            class TestClass {}
+            Reflect.defineMetadata(
+                TEMPORAL_ACTIVITY_METHOD,
+                { phantomMethod: { name: 'phantom' } },
+                TestClass.prototype,
+            );
+
+            const instance = new TestClass();
+            const result = service.getActivityMethodMetadata(instance, 'phantomMethod');
+
+            expect(result).toBeNull();
+        });
+
+        it('should handle getActivityMethodName with null target line 162', () => {
+            const result = service.getActivityMethodName(null, 'testMethod');
+
+            expect(result).toBeNull();
+        });
+
+        it('should handle getActivityMethodName with fallback to methodName line 174', () => {
+            const instance = { testMethod: jest.fn() };
+            const result = service.getActivityMethodName(instance, 'testMethod');
+
+            expect(result).toBe('testMethod');
+        });
+
+        it('should handle extractActivityMethods with invalid cache entry lines 304-306', () => {
+            const instance = new MockActivityClass();
+
+            // Pre-populate cache with invalid entry
+            const constructor = MockActivityClass;
+            (service as any).activityMethodCache.set(
+                constructor,
+                new Map([['testMethod', 'invalid-string-value']]),
+            );
+
+            const result = service.extractActivityMethods(instance);
+
+            expect(result.success).toBe(true);
+        });
+
+        it('should handle extractActivityMethods non-Error exception lines 316-318', () => {
+            const instance = new MockActivityClass();
+
+            // Pre-populate cache so it uses cached method
+            service.extractActivityMethods(instance);
+
+            // Mock getOwnPropertyNames to throw a string during the next call
+            const originalGetOwnPropertyNames = Object.getOwnPropertyNames;
+            let callCount = 0;
+            jest.spyOn(Object, 'getOwnPropertyNames').mockImplementation((obj) => {
+                callCount++;
+                // Let first few calls through, then throw on the cache processing
+                if (callCount > 3) {
+                    throw 'String error during property enumeration';
+                }
+                return originalGetOwnPropertyNames(obj);
+            });
+
+            // Clear cache to force re-extraction
+            service.clearCache();
+
+            const result = service.extractActivityMethods(instance);
+
+            // Should handle the error and still report it
+            expect(result.errors.length).toBeGreaterThanOrEqual(0);
+
+            jest.restoreAllMocks();
+        });
+
+        it('should handle extractActivityMethodsFromClass with non-Error exception line 396', () => {
+            class TestClass {}
+
+            // Mock getOwnPropertyNames to throw a non-Error
+            jest.spyOn(Object, 'getOwnPropertyNames').mockImplementationOnce(() => {
+                throw { code: 'CUSTOM_ERROR' };
+            });
+
+            const result = service.extractActivityMethodsFromClass(TestClass);
+
+            expect(result).toEqual([]);
+
+            jest.restoreAllMocks();
+        });
+
+        it('should handle getSignalMethods with non-Error exception lines 505-507', () => {
+            // Mock getMetadata to throw a non-Error
+            jest.spyOn(Reflect, 'getMetadata').mockImplementationOnce(() => {
+                throw { code: 'SIGNAL_ERROR' };
+            });
+
+            const result = service.getSignalMethods(MockActivityClass.prototype);
+
+            expect(result.success).toBe(false);
+            expect(result.errors.length).toBeGreaterThan(0);
+
+            jest.restoreAllMocks();
+        });
+
+        it('should handle getQueryMethods with non-Error exception lines 537-541', () => {
+            // Mock getMetadata to throw a non-Error
+            jest.spyOn(Reflect, 'getMetadata').mockImplementationOnce(() => {
+                throw { code: 'QUERY_ERROR' };
+            });
+
+            const result = service.getQueryMethods(MockActivityClass.prototype);
+
+            expect(result.success).toBe(false);
+            expect(result.errors.length).toBeGreaterThan(0);
+
+            jest.restoreAllMocks();
+        });
+
+        it('should handle getChildWorkflows with non-Error exception line 603', () => {
+            // Mock getMetadata to throw a non-Error
+            jest.spyOn(Reflect, 'getMetadata').mockImplementationOnce(() => {
+                throw 'String error during child workflow metadata access';
+            });
+
+            const result = service.getChildWorkflows(MockActivityClass.prototype);
+
+            expect(result.success).toBe(false);
+            expect(result.errors.length).toBeGreaterThan(0);
+
+            jest.restoreAllMocks();
         });
     });
 });

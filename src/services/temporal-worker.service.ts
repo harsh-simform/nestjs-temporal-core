@@ -78,11 +78,29 @@ export class TemporalWorkerManagerService
             } else {
                 this.lastError = initResult.error?.message || 'Unknown initialization error';
                 this.logger.error('Failed to initialize worker manager', initResult.error);
+
+                // Don't throw if connection failures are allowed
+                if (this.options.allowConnectionFailure === true) {
+                    this.logger.warn(
+                        'Worker initialization failed but connection failures are allowed',
+                    );
+                    return;
+                }
+
                 throw initResult.error || new Error('Worker initialization failed');
             }
         } catch (error) {
             this.lastError = this.extractErrorMessage(error);
             this.logger.error('Failed to initialize worker manager', error);
+
+            // Don't throw if connection failures are allowed
+            if (this.options.allowConnectionFailure === true) {
+                this.logger.warn(
+                    'Worker initialization failed but connection failures are allowed',
+                );
+                return;
+            }
+
             throw error;
         }
     }

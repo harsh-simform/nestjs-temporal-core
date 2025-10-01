@@ -104,9 +104,7 @@ describe('TemporalDiscoveryService', () => {
             discoveryService.getProviders.mockReturnValue([mockWrapper as any]);
             metadataAccessor.isActivity.mockReturnValue(true);
             metadataAccessor.extractActivityMethods.mockReturnValue({
-                methods: new Map([
-                    ['testActivity', testInstance.testMethod.bind(testInstance)],
-                ]),
+                methods: new Map([['testActivity', testInstance.testMethod.bind(testInstance)]]),
                 issues: [],
             });
 
@@ -175,9 +173,7 @@ describe('TemporalDiscoveryService', () => {
             discoveryService.getProviders.mockReturnValue([mockWrapper as any]);
             metadataAccessor.isActivity.mockReturnValue(true);
             metadataAccessor.extractActivityMethods.mockReturnValue({
-                methods: new Map([
-                    ['testActivity', testInstance.testMethod.bind(testInstance)],
-                ]),
+                methods: new Map([['testActivity', testInstance.testMethod.bind(testInstance)]]),
                 issues: [],
             });
 
@@ -474,9 +470,7 @@ describe('TemporalDiscoveryService', () => {
             discoveryService.getProviders.mockReturnValue([mockWrapper as any]);
             metadataAccessor.isActivity.mockReturnValue(true);
             metadataAccessor.extractActivityMethods.mockReturnValue({
-                methods: new Map([
-                    ['initialActivity', testInstance.testMethod.bind(testInstance)],
-                ]),
+                methods: new Map([['initialActivity', testInstance.testMethod.bind(testInstance)]]),
                 issues: [],
             });
 
@@ -558,9 +552,7 @@ describe('TemporalDiscoveryService', () => {
             discoveryService.getProviders.mockReturnValue([mockWrapper as any]);
             metadataAccessor.isActivity.mockReturnValue(true);
             metadataAccessor.extractActivityMethods.mockReturnValue({
-                methods: new Map([
-                    ['testActivity', testInstance.testMethod.bind(testInstance)],
-                ]),
+                methods: new Map([['testActivity', testInstance.testMethod.bind(testInstance)]]),
                 issues: [],
             });
 
@@ -665,9 +657,8 @@ describe('TemporalDiscoveryService', () => {
                 ],
             }).compile();
 
-            const filteredService = moduleWithFilter.get<TemporalDiscoveryService>(
-                TemporalDiscoveryService,
-            );
+            const filteredService =
+                moduleWithFilter.get<TemporalDiscoveryService>(TemporalDiscoveryService);
 
             const allowedInstance = new AllowedActivity();
             const disallowedInstance = new DisallowedActivity();
@@ -720,9 +711,7 @@ describe('TemporalDiscoveryService', () => {
             discoveryService.getProviders.mockReturnValue([mockWrapper as any]);
             metadataAccessor.isActivity.mockReturnValue(true);
             metadataAccessor.extractActivityMethods.mockReturnValue({
-                methods: new Map([
-                    ['invalidHandler', { handler: 'not-a-function' }],
-                ]),
+                methods: new Map([['invalidHandler', { handler: 'not-a-function' }]]),
                 issues: [],
             });
 
@@ -817,9 +806,7 @@ describe('TemporalDiscoveryService', () => {
             discoveryService.getProviders.mockReturnValue([mockWrapper as any]);
             metadataAccessor.isActivity.mockReturnValue(true);
             metadataAccessor.extractActivityMethods.mockReturnValue({
-                methods: new Map([
-                    ['activity1', testInstance.testMethod.bind(testInstance)],
-                ]),
+                methods: new Map([['activity1', testInstance.testMethod.bind(testInstance)]]),
                 issues: [],
             });
 
@@ -879,6 +866,108 @@ describe('TemporalDiscoveryService', () => {
             // Second activity should still be discovered
             expect(service.hasActivity('secondActivity')).toBe(true);
         });
+
+        it('should handle string errors during wrapper processing', async () => {
+            const testInstance = new TestActivity();
+
+            discoveryService.getProviders.mockReturnValue([
+                { instance: testInstance, metatype: TestActivity },
+            ] as any);
+
+            metadataAccessor.isActivity.mockImplementation(() => {
+                throw 'String error in wrapper';
+            });
+
+            await service.onModuleInit();
+
+            // Service should still complete
+            const status = service.getHealthStatus();
+            expect(status.isComplete).toBe(true);
+        });
+
+        it('should handle not-an-activity case in discoverActivitiesInClass', async () => {
+            const testInstance = new RegularService();
+
+            discoveryService.getProviders.mockReturnValue([
+                { instance: testInstance, metatype: RegularService },
+            ] as any);
+
+            // Return true for the first check (in processWrapper), false for the second (in discoverActivitiesInClass)
+            let isActivityCallCount = 0;
+            metadataAccessor.isActivity.mockImplementation(() => {
+                isActivityCallCount++;
+                return isActivityCallCount === 1; // true on first call, false on second
+            });
+
+            await service.onModuleInit();
+
+            // Should complete successfully without discovering activities
+            const status = service.getHealthStatus();
+            expect(status.isComplete).toBe(true);
+            const activities = service.getAllActivities();
+            expect(Object.keys(activities).length).toBe(0);
+        });
+
+        it('should handle string errors during activity method processing', async () => {
+            const testInstance = new TestActivity();
+
+            discoveryService.getProviders.mockReturnValue([
+                { instance: testInstance, metatype: TestActivity },
+            ] as any);
+
+            metadataAccessor.isActivity.mockReturnValue(true);
+            metadataAccessor.extractActivityMethods.mockReturnValue({
+                methods: new Map([
+                    [
+                        'badActivity',
+                        {
+                            handler: () => {
+                                throw 'String error in handler';
+                            },
+                        },
+                    ],
+                ]),
+                issues: [],
+            });
+
+            // Mock the Map.set to throw a string error
+            const originalSet = Map.prototype.set;
+            jest.spyOn(Map.prototype, 'set').mockImplementationOnce(function (
+                this: Map<any, any>,
+            ) {
+                throw 'String error during set';
+            });
+
+            await service.onModuleInit();
+
+            (Map.prototype.set as jest.Mock).mockRestore();
+
+            const status = service.getHealthStatus();
+            expect(status.isComplete).toBe(true);
+        });
+
+        it('should handle wrapper processing error with string error lines 222-225', async () => {
+            const testInstance = new TestActivity();
+
+            discoveryService.getProviders.mockReturnValue([
+                { instance: testInstance, metatype: TestActivity },
+            ] as any);
+
+            // Make isActivity throw a string error
+            metadataAccessor.isActivity.mockImplementation(() => {
+                throw 'String wrapper error';
+            });
+
+            const logSpy = jest.spyOn(service['logger'], 'warn').mockImplementation();
+
+            await service.onModuleInit();
+
+            // Should log the error but continue
+            expect(logSpy).toHaveBeenCalled();
+            const status = service.getHealthStatus();
+            expect(status.isComplete).toBe(true);
+
+            logSpy.mockRestore();
+        });
     });
 });
-
