@@ -1,130 +1,43 @@
-/**
- * @fileoverview Main Temporal Module for NestJS Integration
- *
- * This module provides the core Temporal.io integration for NestJS applications.
- * It handles client connection, worker management, activity discovery, and
- * scheduling functionality in a unified, configurable module.
- *
- * @author NestJS Temporal Core
- * @version 1.0.0
- */
-
-import { DynamicModule, Module, Provider } from '@nestjs/common';
+import { DynamicModule, Module, Provider, Type } from '@nestjs/common';
 import { DiscoveryModule } from '@nestjs/core';
-import { TemporalService } from './temporal.service';
-import { TemporalAsyncOptions, TemporalOptions, TemporalOptionsFactory } from './interfaces';
-import { ERRORS, TEMPORAL_MODULE_OPTIONS } from './constants';
-import { TemporalClientModule } from './client';
-import { TemporalWorkerModule } from './worker';
-import { TemporalDiscoveryService, TemporalScheduleManagerService } from './discovery';
+import { TemporalService } from './services/temporal.service';
+import {
+    ACTIVITY_MODULE_OPTIONS,
+    TEMPORAL_CLIENT,
+    TEMPORAL_CONNECTION,
+    TEMPORAL_MODULE_OPTIONS,
+} from './constants';
+import { TemporalDiscoveryService } from './services/temporal-discovery.service';
+import { TemporalClientService } from './services/temporal-client.service';
+import { TemporalScheduleService } from './services/temporal-schedule.service';
+import { TemporalWorkerManagerService } from './services/temporal-worker.service';
+import { TemporalMetadataAccessor } from './services/temporal-metadata.service';
 import { TemporalLoggerManager } from './utils/logger';
+import { TemporalOptions } from './interfaces';
+import { TemporalAsyncOptions, TemporalOptionsFactory } from './interfaces';
+import { TemporalConnectionFactory } from './providers/temporal-connection.factory';
 
 /**
  * Main Temporal module for NestJS applications.
  *
  * This module provides:
- * - Temporal client connection management
+ * - Temporal client connection management with connection pooling
  * - Worker creation and lifecycle management
  * - Activity and workflow discovery
  * - Schedule management
  * - Comprehensive logging and error handling
- *
- * @example
- * ```typescript
- * // Basic usage
- * @Module({
- *   imports: [
- *     TemporalModule.register({
- *       connection: {
- *         address: 'localhost:7233',
- *         namespace: 'default'
- *       },
- *       taskQueue: 'my-task-queue'
- *     })
- *   ]
- * })
- * export class AppModule {}
- *
- * // Async configuration
- * @Module({
- *   imports: [
- *     TemporalModule.registerAsync({
- *       useFactory: async (configService: ConfigService) => ({
- *         connection: {
- *           address: configService.get('TEMPORAL_ADDRESS'),
- *           namespace: configService.get('TEMPORAL_NAMESPACE')
- *         }
- *       }),
- *       inject: [ConfigService]
- *     })
- *   ]
- * })
- * export class AppModule {}
- * ```
+ * - Graceful degradation and fault tolerance
  */
 @Module({})
 export class TemporalModule {
-    /**
-     * Register the Temporal module with synchronous configuration.
-     *
-     * @param options - Temporal configuration options
-     * @returns Dynamic module configuration
-     *
-     * @example
-     * ```typescript
-     * TemporalModule.register({
-     *   connection: {
-     *     address: 'localhost:7233',
-     *     namespace: 'default'
-     *   },
-     *   taskQueue: 'my-task-queue',
-     *   worker: {
-     *     workflowsPath: './src/workflows',
-     *     activityClasses: [MyActivity]
-     *   }
-     * })
-     * ```
-     */
-    static register(options: TemporalOptions): DynamicModule {
+    static register(options: Partial<TemporalOptions> = {}): DynamicModule {
         this.validateOptions(options);
 
-        const imports: DynamicModule[] = [];
-        const providers: Provider[] = [];
-
-        // Always include client module for Temporal operations
-        imports.push(TemporalClientModule.register(options));
-
-        // Include worker module only if worker configuration is provided
-        if (options.worker && (options.worker.workflowsPath || options.worker.workflowBundle)) {
-            imports.push(TemporalWorkerModule.register(options));
-        }
-
-        // Core providers
-        providers.push(
-            {
-                provide: TEMPORAL_MODULE_OPTIONS,
-                useValue: options,
-            },
-            {
-                provide: TemporalLoggerManager,
-                useFactory: () => {
-                    const manager = TemporalLoggerManager.getInstance();
-                    manager.configure({
-                        enableLogger: options.enableLogger,
-                        logLevel: options.logLevel,
-                        appName: 'NestJS-Temporal-Core',
-                    });
-                    return manager;
-                },
-            },
-            TemporalDiscoveryService,
-            TemporalScheduleManagerService,
-            TemporalService,
-        );
+        const providers: Provider[] = this.createCoreProviders(options);
 
         return {
             module: TemporalModule,
-            imports: [DiscoveryModule, ...imports],
+            imports: [DiscoveryModule],
             providers,
             exports: [TemporalService, TemporalLoggerManager, TEMPORAL_MODULE_OPTIONS],
             global: options.isGlobal,
@@ -134,80 +47,93 @@ export class TemporalModule {
     static registerAsync(options: TemporalAsyncOptions): DynamicModule {
         this.validateAsyncOptions(options);
 
-        const imports: (DynamicModule | typeof DiscoveryModule)[] = [DiscoveryModule];
+        const imports: (DynamicModule | typeof DiscoveryModule | Type<unknown>)[] = [
+            DiscoveryModule,
+        ];
         const providers: Provider[] = [];
 
-        // Create async options provider
-        if (options.useFactory) {
-            providers.push({
-                provide: TEMPORAL_MODULE_OPTIONS,
-                useFactory: options.useFactory,
-                inject: options.inject || [],
-            });
-        } else if (options.useClass) {
-            providers.push(
-                {
-                    provide: options.useClass,
-                    useClass: options.useClass,
-                },
-                {
-                    provide: TEMPORAL_MODULE_OPTIONS,
-                    useFactory: async (optionsFactory: TemporalOptionsFactory) =>
-                        optionsFactory.createTemporalOptions(),
-                    inject: [options.useClass],
-                },
-            );
-        } else if (options.useExisting) {
-            providers.push({
-                provide: TEMPORAL_MODULE_OPTIONS,
-                useFactory: async (optionsFactory: TemporalOptionsFactory) =>
-                    optionsFactory.createTemporalOptions(),
-                inject: [options.useExisting],
-            });
+        // Add imports from options
+        if (options.imports) {
+            for (const importModule of options.imports) {
+                if (typeof importModule === 'function') {
+                    // It's a class/module
+                    imports.push(importModule);
+                } else if (typeof importModule === 'object' && importModule !== null) {
+                    // It's likely a DynamicModule
+                    imports.push(importModule as DynamicModule);
+                }
+            }
         }
 
-        // Client module (always required)
-        imports.push(
-            TemporalClientModule.registerAsync({
-                imports: options.imports,
-                useFactory: async (...args: unknown[]) => {
-                    const temporalOptions = await this.createOptionsFromFactory(options, args);
-                    return temporalOptions;
+        // Add the factory class as a provider when using useClass
+        if (options.useClass) {
+            providers.push(options.useClass);
+        }
+
+        // Create async options provider
+        providers.push(this.createAsyncOptionsProvider(options));
+
+        // Add core providers that depend on async options
+        providers.push(...this.createCoreAsyncProviders());
+
+        return {
+            module: TemporalModule,
+            imports,
+            providers,
+            exports: [TemporalService, TemporalLoggerManager, TEMPORAL_MODULE_OPTIONS],
+            global: options.isGlobal,
+        };
+    }
+
+    private static createCoreProviders(options: Partial<TemporalOptions>): Provider[] {
+        return [
+            // Module options
+            {
+                provide: TEMPORAL_MODULE_OPTIONS,
+                useValue: options,
+            },
+
+            // Connection factory (centralized connection management)
+            TemporalConnectionFactory,
+
+            // Client provider using connection factory
+            {
+                provide: TEMPORAL_CLIENT,
+                useFactory: async (
+                    connectionFactory: TemporalConnectionFactory,
+                    temporalOptions: Partial<TemporalOptions>,
+                ) => {
+                    return connectionFactory.createClient(temporalOptions as TemporalOptions);
                 },
-                inject: options.inject,
-            }),
-        );
+                inject: [TemporalConnectionFactory, TEMPORAL_MODULE_OPTIONS],
+            },
 
-        // Worker module (conditional)
-        imports.push(
-            TemporalWorkerModule.registerAsync({
-                imports: options.imports,
-                useFactory: async (...args: unknown[]): Promise<TemporalOptions> => {
-                    const temporalOptions = await this.createOptionsFromFactory(options, args);
-
-                    // Only include worker if configuration is provided
-                    if (
-                        !temporalOptions.worker ||
-                        (!temporalOptions.worker.workflowsPath &&
-                            !temporalOptions.worker.workflowBundle)
-                    ) {
-                        // Return a modified options without worker configuration
-                        const { worker: _worker, ...optionsWithoutWorker } = temporalOptions;
-                        return optionsWithoutWorker;
-                    }
-
-                    return temporalOptions;
+            // Worker connection provider using connection factory
+            {
+                provide: TEMPORAL_CONNECTION,
+                useFactory: async (
+                    connectionFactory: TemporalConnectionFactory,
+                    temporalOptions: Partial<TemporalOptions>,
+                ) => {
+                    return connectionFactory.createWorkerConnection(
+                        temporalOptions as TemporalOptions,
+                    );
                 },
-                inject: options.inject,
-            }),
-        );
+                inject: [TemporalConnectionFactory, TEMPORAL_MODULE_OPTIONS],
+            },
 
-        // Add remaining providers
-        providers.push(
+            // Activity module options
+            {
+                provide: ACTIVITY_MODULE_OPTIONS,
+                useValue: {
+                    activityClasses: options.worker?.activityClasses || [],
+                },
+            },
+
+            // Logger manager
             {
                 provide: TemporalLoggerManager,
-                useFactory: async (...args: unknown[]) => {
-                    const temporalOptions = await this.createOptionsFromFactory(options, args);
+                useFactory: (temporalOptions: Partial<TemporalOptions>) => {
                     const manager = TemporalLoggerManager.getInstance();
                     manager.configure({
                         enableLogger: temporalOptions.enableLogger,
@@ -216,48 +142,134 @@ export class TemporalModule {
                     });
                     return manager;
                 },
-                inject: options.inject,
+                inject: [TEMPORAL_MODULE_OPTIONS],
             },
+
+            // Core services
+            TemporalClientService,
+            TemporalScheduleService,
             TemporalDiscoveryService,
-            TemporalScheduleManagerService,
+            TemporalWorkerManagerService,
+            TemporalMetadataAccessor,
             TemporalService,
-        );
-
-        return {
-            module: TemporalModule,
-            imports: [...(options.imports || []), ...imports],
-            providers,
-            exports: [TemporalService, TemporalLoggerManager, TEMPORAL_MODULE_OPTIONS],
-            global: options.isGlobal,
-        };
+        ];
     }
 
-    static forClient(options: {
-        connection: TemporalOptions['connection'];
-        enableLogger?: boolean;
-        logLevel?: 'error' | 'warn' | 'info' | 'debug' | 'verbose';
-        isGlobal?: boolean;
-    }): DynamicModule {
-        return this.register({
-            connection: options.connection,
-            enableLogger: options.enableLogger,
-            logLevel: options.logLevel,
-            isGlobal: options.isGlobal,
-            allowConnectionFailure: true,
-        });
+    private static createCoreAsyncProviders(): Provider[] {
+        return [
+            // Connection factory (centralized connection management)
+            TemporalConnectionFactory,
+
+            // Client provider using connection factory
+            {
+                provide: TEMPORAL_CLIENT,
+                useFactory: async (
+                    connectionFactory: TemporalConnectionFactory,
+                    temporalOptions: Partial<TemporalOptions>,
+                ) => {
+                    return connectionFactory.createClient(temporalOptions as TemporalOptions);
+                },
+                inject: [TemporalConnectionFactory, TEMPORAL_MODULE_OPTIONS],
+            },
+
+            // Worker connection provider using connection factory
+            {
+                provide: TEMPORAL_CONNECTION,
+                useFactory: async (
+                    connectionFactory: TemporalConnectionFactory,
+                    temporalOptions: Partial<TemporalOptions>,
+                ) => {
+                    return connectionFactory.createWorkerConnection(
+                        temporalOptions as TemporalOptions,
+                    );
+                },
+                inject: [TemporalConnectionFactory, TEMPORAL_MODULE_OPTIONS],
+            },
+
+            // Activity module options
+            {
+                provide: ACTIVITY_MODULE_OPTIONS,
+                useFactory: (temporalOptions: Partial<TemporalOptions>) => {
+                    return {
+                        activityClasses: temporalOptions.worker?.activityClasses || [],
+                    };
+                },
+                inject: [TEMPORAL_MODULE_OPTIONS],
+            },
+
+            // Logger manager
+            {
+                provide: TemporalLoggerManager,
+                useFactory: (temporalOptions: Partial<TemporalOptions>) => {
+                    const manager = TemporalLoggerManager.getInstance();
+                    manager.configure({
+                        enableLogger: temporalOptions.enableLogger,
+                        logLevel: temporalOptions.logLevel,
+                        appName: 'NestJS-Temporal-Core',
+                    });
+                    return manager;
+                },
+                inject: [TEMPORAL_MODULE_OPTIONS],
+            },
+
+            // Core services
+            TemporalClientService,
+            TemporalScheduleService,
+            TemporalDiscoveryService,
+            TemporalWorkerManagerService,
+            TemporalMetadataAccessor,
+            TemporalService,
+        ];
     }
 
-    private static validateOptions(options: TemporalOptions): void {
+    private static createAsyncOptionsProvider(options: TemporalAsyncOptions): Provider {
+        if (options.useFactory) {
+            return {
+                provide: TEMPORAL_MODULE_OPTIONS,
+                useFactory: options.useFactory,
+                inject:
+                    (options.inject as (
+                        | import('@nestjs/common').InjectionToken
+                        | import('@nestjs/common').OptionalFactoryDependency
+                    )[]) || [],
+            };
+        } else if (options.useClass) {
+            return {
+                provide: TEMPORAL_MODULE_OPTIONS,
+                useFactory: async (optionsFactory: TemporalOptionsFactory) =>
+                    optionsFactory.createTemporalOptions(),
+                inject: [options.useClass],
+            };
+        } else if (options.useExisting) {
+            return {
+                provide: TEMPORAL_MODULE_OPTIONS,
+                useFactory: async (optionsFactory: TemporalOptionsFactory) =>
+                    optionsFactory.createTemporalOptions(),
+                inject: [options.useExisting],
+            };
+        } else {
+            throw new Error('Invalid async options configuration');
+        }
+    }
+
+    /**
+     * Validate synchronous options
+     */
+    private static validateOptions(options: Partial<TemporalOptions>): void {
         if (!options) {
-            throw new Error('Temporal options are required');
+            return; // Allow empty options for minimal configuration
         }
 
-        if (!options.connection) {
-            throw new Error('Connection configuration is required');
-        }
+        // Validate connection configuration if provided
+        if (options.connection) {
+            if (!options.connection.address || !options.connection.address.trim()) {
+                throw new Error('Connection address is required when connection is configured');
+            }
 
-        if (!options.connection.address) {
-            throw new Error('Connection address is required');
+            // Validate address format (basic check)
+            if (!options.connection.address.includes(':')) {
+                throw new Error('Connection address must include port (e.g., localhost:7233)');
+            }
         }
 
         // Validate worker configuration if provided
@@ -268,9 +280,25 @@ export class TemporalModule {
             if (hasWorkflowsPath && hasWorkflowBundle) {
                 throw new Error('Worker cannot have both workflowsPath and workflowBundle');
             }
+
+            // Validate task queue if provided
+            if (options.taskQueue && options.taskQueue.trim().length === 0) {
+                throw new Error('Task queue cannot be empty string');
+            }
+        }
+
+        // Validate logger configuration
+        if (
+            options.logLevel &&
+            !['error', 'warn', 'info', 'debug', 'verbose'].includes(options.logLevel)
+        ) {
+            throw new Error(`Invalid log level: ${options.logLevel}`);
         }
     }
 
+    /**
+     * Validate asynchronous options
+     */
     private static validateAsyncOptions(options: TemporalAsyncOptions): void {
         const hasFactory = Boolean(options.useFactory);
         const hasClass = Boolean(options.useClass);
@@ -280,34 +308,19 @@ export class TemporalModule {
 
         if (configMethods === 0) {
             throw new Error(
-                `${ERRORS.INVALID_OPTIONS}: Must provide useFactory, useClass, or useExisting`,
+                'Invalid Temporal module options: Must provide useFactory, useClass, or useExisting',
             );
         }
 
         if (configMethods > 1) {
             throw new Error(
-                `${ERRORS.INVALID_OPTIONS}: Cannot provide multiple configuration methods`,
+                'Invalid Temporal module options: Cannot provide multiple configuration methods',
             );
         }
-    }
 
-    private static async createOptionsFromFactory(
-        options: TemporalAsyncOptions,
-        args: unknown[],
-    ): Promise<TemporalOptions> {
-        if (options.useFactory) {
-            return await options.useFactory(...args);
+        // Additional validation for factory options
+        if (options.useFactory && options.inject && !Array.isArray(options.inject)) {
+            throw new Error('inject option must be an array when using useFactory');
         }
-
-        if (options.useClass) {
-            const optionsFactory = new options.useClass() as TemporalOptionsFactory;
-            return await optionsFactory.createTemporalOptions();
-        }
-
-        if (options.useExisting) {
-            throw new Error('useExisting should be handled by dependency injection');
-        }
-
-        throw new Error(ERRORS.INVALID_OPTIONS);
     }
 }

@@ -39,6 +39,8 @@ lerna-debug.log*
 .env.local
 .env.*.local
 
-# npm package files
-package-lock.json
-yarn.lock
+# Documentation
+/docs/generated
+/docs/temp
+/docs/API.md
+
