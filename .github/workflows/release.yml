@@ -1,0 +1,135 @@
+name: Release to NPM
+
+on:
+    push:
+        branches:
+            - main
+
+permissions:
+    contents: write
+    pull-requests: read
+
+jobs:
+    release:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+                  token: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: "20"
+                  registry-url: "https://registry.npmjs.org"
+
+            - name: Configure Git
+              run: |
+                  git config --global user.name "github-actions[bot]"
+                  git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Run tests
+              run: npm test
+
+            - name: Determine version bump type
+              id: version-bump
+              run: |
+                  # Get the last commit message
+                  COMMIT_MSG=$(git log -1 --pretty=%B)
+                  echo "Commit message: $COMMIT_MSG"
+
+                  # Determine bump type based on conventional commits
+                  if echo "$COMMIT_MSG" | grep -qiE "^feat(\(.*\))?!:|^BREAKING CHANGE:|breaking change"; then
+                    echo "type=major" >> $GITHUB_OUTPUT
+                    echo "Version bump: MAJOR (breaking change)"
+                  elif echo "$COMMIT_MSG" | grep -qiE "^feat(\(.*\))?:"; then
+                    echo "type=minor" >> $GITHUB_OUTPUT
+                    echo "Version bump: MINOR (feature)"
+                  elif echo "$COMMIT_MSG" | grep -qiE "^fix(\(.*\))?:|^chore(\(.*\))?:|^docs(\(.*\))?:|^style(\(.*\))?:|^refactor(\(.*\))?:|^perf(\(.*\))?:|^test(\(.*\))?:"; then
+                    echo "type=patch" >> $GITHUB_OUTPUT
+                    echo "Version bump: PATCH (fix/chore/etc)"
+                  else
+                    echo "type=patch" >> $GITHUB_OUTPUT
+                    echo "Version bump: PATCH (default)"
+                  fi
+
+            - name: Bump version
+              run: |
+                  # Bump version without creating git tag (we'll do that after)
+                  npm version ${{ steps.version-bump.outputs.type }} --no-git-tag-version
+
+                  # Get the new version
+                  NEW_VERSION=$(node -p "require('./package.json').version")
+                  echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+                  echo "New version: $NEW_VERSION"
+
+            - name: Update CHANGELOG
+              run: |
+                  # Get commit messages since last tag
+                  LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+                  if [ -z "$LAST_TAG" ]; then
+                    COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges)
+                  else
+                    COMMITS=$(git log ${LAST_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges)
+                  fi
+
+                  # Get current date
+                  DATE=$(date +%Y-%m-%d)
+
+                  # Create new changelog entry
+                  cat > /tmp/new_entry.md << EOF
+                  ## [$NEW_VERSION] - $DATE
+
+                  ### Changes
+
+                  $COMMITS
+
+                  EOF
+
+                  # Update CHANGELOG.md
+                  if [ -f CHANGELOG.md ]; then
+                    # Insert new entry after the header
+                    sed -i.bak '1 r /tmp/new_entry.md' CHANGELOG.md && rm CHANGELOG.md.bak
+                  else
+                    echo "# Changelog" > CHANGELOG.md
+                    cat /tmp/new_entry.md >> CHANGELOG.md
+                  fi
+
+            - name: Build package
+              run: npm run build
+
+            - name: Commit version bump
+              run: |
+                  git add package.json package-lock.json CHANGELOG.md
+                  git commit -m "chore: release v$NEW_VERSION [skip ci]"
+                  git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
+
+            - name: Push changes
+              run: |
+                  git push origin main
+                  git push origin "v$NEW_VERSION"
+
+            - name: Publish to NPM
+              run: npm publish --access public
+              env:
+                  NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+            - name: Create GitHub Release
+              uses: actions/create-release@v1
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                  tag_name: v${{ env.NEW_VERSION }}
+                  release_name: Release v${{ env.NEW_VERSION }}
+                  body: |
+                      ## Changes in v${{ env.NEW_VERSION }}
+
+                      See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
+                  draft: false
+                  prerelease: false
