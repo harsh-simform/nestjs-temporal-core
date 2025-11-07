@@ -362,6 +362,136 @@ TemporalModule.register({
 })
 ```
 
+### Multiple Workers Configuration
+
+**New in 3.0.12**: Support for multiple workers with different task queues in the same process.
+
+```typescript
+TemporalModule.register({
+  connection: {
+    address: 'localhost:7233',
+    namespace: 'default',
+  },
+  workers: [
+    {
+      taskQueue: 'payments-queue',
+      workflowsPath: require.resolve('./workflows/payments'),
+      activityClasses: [PaymentActivity, RefundActivity],
+      autoStart: true,
+      workerOptions: {
+        maxConcurrentActivityTaskExecutions: 100,
+      },
+    },
+    {
+      taskQueue: 'notifications-queue',
+      workflowsPath: require.resolve('./workflows/notifications'),
+      activityClasses: [EmailActivity, SmsActivity],
+      autoStart: true,
+      workerOptions: {
+        maxConcurrentActivityTaskExecutions: 50,
+      },
+    },
+    {
+      taskQueue: 'background-jobs',
+      workflowsPath: require.resolve('./workflows/jobs'),
+      activityClasses: [DataProcessingActivity],
+      autoStart: false, // Start manually later
+    },
+  ],
+  logLevel: 'info',
+  enableLogger: true,
+})
+```
+
+#### Accessing Multiple Workers
+
+```typescript
+import { Injectable } from '@nestjs/common';
+import { TemporalService } from 'nestjs-temporal-core';
+
+@Injectable()
+export class WorkerManagementService {
+  constructor(private readonly temporal: TemporalService) {}
+
+  async checkWorkerStatus() {
+    // Get all workers info
+    const workersInfo = this.temporal.getAllWorkers();
+    console.log(`Total workers: ${workersInfo.totalWorkers}`);
+    console.log(`Running workers: ${workersInfo.runningWorkers}`);
+
+    // Get specific worker status
+    const paymentWorkerStatus = this.temporal.getWorkerStatusByTaskQueue('payments-queue');
+    if (paymentWorkerStatus?.isHealthy) {
+      console.log('Payment worker is healthy');
+    }
+  }
+
+  async controlWorkers() {
+    // Start a specific worker
+    await this.temporal.startWorkerByTaskQueue('background-jobs');
+
+    // Stop a specific worker
+    await this.temporal.stopWorkerByTaskQueue('notifications-queue');
+  }
+
+  async registerNewWorker() {
+    // Dynamically register a new worker at runtime
+    const result = await this.temporal.registerWorker({
+      taskQueue: 'new-queue',
+      workflowsPath: require.resolve('./workflows/new'),
+      activityClasses: [NewActivity],
+      autoStart: true,
+    });
+
+    if (result.success) {
+      console.log(`Worker registered for queue: ${result.taskQueue}`);
+    }
+  }
+}
+```
+
+### Manual Worker Creation (Advanced)
+
+For users who need full control, you can access the native Temporal connection to create custom workers:
+
+```typescript
+import { Injectable, OnModuleInit } from '@nestjs/common';
+import { TemporalService } from 'nestjs-temporal-core';
+import { Worker } from '@temporalio/worker';
+
+@Injectable()
+export class CustomWorkerService implements OnModuleInit {
+  private customWorker: Worker;
+
+  constructor(private readonly temporal: TemporalService) {}
+
+  async onModuleInit() {
+    const workerManager = this.temporal.getWorkerManager();
+    const connection = workerManager.getConnection();
+
+    if (!connection) {
+      throw new Error('No connection available');
+    }
+
+    // Create your custom worker using the native Temporal SDK
+    this.customWorker = await Worker.create({
+      connection,
+      taskQueue: 'custom-task-queue',
+      namespace: 'default',
+      workflowsPath: require.resolve('./workflows/custom'),
+      activities: {
+        myCustomActivity: async (data: string) => {
+          return `Processed: ${data}`;
+        },
+      },
+    });
+
+    // Start the worker
+    await this.customWorker.run();
+  }
+}
+```
+
 ### Async Configuration
 
 For dynamic configuration using environment variables or config services:
@@ -1423,6 +1553,208 @@ interface ServiceHealth {
   lastChecked: Date;
 }
 ```
+```
+
+## Migration Guide
+
+### Migrating to v3.0.12+ (Multiple Workers Support)
+
+Version 3.0.12 introduces support for multiple workers without breaking existing single-worker configurations.
+
+#### No Changes Required for Single Worker
+
+If you're using a single worker, your existing configuration continues to work without any changes:
+
+```typescript
+// ✅ This still works exactly as before
+TemporalModule.register({
+  connection: { address: 'localhost:7233' },
+  taskQueue: 'my-queue',
+  worker: {
+    workflowsPath: require.resolve('./workflows'),
+    activityClasses: [MyActivity],
+  },
+})
+```
+
+#### Migrating to Multiple Workers
+
+**Before (v3.0.10):**
+```typescript
+// You had to create custom workers manually
+@Injectable()
+export class ScheduleService implements OnModuleInit {
+  private customWorker: Worker;
+
+  constructor(private temporal: TemporalService) {}
+
+  async onModuleInit() {
+    // This pattern required accessing internal APIs
+    const workerManager = this.temporal.getWorkerManager();
+    const connection = workerManager?.getConnection(); // This wasn't available!
+
+    // Manual worker creation...
+  }
+}
+```
+
+**After (v3.0.12):**
+```typescript
+// Option 1: Configure multiple workers in module
+TemporalModule.register({
+  connection: { address: 'localhost:7233' },
+  workers: [
+    {
+      taskQueue: 'main-queue',
+      workflowsPath: require.resolve('./workflows/main'),
+      activityClasses: [MainActivity],
+    },
+    {
+      taskQueue: 'schedule-queue',
+      workflowsPath: require.resolve('./workflows/schedule'),
+      activityClasses: [ScheduleActivity],
+    },
+  ],
+})
+
+// Option 2: Get native connection for manual worker creation
+@Injectable()
+export class CustomWorkerService implements OnModuleInit {
+  constructor(private temporal: TemporalService) {}
+
+  async onModuleInit() {
+    const workerManager = this.temporal.getWorkerManager();
+    const connection = workerManager.getConnection(); // Now available!
+
+    if (!connection) return;
+
+    const customWorker = await Worker.create({
+      connection, // Native NativeConnection object
+      taskQueue: 'custom-queue',
+      workflowsPath: require.resolve('./workflows/custom'),
+      activities: {
+        myActivity: async (data: string) => data,
+      },
+    });
+
+    await customWorker.run();
+  }
+}
+
+// Option 3: Register workers dynamically at runtime
+@Injectable()
+export class DynamicWorkerService {
+  constructor(private temporal: TemporalService) {}
+
+  async registerNewQueue(taskQueue: string) {
+    const result = await this.temporal.registerWorker({
+      taskQueue,
+      workflowsPath: require.resolve('./workflows/dynamic'),
+      activityClasses: [DynamicActivity],
+      autoStart: true,
+    });
+
+    if (result.success) {
+      console.log(`Worker registered for ${taskQueue}`);
+    }
+  }
+}
+```
+
+#### New APIs in v3.0.12
+
+```typescript
+// Get native connection for custom worker creation
+const workerManager = temporal.getWorkerManager();
+const connection: NativeConnection | null = workerManager.getConnection();
+
+// Get specific worker by task queue
+const worker: Worker | null = temporal.getWorker('payments-queue');
+
+// Get all workers information
+const workersInfo: MultipleWorkersInfo = temporal.getAllWorkers();
+console.log(`${workersInfo.runningWorkers}/${workersInfo.totalWorkers} workers running`);
+
+// Get specific worker status
+const status: WorkerStatus | null = temporal.getWorkerStatusByTaskQueue('payments-queue');
+
+// Control specific workers
+await temporal.startWorkerByTaskQueue('payments-queue');
+await temporal.stopWorkerByTaskQueue('notifications-queue');
+
+// Register new worker dynamically
+const result = await temporal.registerWorker({
+  taskQueue: 'new-queue',
+  workflowsPath: require.resolve('./workflows/new'),
+  activityClasses: [NewActivity],
+  autoStart: true,
+});
+```
+
+#### Breaking Changes from v3.0.10 to v3.0.11
+
+If you're upgrading from v3.0.10, note these changes:
+
+1. **Internal Architecture**: The internal connection management was refactored. If you were accessing private/internal APIs, those may have changed.
+
+2. **getConnection() Now Available**: In v3.0.10, accessing the native connection wasn't possible. This is now officially supported via `getWorkerManager().getConnection()`.
+
+3. **No API Removals**: All public APIs from v3.0.10 remain available in v3.0.11+.
+
+#### Best Practices for Multiple Workers
+
+```typescript
+// 1. Separate workers by domain/responsibility
+TemporalModule.register({
+  connection: { address: 'localhost:7233' },
+  workers: [
+    {
+      taskQueue: 'payments',        // Financial transactions
+      workflowsPath: require.resolve('./workflows/payments'),
+      activityClasses: [PaymentActivity, RefundActivity],
+      workerOptions: {
+        maxConcurrentActivityTaskExecutions: 50,
+      },
+    },
+    {
+      taskQueue: 'notifications',   // User notifications
+      workflowsPath: require.resolve('./workflows/notifications'),
+      activityClasses: [EmailActivity, SmsActivity],
+      workerOptions: {
+        maxConcurrentActivityTaskExecutions: 100,
+      },
+    },
+    {
+      taskQueue: 'background-jobs',  // Async background processing
+      workflowsPath: require.resolve('./workflows/jobs'),
+      activityClasses: [DataProcessingActivity],
+      autoStart: false, // Start only when needed
+    },
+  ],
+})
+
+// 2. Monitor worker health individually
+@Injectable()
+export class WorkerHealthService {
+  constructor(private temporal: TemporalService) {}
+
+  async checkAllWorkers() {
+    const allWorkers = this.temporal.getAllWorkers();
+    
+    for (const [taskQueue, status] of allWorkers.workers.entries()) {
+      if (!status.isHealthy) {
+        // Alert or restart unhealthy worker
+        await this.restartWorker(taskQueue);
+      }
+    }
+  }
+
+  private async restartWorker(taskQueue: string) {
+    await this.temporal.stopWorkerByTaskQueue(taskQueue);
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    await this.temporal.startWorkerByTaskQueue(taskQueue);
+  }
+}
 ```
 
 ## Troubleshooting
