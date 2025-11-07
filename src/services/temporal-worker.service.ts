@@ -17,6 +17,10 @@ import {
     WorkerStats,
     ActivityRegistrationResult,
     WorkerDiscoveryResult,
+    WorkerDefinition,
+    MultipleWorkersInfo,
+    CreateWorkerResult,
+    WorkerInstance,
 } from '../interfaces';
 import { TemporalDiscoveryService } from './temporal-discovery.service';
 import { createLogger, TemporalLogger } from '../utils/logger';
@@ -25,25 +29,33 @@ import { createLogger, TemporalLogger } from '../utils/logger';
  * Temporal Worker Manager Service
  *
  * Manages the lifecycle of Temporal workers including:
- * - Worker initialization and configuration
+ * - Worker initialization and configuration (single or multiple workers)
  * - Activity discovery and registration
  * - Worker health monitoring
  * - Graceful shutdown handling
+ * - Support for multiple task queues
  */
 @Injectable()
 export class TemporalWorkerManagerService
     implements OnModuleInit, OnModuleDestroy, OnApplicationBootstrap
 {
     private readonly logger: TemporalLogger;
+
+    // Legacy single worker support (for backward compatibility)
     private worker: Worker | null = null;
     private restartCount = 0;
     private readonly maxRestarts = 3;
-    private connection: NativeConnection | null = null;
     private isInitialized = false;
     private isRunning = false;
     private lastError: string | null = null;
     private startedAt: Date | null = null;
     private readonly activities = new Map<string, Function>();
+
+    // Multiple workers support
+    private readonly workers = new Map<string, WorkerInstance>();
+
+    // Shared resources
+    private connection: NativeConnection | null = null;
     private shutdownPromise: Promise<void> | null = null;
 
     constructor(
@@ -63,6 +75,13 @@ export class TemporalWorkerManagerService
         try {
             this.logger.debug('Initializing Temporal worker manager...');
 
+            // Check if we should use multiple workers mode
+            if (this.options.workers && this.options.workers.length > 0) {
+                await this.initializeMultipleWorkers();
+                return;
+            }
+
+            // Legacy single worker initialization
             if (!this.shouldInitializeWorker()) {
                 this.logger.info(
                     'Worker initialization skipped - no worker configuration provided',
@@ -106,6 +125,18 @@ export class TemporalWorkerManagerService
     }
 
     async onApplicationBootstrap(): Promise<void> {
+        // Start multiple workers if configured
+        if (this.options.workers && this.options.workers.length > 0) {
+            for (const [taskQueue] of this.workers.entries()) {
+                const workerDef = this.options.workers.find((w) => w.taskQueue === taskQueue);
+                if (workerDef?.autoStart !== false) {
+                    await this.startWorkerByTaskQueue(taskQueue);
+                }
+            }
+            return;
+        }
+
+        // Legacy single worker auto-start
         if (this.worker && this.options.worker?.autoStart !== false) {
             await this.startWorker();
         }
@@ -114,6 +145,324 @@ export class TemporalWorkerManagerService
     async onModuleDestroy(): Promise<void> {
         await this.shutdownWorker();
     }
+
+    // ==========================================
+    // Multiple Workers Support
+    // ==========================================
+
+    /**
+     * Initialize multiple workers from configuration
+     */
+    private async initializeMultipleWorkers(): Promise<void> {
+        this.logger.info(`Initializing ${this.options.workers!.length} workers...`);
+
+        // Ensure connection is established first
+        await this.createConnection();
+
+        if (!this.connection && this.options.allowConnectionFailure !== false) {
+            this.logger.warn('Connection failed, skipping worker initialization');
+            return;
+        }
+
+        for (const workerDef of this.options.workers!) {
+            try {
+                await this.createWorkerFromDefinition(workerDef);
+            } catch (error) {
+                this.logger.error(
+                    `Failed to initialize worker for task queue '${workerDef.taskQueue}'`,
+                    error,
+                );
+                if (this.options.allowConnectionFailure !== true) {
+                    throw error;
+                }
+            }
+        }
+
+        this.logger.info(`Successfully initialized ${this.workers.size} workers`);
+    }
+
+    /**
+     * Create a worker from a worker definition
+     */
+    private async createWorkerFromDefinition(workerDef: WorkerDefinition): Promise<WorkerInstance> {
+        this.logger.debug(`Creating worker for task queue: ${workerDef.taskQueue}`);
+
+        // Check if worker already exists
+        if (this.workers.has(workerDef.taskQueue)) {
+            throw new Error(`Worker for task queue '${workerDef.taskQueue}' already exists`);
+        }
+
+        // Load activities for this worker
+        const activities = new Map<string, Function>();
+
+        // Get activities from discovery service
+        if (workerDef.activityClasses && workerDef.activityClasses.length > 0) {
+            await this.loadActivitiesForWorker(activities);
+        } else {
+            // Use all discovered activities
+            const allActivities = this.discoveryService.getAllActivities();
+            for (const [name, handler] of Object.entries(allActivities)) {
+                activities.set(name, handler);
+            }
+        }
+
+        // Create worker config
+        const workerConfig: WorkerConfig = {
+            taskQueue: workerDef.taskQueue,
+            namespace: this.options.connection?.namespace || 'default',
+            connection: this.connection!,
+            activities: Object.fromEntries(activities),
+        };
+
+        // Add workflow configuration
+        if (workerDef.workflowsPath) {
+            workerConfig.workflowsPath = workerDef.workflowsPath;
+        } else if (workerDef.workflowBundle) {
+            workerConfig.workflowBundle = workerDef.workflowBundle;
+        }
+
+        // Add worker options
+        if (workerDef.workerOptions) {
+            Object.assign(workerConfig, workerDef.workerOptions);
+        }
+
+        // Create the worker
+        const { Worker } = await import('@temporalio/worker');
+        const worker = await Worker.create(workerConfig as never);
+
+        // Create worker instance
+        const workerInstance: WorkerInstance = {
+            worker,
+            taskQueue: workerDef.taskQueue,
+            namespace: this.options.connection?.namespace || 'default',
+            isRunning: false,
+            isInitialized: true,
+            lastError: null,
+            startedAt: null,
+            restartCount: 0,
+            activities,
+            workflowSource: this.getWorkflowSourceFromDef(workerDef),
+        };
+
+        // Store worker instance
+        this.workers.set(workerDef.taskQueue, workerInstance);
+
+        this.logger.info(
+            `Worker created for task queue '${workerDef.taskQueue}' with ${activities.size} activities`,
+        );
+
+        return workerInstance;
+    }
+
+    /**
+     * Register and create a new worker dynamically at runtime
+     */
+    async registerWorker(workerDef: WorkerDefinition): Promise<CreateWorkerResult> {
+        try {
+            // Validate task queue
+            if (!workerDef.taskQueue || workerDef.taskQueue.trim().length === 0) {
+                throw new Error('Task queue is required');
+            }
+
+            // Ensure connection exists
+            if (!this.connection) {
+                await this.createConnection();
+            }
+
+            const workerInstance = await this.createWorkerFromDefinition(workerDef);
+
+            // Auto-start if requested
+            if (workerDef.autoStart !== false) {
+                await this.startWorkerByTaskQueue(workerDef.taskQueue);
+            }
+
+            return {
+                success: true,
+                taskQueue: workerDef.taskQueue,
+                worker: workerInstance.worker,
+            };
+        } catch (error) {
+            this.logger.error(`Failed to create worker for '${workerDef.taskQueue}'`, error);
+            return {
+                success: false,
+                taskQueue: workerDef.taskQueue,
+                error: error instanceof Error ? error : new Error(this.extractErrorMessage(error)),
+            };
+        }
+    }
+
+    /**
+     * Get a specific worker by task queue
+     */
+    getWorker(taskQueue: string): Worker | null {
+        const workerInstance = this.workers.get(taskQueue);
+        return workerInstance ? workerInstance.worker : null;
+    }
+
+    /**
+     * Get all workers information
+     */
+    getAllWorkers(): MultipleWorkersInfo {
+        const workersStatus = new Map<string, WorkerStatus>();
+
+        for (const [taskQueue, workerInstance] of this.workers.entries()) {
+            workersStatus.set(taskQueue, this.getWorkerStatusFromInstance(workerInstance));
+        }
+
+        return {
+            workers: workersStatus,
+            totalWorkers: this.workers.size,
+            runningWorkers: Array.from(this.workers.values()).filter((w) => w.isRunning).length,
+            healthyWorkers: Array.from(this.workers.values()).filter(
+                (w) => w.isInitialized && !w.lastError && w.isRunning,
+            ).length,
+        };
+    }
+
+    /**
+     * Get worker status for a specific task queue
+     */
+    getWorkerStatusByTaskQueue(taskQueue: string): WorkerStatus | null {
+        const workerInstance = this.workers.get(taskQueue);
+        return workerInstance ? this.getWorkerStatusFromInstance(workerInstance) : null;
+    }
+
+    /**
+     * Start a specific worker by task queue
+     */
+    async startWorkerByTaskQueue(taskQueue: string): Promise<void> {
+        const workerInstance = this.workers.get(taskQueue);
+
+        if (!workerInstance) {
+            throw new Error(`Worker for task queue '${taskQueue}' not found`);
+        }
+
+        if (workerInstance.isRunning) {
+            this.logger.warn(`Worker for '${taskQueue}' is already running`);
+            return;
+        }
+
+        try {
+            this.logger.info(`Starting worker for task queue '${taskQueue}'...`);
+            workerInstance.isRunning = true;
+            workerInstance.startedAt = new Date();
+            workerInstance.lastError = null;
+
+            // Start the worker in the background
+            workerInstance.worker.run().catch((error) => {
+                workerInstance.lastError = this.extractErrorMessage(error);
+                workerInstance.isRunning = false;
+                this.logger.error(`Worker '${taskQueue}' failed`, error);
+            });
+
+            this.logger.info(`Worker for '${taskQueue}' started successfully`);
+        } catch (error) {
+            workerInstance.lastError = this.extractErrorMessage(error);
+            workerInstance.isRunning = false;
+            this.logger.error(`Failed to start worker for '${taskQueue}'`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Stop a specific worker by task queue
+     */
+    async stopWorkerByTaskQueue(taskQueue: string): Promise<void> {
+        const workerInstance = this.workers.get(taskQueue);
+
+        if (!workerInstance) {
+            throw new Error(`Worker for task queue '${taskQueue}' not found`);
+        }
+
+        if (!workerInstance.isRunning) {
+            this.logger.debug(`Worker for '${taskQueue}' is not running`);
+            return;
+        }
+
+        try {
+            this.logger.info(`Stopping worker for task queue '${taskQueue}'...`);
+            await workerInstance.worker.shutdown();
+            workerInstance.isRunning = false;
+            workerInstance.startedAt = null;
+            this.logger.info(`Worker for '${taskQueue}' stopped successfully`);
+        } catch (error) {
+            workerInstance.lastError = this.extractErrorMessage(error);
+            this.logger.error(`Failed to stop worker for '${taskQueue}'`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Get the native connection for creating custom workers
+     * @returns NativeConnection instance or null
+     */
+    getConnection(): NativeConnection | null {
+        return this.connection;
+    }
+
+    /**
+     * Helper method to get worker status from worker instance
+     */
+    private getWorkerStatusFromInstance(workerInstance: WorkerInstance): WorkerStatus {
+        const uptime = workerInstance.startedAt
+            ? Date.now() - workerInstance.startedAt.getTime()
+            : undefined;
+
+        return {
+            isInitialized: workerInstance.isInitialized,
+            isRunning: workerInstance.isRunning,
+            isHealthy:
+                workerInstance.isInitialized &&
+                !workerInstance.lastError &&
+                workerInstance.isRunning,
+            taskQueue: workerInstance.taskQueue,
+            namespace: workerInstance.namespace,
+            workflowSource: workerInstance.workflowSource,
+            activitiesCount: workerInstance.activities.size,
+            lastError: workerInstance.lastError || undefined,
+            startedAt: workerInstance.startedAt || undefined,
+            uptime,
+        };
+    }
+
+    /**
+     * Helper to load activities for a specific worker
+     */
+    private async loadActivitiesForWorker(activities: Map<string, Function>): Promise<void> {
+        // Wait for discovery service to complete
+        let attempts = 0;
+        const maxAttempts = 30;
+
+        while (attempts < maxAttempts) {
+            const healthStatus = this.discoveryService.getHealthStatus();
+            if (healthStatus.isComplete) {
+                break;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            attempts++;
+        }
+
+        const allActivities = this.discoveryService.getAllActivities();
+
+        for (const [activityName, handler] of Object.entries(allActivities)) {
+            activities.set(activityName, handler);
+        }
+    }
+
+    /**
+     * Helper to determine workflow source from definition
+     */
+    private getWorkflowSourceFromDef(
+        workerDef: WorkerDefinition,
+    ): 'bundle' | 'filesystem' | 'registered' | 'none' {
+        if (workerDef.workflowBundle) return 'bundle';
+        if (workerDef.workflowsPath) return 'filesystem';
+        return 'none';
+    }
+
+    // ==========================================
+    // Legacy Single Worker Support (Backward Compatibility)
+    // ==========================================
 
     /**
      * Start the worker
@@ -764,13 +1113,32 @@ export class TemporalWorkerManagerService
 
     private async performShutdown(): Promise<void> {
         try {
-            this.logger.info('Shutting down Temporal worker...');
+            this.logger.info('Shutting down Temporal worker manager...');
 
+            // Shutdown multiple workers if they exist
+            if (this.workers.size > 0) {
+                this.logger.info(`Shutting down ${this.workers.size} workers...`);
+                for (const [taskQueue, workerInstance] of this.workers.entries()) {
+                    try {
+                        if (workerInstance.isRunning) {
+                            this.logger.debug(`Stopping worker for '${taskQueue}'...`);
+                            await workerInstance.worker.shutdown();
+                            workerInstance.isRunning = false;
+                        }
+                    } catch (error) {
+                        this.logger.warn(`Error shutting down worker '${taskQueue}'`, error);
+                    }
+                }
+                this.workers.clear();
+            }
+
+            // Shutdown legacy single worker if it exists
             if (this.worker) {
                 await this.stopWorker();
                 this.worker = null;
             }
 
+            // Close connection
             if (this.connection && !this.injectedConnection) {
                 try {
                     await this.connection.close();
@@ -782,7 +1150,7 @@ export class TemporalWorkerManagerService
             }
 
             this.isInitialized = false;
-            this.logger.info('Worker shutdown completed');
+            this.logger.info('Worker manager shutdown completed');
         } catch (error) {
             this.logger.error('Error during worker shutdown', error);
         } finally {
