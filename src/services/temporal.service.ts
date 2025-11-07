@@ -16,6 +16,10 @@ import {
     ActivityExecutionResult,
     OverallHealthStatus,
     ServiceStatistics,
+    WorkerDefinition,
+    MultipleWorkersInfo,
+    CreateWorkerResult,
+    Worker,
 } from '../interfaces';
 import { TemporalClientService } from './temporal-client.service';
 import { TemporalWorkerManagerService } from './temporal-worker.service';
@@ -363,6 +367,83 @@ export class TemporalService implements OnModuleInit, OnModuleDestroy {
             return null;
         }
         return this.workerService.getStatus();
+    }
+
+    /**
+     * Get the worker manager service (provides access to getConnection())
+     */
+    getWorkerManager(): TemporalWorkerManagerService {
+        return this.workerService;
+    }
+
+    /**
+     * Get a specific worker by task queue (for multiple workers setup)
+     */
+    getWorker(taskQueue: string): Worker | null {
+        this.ensureInitialized();
+        if (!this.workerService) {
+            return null;
+        }
+        return this.workerService.getWorker(taskQueue);
+    }
+
+    /**
+     * Get all workers information (for multiple workers setup)
+     */
+    getAllWorkers(): MultipleWorkersInfo | null {
+        this.ensureInitialized();
+        if (!this.workerService) {
+            return null;
+        }
+        return this.workerService.getAllWorkers();
+    }
+
+    /**
+     * Get worker status for a specific task queue (for multiple workers setup)
+     */
+    getWorkerStatusByTaskQueue(taskQueue: string): WorkerStatus | null {
+        this.ensureInitialized();
+        if (!this.workerService) {
+            return null;
+        }
+        return this.workerService.getWorkerStatusByTaskQueue(taskQueue);
+    }
+
+    /**
+     * Start a specific worker by task queue (for multiple workers setup)
+     */
+    async startWorkerByTaskQueue(taskQueue: string): Promise<void> {
+        this.ensureInitialized();
+        if (!this.workerService) {
+            throw new Error('Worker service not available');
+        }
+        return this.workerService.startWorkerByTaskQueue(taskQueue);
+    }
+
+    /**
+     * Stop a specific worker by task queue (for multiple workers setup)
+     */
+    async stopWorkerByTaskQueue(taskQueue: string): Promise<void> {
+        this.ensureInitialized();
+        if (!this.workerService) {
+            throw new Error('Worker service not available');
+        }
+        return this.workerService.stopWorkerByTaskQueue(taskQueue);
+    }
+
+    /**
+     * Register and create a new worker dynamically at runtime
+     */
+    async registerWorker(workerDef: WorkerDefinition): Promise<CreateWorkerResult> {
+        this.ensureInitialized();
+        if (!this.workerService) {
+            return {
+                success: false,
+                taskQueue: workerDef.taskQueue,
+                error: new Error('Worker service not available'),
+            };
+        }
+        return this.workerService.registerWorker(workerDef);
     }
 
     /**
