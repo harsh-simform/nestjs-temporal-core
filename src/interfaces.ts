@@ -85,10 +85,37 @@ export interface RetryPolicyConfig {
 }
 
 /**
+ * Configuration for a single worker instance.
+ * Allows defining multiple workers with different task queues.
+ *
+ * @example
+ * ```typescript
+ * const workerDef: WorkerDefinition = {
+ *   taskQueue: 'payments-queue',
+ *   workflowsPath: './dist/workflows/payments',
+ *   activityClasses: [PaymentActivity],
+ *   autoStart: true,
+ *   workerOptions: {
+ *     maxConcurrentActivityTaskExecutions: 100
+ *   }
+ * };
+ * ```
+ */
+export interface WorkerDefinition {
+    taskQueue: string;
+    workflowsPath?: string;
+    workflowBundle?: Record<string, unknown>;
+    activityClasses?: Array<Type<object>>;
+    autoStart?: boolean;
+    workerOptions?: WorkerCreateOptions;
+}
+
+/**
  * Main configuration options for Temporal module initialization.
  * Supports both client-only and worker configurations.
+ * Now supports multiple workers via the `workers` array property.
  *
- * @example Basic Setup
+ * @example Basic Setup with Single Worker (Legacy)
  * ```typescript
  * const options: TemporalOptions = {
  *   connection: {
@@ -101,6 +128,28 @@ export interface RetryPolicyConfig {
  *     activityClasses: [MyActivityClass],
  *     autoStart: true
  *   }
+ * };
+ * ```
+ *
+ * @example Multiple Workers Setup
+ * ```typescript
+ * const options: TemporalOptions = {
+ *   connection: {
+ *     address: 'localhost:7233',
+ *     namespace: 'default'
+ *   },
+ *   workers: [
+ *     {
+ *       taskQueue: 'payments-queue',
+ *       workflowsPath: './dist/workflows/payments',
+ *       activityClasses: [PaymentActivity]
+ *     },
+ *     {
+ *       taskQueue: 'notifications-queue',
+ *       workflowsPath: './dist/workflows/notifications',
+ *       activityClasses: [EmailActivity]
+ *     }
+ *   ]
  * };
  * ```
  *
@@ -132,6 +181,7 @@ export interface TemporalOptions extends LoggerConfig {
         autoStart?: boolean;
         workerOptions?: WorkerCreateOptions;
     };
+    workers?: WorkerDefinition[];
     autoRestart?: boolean;
     isGlobal?: boolean;
     allowConnectionFailure?: boolean;
@@ -565,6 +615,64 @@ export interface WorkerStatus {
     lastError?: string;
     startedAt?: Date;
     uptime?: number;
+}
+
+/**
+ * Information about multiple workers in the system.
+ * Used when managing multiple task queues.
+ *
+ * @example
+ * ```typescript
+ * const workers = temporalService.getAllWorkers();
+ * workers.forEach(worker => {
+ *   console.log(`Worker ${worker.taskQueue}: ${worker.status.isRunning ? 'running' : 'stopped'}`);
+ * });
+ * ```
+ */
+export interface MultipleWorkersInfo {
+    workers: Map<string, WorkerStatus>;
+    totalWorkers: number;
+    runningWorkers: number;
+    healthyWorkers: number;
+}
+
+/**
+ * Result of creating a new worker dynamically.
+ *
+ * @example
+ * ```typescript
+ * const result = await temporalService.createWorker({
+ *   taskQueue: 'new-queue',
+ *   workflowsPath: './dist/workflows',
+ *   autoStart: true
+ * });
+ * if (result.success) {
+ *   console.log(`Worker created for queue: ${result.taskQueue}`);
+ * }
+ * ```
+ */
+export interface CreateWorkerResult {
+    success: boolean;
+    taskQueue: string;
+    error?: Error;
+    worker?: Worker;
+}
+
+/**
+ * Individual worker instance with metadata
+ * Internal structure used by TemporalWorkerManagerService
+ */
+export interface WorkerInstance {
+    worker: Worker;
+    taskQueue: string;
+    namespace: string;
+    isRunning: boolean;
+    isInitialized: boolean;
+    lastError: string | null;
+    startedAt: Date | null;
+    restartCount: number;
+    activities: Map<string, Function>;
+    workflowSource: 'bundle' | 'filesystem' | 'registered' | 'none';
 }
 
 /**
