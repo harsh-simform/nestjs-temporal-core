@@ -1,7 +1,4 @@
-import {
-    Activity,
-    ActivityMethod,
-} from '../../src/decorators/activity.decorator';
+import { Activity, ActivityMethod } from '../../src/decorators/activity.decorator';
 import { TEMPORAL_ACTIVITY, TEMPORAL_ACTIVITY_METHOD } from '../../src/constants';
 import 'reflect-metadata';
 
@@ -468,7 +465,6 @@ describe('Activity Decorator', () => {
             Reflect.defineMetadata = originalDefineMetadata;
         });
     });
-
 
     describe('@Activity Edge Cases', () => {
         it('should handle class with undefined name', () => {

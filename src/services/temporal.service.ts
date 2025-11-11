@@ -614,6 +614,7 @@ export class TemporalService implements OnModuleInit, OnModuleDestroy {
                 return { status: 'not_available' as const };
             }
 
+            /* istanbul ignore if -- Defensive check: workerService must exist if hasWorker() is true */
             if (!this.workerService) {
                 return { status: 'not_available' as const };
             }

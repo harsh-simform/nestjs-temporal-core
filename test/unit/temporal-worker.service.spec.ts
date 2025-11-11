@@ -986,56 +986,50 @@ describe('TemporalWorkerManagerService', () => {
             loggerSpy.mockRestore();
         });
 
-        it(
-            'should hit max restart limit',
-            async () => {
-                const crashingWorker = {
-                    run: jest.fn().mockRejectedValue(new Error('Crash')),
-                    shutdown: jest.fn().mockResolvedValue(undefined),
-                };
+        it('should hit max restart limit', async () => {
+            const crashingWorker = {
+                run: jest.fn().mockRejectedValue(new Error('Crash')),
+                shutdown: jest.fn().mockResolvedValue(undefined),
+            };
 
-                (Worker.create as jest.Mock).mockResolvedValue(crashingWorker);
+            (Worker.create as jest.Mock).mockResolvedValue(crashingWorker);
 
-                const module: TestingModule = await Test.createTestingModule({
-                    providers: [
-                        TemporalWorkerManagerService,
-                        {
-                            provide: TEMPORAL_MODULE_OPTIONS,
-                            useValue: {
-                                ...mockOptions,
-                                autoRestart: true,
-                            },
-                        },
-                        {
-                            provide: TEMPORAL_CONNECTION,
-                            useValue: null,
-                        },
-                        {
-                            provide: TemporalDiscoveryService,
-                            useValue: mockDiscoveryService,
-                        },
-                    ],
-                }).compile();
-
-                const testService = module.get<TemporalWorkerManagerService>(
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
                     TemporalWorkerManagerService,
-                );
-                await testService.onModuleInit();
+                    {
+                        provide: TEMPORAL_MODULE_OPTIONS,
+                        useValue: {
+                            ...mockOptions,
+                            autoRestart: true,
+                        },
+                    },
+                    {
+                        provide: TEMPORAL_CONNECTION,
+                        useValue: null,
+                    },
+                    {
+                        provide: TemporalDiscoveryService,
+                        useValue: mockDiscoveryService,
+                    },
+                ],
+            }).compile();
 
-                const loggerSpy = jest
-                    .spyOn((testService as any).logger, 'error')
-                    .mockImplementation();
+            const testService = module.get<TemporalWorkerManagerService>(
+                TemporalWorkerManagerService,
+            );
+            await testService.onModuleInit();
 
-                await testService.startWorker();
-                // Wait long enough for multiple restart attempts
-                await new Promise((resolve) => setTimeout(resolve, 5000));
+            const loggerSpy = jest.spyOn((testService as any).logger, 'error').mockImplementation();
 
-                // Check that error was called (restart logic was triggered)
-                expect(loggerSpy).toHaveBeenCalled();
-                loggerSpy.mockRestore();
-            },
-            10000,
-        );
+            await testService.startWorker();
+            // Wait long enough for multiple restart attempts
+            await new Promise((resolve) => setTimeout(resolve, 5000));
+
+            // Check that error was called (restart logic was triggered)
+            expect(loggerSpy).toHaveBeenCalled();
+            loggerSpy.mockRestore();
+        }, 10000);
 
         it('should handle restart with stopWorker error', async () => {
             await service.onModuleInit();
@@ -1061,7 +1055,7 @@ describe('TemporalWorkerManagerService', () => {
 
             // Mock activities.set to throw for badActivity
             const originalSet = Map.prototype.set;
-            let callCount = 0;
+            const callCount = 0;
             jest.spyOn(Map.prototype, 'set').mockImplementation(function (
                 this: Map<any, any>,
                 key: any,
@@ -1828,7 +1822,10 @@ describe('TemporalWorkerManagerService', () => {
             // Wait for the catch block to execute
             await new Promise((resolve) => setTimeout(resolve, 100));
 
-            expect(loggerSpy).toHaveBeenCalledWith('Background worker start failed', expect.any(Error));
+            expect(loggerSpy).toHaveBeenCalledWith(
+                'Background worker start failed',
+                expect.any(Error),
+            );
             loggerSpy.mockRestore();
         });
 
@@ -1883,6 +1880,940 @@ describe('TemporalWorkerManagerService', () => {
 
             expect(options.workflowsPath).toBe('./dist/workflows');
             expect(options.activities).toBeDefined();
+        });
+    });
+
+    describe('Multiple Workers Support', () => {
+        const multipleWorkersOptions: TemporalOptions = {
+            connection: {
+                namespace: 'test-namespace',
+                address: 'localhost:7233',
+            },
+            workers: [
+                {
+                    taskQueue: 'queue-1',
+                    workflowsPath: './dist/workflows1',
+                },
+                {
+                    taskQueue: 'queue-2',
+                    workflowsPath: './dist/workflows2',
+                    autoStart: true,
+                },
+            ],
+            enableLogger: false,
+            logLevel: 'error',
+        };
+
+        beforeEach(async () => {
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    TemporalWorkerManagerService,
+                    {
+                        provide: TEMPORAL_MODULE_OPTIONS,
+                        useValue: multipleWorkersOptions,
+                    },
+                    {
+                        provide: TEMPORAL_CONNECTION,
+                        useValue: null,
+                    },
+                    {
+                        provide: TemporalDiscoveryService,
+                        useValue: mockDiscoveryService,
+                    },
+                ],
+            }).compile();
+
+            service = module.get<TemporalWorkerManagerService>(TemporalWorkerManagerService);
+        });
+
+        it('should initialize multiple workers', async () => {
+            await service.onModuleInit();
+
+            expect(NativeConnection.connect).toHaveBeenCalled();
+            expect(Worker.create).toHaveBeenCalledTimes(2);
+        });
+
+        it('should skip multiple workers init if connection fails and allowed', async () => {
+            (NativeConnection.connect as jest.Mock).mockResolvedValue(null);
+
+            const logSpy = jest.spyOn((service as any).logger, 'warn').mockImplementation();
+
+            await service.onModuleInit();
+
+            expect(logSpy).toHaveBeenCalledWith(
+                expect.stringContaining('Connection failed, skipping worker initialization'),
+            );
+
+            logSpy.mockRestore();
+        });
+
+        it('should handle errors during worker creation with allowConnectionFailure', async () => {
+            const multipleWorkersWithAllowFailure = {
+                ...multipleWorkersOptions,
+                allowConnectionFailure: true,
+            };
+
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    TemporalWorkerManagerService,
+                    {
+                        provide: TEMPORAL_MODULE_OPTIONS,
+                        useValue: multipleWorkersWithAllowFailure,
+                    },
+                    {
+                        provide: TEMPORAL_CONNECTION,
+                        useValue: null,
+                    },
+                    {
+                        provide: TemporalDiscoveryService,
+                        useValue: mockDiscoveryService,
+                    },
+                ],
+            }).compile();
+
+            const svc = module.get<TemporalWorkerManagerService>(TemporalWorkerManagerService);
+
+            (Worker.create as jest.Mock)
+                .mockRejectedValueOnce(new Error('Worker creation failed'))
+                .mockResolvedValueOnce(mockWorker);
+
+            const logSpy = jest.spyOn((svc as any).logger, 'error').mockImplementation();
+
+            await svc.onModuleInit();
+
+            expect(logSpy).toHaveBeenCalledWith(
+                expect.stringContaining('Failed to initialize worker for task queue'),
+                expect.any(Error),
+            );
+
+            logSpy.mockRestore();
+        });
+
+        it('should throw error during worker creation when allowConnectionFailure is false', async () => {
+            const multipleWorkersNoFailure = {
+                ...multipleWorkersOptions,
+                allowConnectionFailure: false,
+            };
+
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    TemporalWorkerManagerService,
+                    {
+                        provide: TEMPORAL_MODULE_OPTIONS,
+                        useValue: multipleWorkersNoFailure,
+                    },
+                    {
+                        provide: TEMPORAL_CONNECTION,
+                        useValue: null,
+                    },
+                    {
+                        provide: TemporalDiscoveryService,
+                        useValue: mockDiscoveryService,
+                    },
+                ],
+            }).compile();
+
+            const svc = module.get<TemporalWorkerManagerService>(TemporalWorkerManagerService);
+
+            (Worker.create as jest.Mock).mockRejectedValue(new Error('Worker creation failed'));
+
+            await expect(svc.onModuleInit()).rejects.toThrow('Worker creation failed');
+        });
+
+        it('should auto-start workers on bootstrap', async () => {
+            await service.onModuleInit();
+
+            const startSpy = jest
+                .spyOn(service as any, 'startWorkerByTaskQueue')
+                .mockResolvedValue(undefined);
+
+            await service.onApplicationBootstrap();
+
+            expect(startSpy).toHaveBeenCalledWith('queue-1');
+            expect(startSpy).toHaveBeenCalledWith('queue-2');
+
+            startSpy.mockRestore();
+        });
+
+        it('should not start workers on bootstrap if autoStart is false', async () => {
+            const noAutoStartOptions = {
+                ...multipleWorkersOptions,
+                workers: [
+                    {
+                        taskQueue: 'queue-1',
+                        workflowsPath: './dist/workflows1',
+                        autoStart: false,
+                    },
+                ],
+            };
+
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    TemporalWorkerManagerService,
+                    {
+                        provide: TEMPORAL_MODULE_OPTIONS,
+                        useValue: noAutoStartOptions,
+                    },
+                    {
+                        provide: TEMPORAL_CONNECTION,
+                        useValue: null,
+                    },
+                    {
+                        provide: TemporalDiscoveryService,
+                        useValue: mockDiscoveryService,
+                    },
+                ],
+            }).compile();
+
+            const svc = module.get<TemporalWorkerManagerService>(TemporalWorkerManagerService);
+
+            await svc.onModuleInit();
+
+            const startSpy = jest
+                .spyOn(svc as any, 'startWorkerByTaskQueue')
+                .mockResolvedValue(undefined);
+
+            await svc.onApplicationBootstrap();
+
+            expect(startSpy).not.toHaveBeenCalled();
+
+            startSpy.mockRestore();
+        });
+
+        it('should register worker dynamically', async () => {
+            await service.onModuleInit();
+
+            const newWorkerDef = {
+                taskQueue: 'dynamic-queue',
+                workflowsPath: './dist/dynamic-workflows',
+            };
+
+            const result = await service.registerWorker(newWorkerDef);
+
+            expect(result.success).toBe(true);
+            expect(result.taskQueue).toBe('dynamic-queue');
+            expect(Worker.create).toHaveBeenCalledTimes(3); // 2 initial + 1 dynamic
+        });
+
+        it('should handle errors when registering worker dynamically', async () => {
+            await service.onModuleInit();
+
+            (Worker.create as jest.Mock).mockRejectedValueOnce(new Error('Creation failed'));
+
+            const newWorkerDef = {
+                taskQueue: 'failing-queue',
+                workflowsPath: './dist/workflows',
+            };
+
+            const result = await service.registerWorker(newWorkerDef);
+
+            expect(result.success).toBe(false);
+            expect(result.error).toBeInstanceOf(Error);
+        });
+
+        it('should validate task queue when registering worker', async () => {
+            await service.onModuleInit();
+
+            const invalidWorkerDef = {
+                taskQueue: '',
+                workflowsPath: './dist/workflows',
+            };
+
+            const result = await service.registerWorker(invalidWorkerDef);
+
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain('Task queue is required');
+        });
+
+        it('should throw error when creating duplicate worker', async () => {
+            await service.onModuleInit();
+
+            const duplicateWorkerDef = {
+                taskQueue: 'queue-1', // Already exists
+                workflowsPath: './dist/workflows',
+            };
+
+            const result = await service.registerWorker(duplicateWorkerDef);
+
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain('already exists');
+        });
+
+        it('should get worker by task queue', async () => {
+            await service.onModuleInit();
+
+            const worker = service.getWorker('queue-1');
+
+            expect(worker).toBe(mockWorker);
+        });
+
+        it('should return null for non-existent worker', async () => {
+            await service.onModuleInit();
+
+            const worker = service.getWorker('non-existent-queue');
+
+            expect(worker).toBeNull();
+        });
+
+        it('should handle worker with activityClasses', async () => {
+            const workerWithActivityClasses = {
+                ...multipleWorkersOptions,
+                workers: [
+                    {
+                        taskQueue: 'activity-queue',
+                        workflowsPath: './dist/workflows',
+                        activityClasses: [class TestActivity {}],
+                    },
+                ],
+            };
+
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    TemporalWorkerManagerService,
+                    {
+                        provide: TEMPORAL_MODULE_OPTIONS,
+                        useValue: workerWithActivityClasses,
+                    },
+                    {
+                        provide: TEMPORAL_CONNECTION,
+                        useValue: null,
+                    },
+                    {
+                        provide: TemporalDiscoveryService,
+                        useValue: mockDiscoveryService,
+                    },
+                ],
+            }).compile();
+
+            const svc = module.get<TemporalWorkerManagerService>(TemporalWorkerManagerService);
+
+            await svc.onModuleInit();
+
+            expect(Worker.create).toHaveBeenCalled();
+        });
+
+        it('should handle worker with workflowBundle', async () => {
+            const workerWithBundle = {
+                ...multipleWorkersOptions,
+                workers: [
+                    {
+                        taskQueue: 'bundle-queue',
+                        workflowBundle: { code: 'bundle-code', sourceMap: 'map' },
+                    },
+                ],
+            };
+
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    TemporalWorkerManagerService,
+                    {
+                        provide: TEMPORAL_MODULE_OPTIONS,
+                        useValue: workerWithBundle,
+                    },
+                    {
+                        provide: TEMPORAL_CONNECTION,
+                        useValue: null,
+                    },
+                    {
+                        provide: TemporalDiscoveryService,
+                        useValue: mockDiscoveryService,
+                    },
+                ],
+            }).compile();
+
+            const svc = module.get<TemporalWorkerManagerService>(TemporalWorkerManagerService);
+
+            await svc.onModuleInit();
+
+            expect(Worker.create).toHaveBeenCalled();
+        });
+
+        it('should handle worker with workerOptions', async () => {
+            const workerWithOptions = {
+                ...multipleWorkersOptions,
+                workers: [
+                    {
+                        taskQueue: 'options-queue',
+                        workflowsPath: './dist/workflows',
+                        workerOptions: {
+                            maxConcurrentActivityTaskExecutions: 100,
+                            maxConcurrentWorkflowTaskExecutions: 50,
+                        },
+                    },
+                ],
+            };
+
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    TemporalWorkerManagerService,
+                    {
+                        provide: TEMPORAL_MODULE_OPTIONS,
+                        useValue: workerWithOptions,
+                    },
+                    {
+                        provide: TEMPORAL_CONNECTION,
+                        useValue: null,
+                    },
+                    {
+                        provide: TemporalDiscoveryService,
+                        useValue: mockDiscoveryService,
+                    },
+                ],
+            }).compile();
+
+            const svc = module.get<TemporalWorkerManagerService>(TemporalWorkerManagerService);
+
+            await svc.onModuleInit();
+
+            expect(Worker.create).toHaveBeenCalled();
+        });
+
+        it('should auto-start dynamically registered worker', async () => {
+            await service.onModuleInit();
+
+            const startSpy = jest
+                .spyOn(service as any, 'startWorkerByTaskQueue')
+                .mockResolvedValue(undefined);
+
+            const newWorkerDef = {
+                taskQueue: 'auto-start-queue',
+                workflowsPath: './dist/workflows',
+                autoStart: true,
+            };
+
+            await service.registerWorker(newWorkerDef);
+
+            expect(startSpy).toHaveBeenCalledWith('auto-start-queue');
+
+            startSpy.mockRestore();
+        });
+
+        it('should not auto-start dynamically registered worker when autoStart is false', async () => {
+            await service.onModuleInit();
+
+            const startSpy = jest
+                .spyOn(service as any, 'startWorkerByTaskQueue')
+                .mockResolvedValue(undefined);
+
+            const newWorkerDef = {
+                taskQueue: 'no-auto-start-queue',
+                workflowsPath: './dist/workflows',
+                autoStart: false,
+            };
+
+            await service.registerWorker(newWorkerDef);
+
+            expect(startSpy).not.toHaveBeenCalled();
+
+            startSpy.mockRestore();
+        });
+
+        it('should create connection before registering worker if not exists', async () => {
+            // Don't initialize to test connection creation
+            const newWorkerDef = {
+                taskQueue: 'test-queue',
+                workflowsPath: './dist/workflows',
+            };
+
+            const result = await service.registerWorker(newWorkerDef);
+
+            expect(NativeConnection.connect).toHaveBeenCalled();
+            expect(result.success).toBe(true);
+        });
+
+        it('should handle non-Error exceptions when registering worker', async () => {
+            await service.onModuleInit();
+
+            (Worker.create as jest.Mock).mockRejectedValueOnce('String error');
+
+            const newWorkerDef = {
+                taskQueue: 'error-queue',
+                workflowsPath: './dist/workflows',
+            };
+
+            const result = await service.registerWorker(newWorkerDef);
+
+            expect(result.success).toBe(false);
+            expect(result.error).toBeInstanceOf(Error);
+            expect(result.error?.message).toBe('String error');
+        });
+
+        it('should return all workers information', async () => {
+            await service.onModuleInit();
+
+            const allWorkers = service.getAllWorkers();
+
+            expect(allWorkers.totalWorkers).toBe(2);
+            expect(allWorkers.workers.size).toBe(2);
+            expect(allWorkers.workers.has('queue-1')).toBe(true);
+            expect(allWorkers.workers.has('queue-2')).toBe(true);
+            expect(allWorkers.runningWorkers).toBeDefined();
+            expect(allWorkers.healthyWorkers).toBeDefined();
+        });
+
+        it('should return worker status by task queue', async () => {
+            await service.onModuleInit();
+
+            const status = service.getWorkerStatusByTaskQueue('queue-1');
+
+            expect(status).toBeDefined();
+            expect(status?.isInitialized).toBe(true);
+        });
+
+        it('should return null for non-existent task queue', async () => {
+            await service.onModuleInit();
+
+            const status = service.getWorkerStatusByTaskQueue('non-existent');
+
+            expect(status).toBeNull();
+        });
+
+        it('should warn when starting already running worker', async () => {
+            await service.onModuleInit();
+            await service.onApplicationBootstrap(); // Start workers with autoStart=true
+
+            const loggerSpy = jest.spyOn((service as any).logger, 'warn').mockImplementation();
+
+            await service.startWorkerByTaskQueue('queue-2'); // This worker has autoStart=true
+
+            expect(loggerSpy).toHaveBeenCalledWith(
+                expect.stringContaining("Worker for 'queue-2' is already running"),
+            );
+            loggerSpy.mockRestore();
+        });
+
+        it('should throw error when starting non-existent worker', async () => {
+            await service.onModuleInit();
+
+            await expect(service.startWorkerByTaskQueue('non-existent')).rejects.toThrow(
+                "Worker for task queue 'non-existent' not found",
+            );
+        });
+
+        it('should throw error when stopping non-existent worker', async () => {
+            await service.onModuleInit();
+
+            await expect(service.stopWorkerByTaskQueue('non-existent')).rejects.toThrow(
+                "Worker for task queue 'non-existent' not found",
+            );
+        });
+
+        it('should handle errors from worker.run() gracefully', async () => {
+            await service.onModuleInit();
+
+            const workerInstance = (service as any).workers.get('queue-1');
+            const runError = new Error('Worker run failed');
+            workerInstance.worker.run = jest.fn().mockRejectedValue(runError);
+
+            const loggerSpy = jest.spyOn((service as any).logger, 'error').mockImplementation();
+
+            await service.startWorkerByTaskQueue('queue-1');
+
+            // Wait for async error handler
+            await new Promise((resolve) => setTimeout(resolve, 10));
+
+            expect(loggerSpy).toHaveBeenCalled();
+            loggerSpy.mockRestore();
+        });
+
+        it('should handle synchronous errors during worker start', async () => {
+            await service.onModuleInit();
+
+            const workerInstance = (service as any).workers.get('queue-1');
+            const startError = new Error('Start failed');
+            workerInstance.worker.run = jest.fn().mockImplementation(() => {
+                throw startError;
+            });
+
+            const loggerSpy = jest.spyOn((service as any).logger, 'error').mockImplementation();
+
+            await expect(service.startWorkerByTaskQueue('queue-1')).rejects.toThrow('Start failed');
+
+            loggerSpy.mockRestore();
+        });
+
+        it('should skip stopping a worker that is not running', async () => {
+            await service.onModuleInit();
+
+            const loggerSpy = jest.spyOn((service as any).logger, 'debug').mockImplementation();
+
+            await service.stopWorkerByTaskQueue('queue-1');
+
+            expect(loggerSpy).toHaveBeenCalledWith(
+                expect.stringContaining("Worker for 'queue-1' is not running"),
+            );
+            loggerSpy.mockRestore();
+        });
+
+        it('should successfully stop a running worker', async () => {
+            await service.onModuleInit();
+            await service.startWorkerByTaskQueue('queue-1');
+
+            const loggerSpy = jest.spyOn((service as any).logger, 'info').mockImplementation();
+
+            await service.stopWorkerByTaskQueue('queue-1');
+
+            expect(loggerSpy).toHaveBeenCalledWith(
+                expect.stringContaining("Worker for 'queue-1' stopped successfully"),
+            );
+            loggerSpy.mockRestore();
+        });
+
+        it('should handle errors during worker shutdown', async () => {
+            await service.onModuleInit();
+            await service.startWorkerByTaskQueue('queue-1');
+
+            const workerInstance = (service as any).workers.get('queue-1');
+            const shutdownError = new Error('Shutdown failed');
+            workerInstance.worker.shutdown = jest.fn().mockRejectedValue(shutdownError);
+
+            const loggerSpy = jest.spyOn((service as any).logger, 'error').mockImplementation();
+
+            await expect(service.stopWorkerByTaskQueue('queue-1')).rejects.toThrow(
+                'Shutdown failed',
+            );
+
+            loggerSpy.mockRestore();
+        });
+
+        it('should return the native connection', async () => {
+            await service.onModuleInit();
+
+            const connection = service.getConnection();
+
+            expect(connection).toBeDefined();
+            expect(connection).toBe((service as any).connection);
+        });
+
+        it('should calculate worker uptime correctly', async () => {
+            await service.onModuleInit();
+            await service.startWorkerByTaskQueue('queue-1');
+
+            const workerInstance = (service as any).workers.get('queue-1');
+            const status = (service as any).getWorkerStatusFromInstance(workerInstance);
+
+            expect(status.uptime).toBeDefined();
+            expect(typeof status.uptime).toBe('number');
+            expect(status.uptime).toBeGreaterThanOrEqual(0);
+        });
+
+        it('should return undefined uptime when worker not started', async () => {
+            await service.onModuleInit();
+
+            const workerInstance = (service as any).workers.get('queue-1');
+            workerInstance.startedAt = null;
+
+            const status = (service as any).getWorkerStatusFromInstance(workerInstance);
+
+            expect(status.uptime).toBeUndefined();
+        });
+
+        it('should wait for health check to complete when loading activities', async () => {
+            const activities = new Map();
+            mockDiscoveryService.getHealthStatus = jest
+                .fn()
+                .mockReturnValueOnce({ isComplete: false })
+                .mockReturnValueOnce({ isComplete: true });
+            mockDiscoveryService.getAllActivities = jest.fn().mockReturnValue({
+                activity1: jest.fn(),
+                activity2: jest.fn(),
+            });
+
+            await (service as any).loadActivitiesForWorker(activities);
+
+            expect(activities.size).toBe(2);
+            expect(activities.has('activity1')).toBe(true);
+            expect(activities.has('activity2')).toBe(true);
+        });
+
+        it('should handle immediate health check completion', async () => {
+            const activities = new Map();
+            mockDiscoveryService.getHealthStatus = jest.fn().mockReturnValue({ isComplete: true });
+            mockDiscoveryService.getAllActivities = jest.fn().mockReturnValue({
+                activity1: jest.fn(),
+            });
+
+            await (service as any).loadActivitiesForWorker(activities);
+
+            expect(activities.size).toBe(1);
+            expect(activities.has('activity1')).toBe(true);
+        });
+
+        it('should timeout after max attempts waiting for health check', async () => {
+            const activities = new Map();
+            mockDiscoveryService.getHealthStatus = jest.fn().mockReturnValue({ isComplete: false });
+            mockDiscoveryService.getAllActivities = jest.fn().mockReturnValue({
+                activity1: jest.fn(),
+            });
+
+            const startTime = Date.now();
+            await (service as any).loadActivitiesForWorker(activities);
+            const duration = Date.now() - startTime;
+
+            // Should timeout after 30 attempts * 100ms = 3000ms
+            expect(duration).toBeGreaterThanOrEqual(2900);
+            expect(activities.size).toBe(1);
+        });
+
+        it('should return "bundle" from getWorkflowSourceFromDef with workflowBundle', async () => {
+            const source = (service as any).getWorkflowSourceFromDef({
+                taskQueue: 'test',
+                workflowBundle: { code: 'bundled-code' },
+            });
+
+            expect(source).toBe('bundle');
+        });
+
+        it('should return "filesystem" from getWorkflowSourceFromDef with workflowsPath', async () => {
+            const source = (service as any).getWorkflowSourceFromDef({
+                taskQueue: 'test',
+                workflowsPath: './workflows',
+            });
+
+            expect(source).toBe('filesystem');
+        });
+
+        it('should return "none" from getWorkflowSourceFromDef with neither', async () => {
+            const source = (service as any).getWorkflowSourceFromDef({
+                taskQueue: 'test',
+            });
+
+            expect(source).toBe('none');
+        });
+
+        it('should shutdown multiple workers gracefully on module destroy', async () => {
+            await service.onModuleInit();
+            await service.onApplicationBootstrap();
+
+            await service.onModuleDestroy();
+
+            expect((service as any).workers.size).toBe(0);
+        });
+
+        it('should handle errors during individual worker shutdown on destroy', async () => {
+            await service.onModuleInit();
+            await service.startWorkerByTaskQueue('queue-1');
+
+            const workerInstance = (service as any).workers.get('queue-1');
+            workerInstance.worker.shutdown = jest
+                .fn()
+                .mockRejectedValue(new Error('Shutdown failed'));
+
+            const loggerSpy = jest.spyOn((service as any).logger, 'warn').mockImplementation();
+
+            await service.onModuleDestroy();
+
+            expect(loggerSpy).toHaveBeenCalledWith(
+                expect.stringContaining("Error shutting down worker 'queue-1'"),
+                expect.any(Error),
+            );
+            loggerSpy.mockRestore();
+        });
+
+        it('should skip shutdown for non-running workers on destroy', async () => {
+            await service.onModuleInit();
+
+            const workerInstance = (service as any).workers.get('queue-1');
+            const shutdownSpy = jest.spyOn(workerInstance.worker, 'shutdown');
+
+            await service.onModuleDestroy();
+
+            expect(shutdownSpy).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('Legacy Single Worker', () => {
+        let singleWorkerService: TemporalWorkerManagerService;
+
+        beforeEach(async () => {
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    TemporalWorkerManagerService,
+                    {
+                        provide: TEMPORAL_MODULE_OPTIONS,
+                        useValue: {
+                            connection: { address: 'localhost:7233' },
+                            taskQueue: 'test-queue',
+                            worker: { workflowsPath: './workflows' },
+                        },
+                    },
+                    {
+                        provide: TEMPORAL_CONNECTION,
+                        useValue: null,
+                    },
+                    {
+                        provide: TemporalDiscoveryService,
+                        useValue: mockDiscoveryService,
+                    },
+                ],
+            }).compile();
+
+            singleWorkerService = module.get<TemporalWorkerManagerService>(
+                TemporalWorkerManagerService,
+            );
+        });
+
+        it('should throw error when connection not established in createWorker', async () => {
+            (singleWorkerService as any).connection = null;
+
+            // Mock createConnection to not set connection
+            jest.spyOn(singleWorkerService as any, 'createConnection').mockResolvedValue(undefined);
+
+            await expect((singleWorkerService as any).createWorker()).rejects.toThrow(
+                'Connection not established',
+            );
+        });
+
+        it('should return error when worker configuration is missing in initializeWorker', async () => {
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    TemporalWorkerManagerService,
+                    {
+                        provide: TEMPORAL_MODULE_OPTIONS,
+                        useValue: {
+                            connection: { address: 'localhost:7233' },
+                            taskQueue: 'test-queue',
+                            // No worker config
+                        },
+                    },
+                    {
+                        provide: TEMPORAL_CONNECTION,
+                        useValue: null,
+                    },
+                    {
+                        provide: TemporalDiscoveryService,
+                        useValue: mockDiscoveryService,
+                    },
+                ],
+            }).compile();
+
+            const service = module.get<TemporalWorkerManagerService>(TemporalWorkerManagerService);
+
+            const result = await (service as any).initializeWorker();
+
+            expect(result.success).toBe(false);
+            expect(result.error).toBeDefined();
+            expect(result.error.message).toBe('Worker configuration is required');
+            expect(result.activitiesCount).toBe(0);
+        });
+
+        it('should shutdown legacy single worker on module destroy', async () => {
+            const mockWorker = {
+                shutdown: jest.fn().mockResolvedValue(undefined),
+                run: jest.fn().mockResolvedValue(undefined),
+            };
+            (singleWorkerService as any).worker = mockWorker;
+            (singleWorkerService as any).initialized = true;
+            (singleWorkerService as any).isRunning = true; // Worker is running
+            (singleWorkerService as any).workers.clear(); // Ensure no multiple workers
+
+            await singleWorkerService.onModuleDestroy();
+
+            expect(mockWorker.shutdown).toHaveBeenCalled();
+        });
+
+        it('should return null when getting connection if connection is null', async () => {
+            (singleWorkerService as any).connection = null;
+
+            const connection = singleWorkerService.getConnection();
+
+            expect(connection).toBeNull();
+        });
+    });
+
+    describe('Edge Cases - Activity Loading', () => {
+        const emptyActivityClassesOptions: TemporalOptions = {
+            connection: {
+                namespace: 'test-namespace',
+                address: 'localhost:7233',
+            },
+            workers: [
+                {
+                    taskQueue: 'queue-1',
+                    workflowsPath: './dist/workflows',
+                    activityClasses: [], // Empty array should use all discovered
+                },
+            ],
+            enableLogger: false,
+        };
+
+        it('should use all discovered activities when activityClasses is empty', async () => {
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    TemporalWorkerManagerService,
+                    {
+                        provide: TEMPORAL_MODULE_OPTIONS,
+                        useValue: emptyActivityClassesOptions,
+                    },
+                    {
+                        provide: TEMPORAL_CONNECTION,
+                        useValue: null,
+                    },
+                    {
+                        provide: TemporalDiscoveryService,
+                        useValue: mockDiscoveryService,
+                    },
+                ],
+            }).compile();
+
+            const service = module.get<TemporalWorkerManagerService>(TemporalWorkerManagerService);
+
+            mockDiscoveryService.getAllActivities = jest.fn().mockReturnValue({
+                discoveredActivity: jest.fn(),
+            });
+
+            await service.onModuleInit();
+
+            expect(mockDiscoveryService.getAllActivities).toHaveBeenCalled();
+        });
+
+        it('should load activities with loadActivitiesForWorker when activityClasses provided', async () => {
+            class TestActivity {}
+
+            const withActivityClassesOptions: TemporalOptions = {
+                connection: {
+                    namespace: 'test-namespace',
+                    address: 'localhost:7233',
+                },
+                workers: [
+                    {
+                        taskQueue: 'queue-1',
+                        workflowsPath: './dist/workflows',
+                        activityClasses: [TestActivity],
+                    },
+                ],
+                enableLogger: false,
+            };
+
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    TemporalWorkerManagerService,
+                    {
+                        provide: TEMPORAL_MODULE_OPTIONS,
+                        useValue: withActivityClassesOptions,
+                    },
+                    {
+                        provide: TEMPORAL_CONNECTION,
+                        useValue: null,
+                    },
+                    {
+                        provide: TemporalDiscoveryService,
+                        useValue: mockDiscoveryService,
+                    },
+                ],
+            }).compile();
+
+            const service = module.get<TemporalWorkerManagerService>(TemporalWorkerManagerService);
+
+            mockDiscoveryService.getHealthStatus = jest.fn().mockReturnValue({ isComplete: true });
+            mockDiscoveryService.getAllActivities = jest.fn().mockReturnValue({
+                testActivity: jest.fn(),
+            });
+
+            await service.onModuleInit();
+
+            expect(mockDiscoveryService.getHealthStatus).toHaveBeenCalled();
+            expect(mockDiscoveryService.getAllActivities).toHaveBeenCalled();
         });
     });
 });

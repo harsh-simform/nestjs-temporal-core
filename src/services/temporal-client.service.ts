@@ -137,6 +137,7 @@ export class TemporalClientService implements OnModuleInit {
             }
         }
 
+        /* istanbul ignore next */
         // This should never be reached due to the throw in the catch block
         throw new Error(`Failed to start workflow '${workflowType}' after ${maxRetries} attempts`);
     }

@@ -102,8 +102,6 @@ describe('Constants', () => {
         });
     });
 
-
-
     describe('TIMEOUTS', () => {
         it('should export all timeout values', () => {
             expect(TIMEOUTS.ACTIVITY_LONG).toBe('30m');
@@ -170,7 +168,6 @@ describe('Constants', () => {
             }).toThrow();
         });
     });
-
 
     describe('WorkflowIdConflictPolicy enum', () => {
         it('should export all conflict policy values', () => {

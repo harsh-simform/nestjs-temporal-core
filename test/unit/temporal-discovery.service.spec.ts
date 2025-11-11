@@ -154,6 +154,32 @@ describe('TemporalDiscoveryService', () => {
 
             expect(svc).toBeDefined();
         });
+
+        it('should use default TemporalMetadataAccessor when not provided', async () => {
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    TemporalDiscoveryService,
+                    {
+                        provide: DiscoveryService,
+                        useValue: discoveryService,
+                    },
+                    // No TemporalMetadataAccessor provided - should use default
+                    {
+                        provide: TEMPORAL_MODULE_OPTIONS,
+                        useValue: mockOptions,
+                    },
+                    {
+                        provide: ACTIVITY_MODULE_OPTIONS,
+                        useValue: mockActivityModuleOptions,
+                    },
+                ],
+            }).compile();
+
+            const svc = module.get<TemporalDiscoveryService>(TemporalDiscoveryService);
+            await svc.onModuleInit();
+
+            expect(svc).toBeDefined();
+        });
     });
 
     describe('onModuleInit', () => {
@@ -1457,6 +1483,304 @@ describe('TemporalDiscoveryService', () => {
             expect(logSpy).toHaveBeenCalled();
 
             logSpy.mockRestore();
+        });
+    });
+
+    describe('Additional branch coverage', () => {
+        it('should cover getActivity line 82 - when activityInfo is a function directly', async () => {
+            const testInstance = new TestActivity();
+            const directFunction = testInstance.testMethod.bind(testInstance);
+
+            // Manually set discovered activity as a direct function (not wrapped in object)
+            (service as any).discoveredActivities.set('directFunction', directFunction);
+
+            const activity = service.getActivity('directFunction');
+
+            // When activityInfo is a function, it should return the function itself
+            expect(activity).toBe(directFunction);
+            expect(typeof activity).toBe('function');
+        });
+
+        it('should cover constructor with explicitly undefined logger options', async () => {
+            const optionsWithUndefined: TemporalOptions = {
+                taskQueue: 'test',
+                connection: { address: 'localhost:7233' },
+                enableLogger: undefined,
+                logLevel: undefined,
+            };
+
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    TemporalDiscoveryService,
+                    {
+                        provide: DiscoveryService,
+                        useValue: discoveryService,
+                    },
+                    {
+                        provide: TemporalMetadataAccessor,
+                        useValue: metadataAccessor,
+                    },
+                    {
+                        provide: TEMPORAL_MODULE_OPTIONS,
+                        useValue: optionsWithUndefined,
+                    },
+                    {
+                        provide: ACTIVITY_MODULE_OPTIONS,
+                        useValue: mockActivityModuleOptions,
+                    },
+                ],
+            }).compile();
+
+            const svc = module.get<TemporalDiscoveryService>(TemporalDiscoveryService);
+            await svc.onModuleInit();
+
+            expect(svc).toBeDefined();
+        });
+
+        it('should cover constructor with only enableLogger defined', async () => {
+            const optionsOnlyEnableLogger: TemporalOptions = {
+                taskQueue: 'test',
+                connection: { address: 'localhost:7233' },
+                enableLogger: true,
+            };
+
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    TemporalDiscoveryService,
+                    {
+                        provide: DiscoveryService,
+                        useValue: discoveryService,
+                    },
+                    {
+                        provide: TemporalMetadataAccessor,
+                        useValue: metadataAccessor,
+                    },
+                    {
+                        provide: TEMPORAL_MODULE_OPTIONS,
+                        useValue: optionsOnlyEnableLogger,
+                    },
+                    {
+                        provide: ACTIVITY_MODULE_OPTIONS,
+                        useValue: mockActivityModuleOptions,
+                    },
+                ],
+            }).compile();
+
+            const svc = module.get<TemporalDiscoveryService>(TemporalDiscoveryService);
+            await svc.onModuleInit();
+
+            expect(svc).toBeDefined();
+        });
+
+        it('should cover constructor with only logLevel defined', async () => {
+            const optionsOnlyLogLevel: TemporalOptions = {
+                taskQueue: 'test',
+                connection: { address: 'localhost:7233' },
+                logLevel: 'debug',
+            };
+
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    TemporalDiscoveryService,
+                    {
+                        provide: DiscoveryService,
+                        useValue: discoveryService,
+                    },
+                    {
+                        provide: TemporalMetadataAccessor,
+                        useValue: metadataAccessor,
+                    },
+                    {
+                        provide: TEMPORAL_MODULE_OPTIONS,
+                        useValue: optionsOnlyLogLevel,
+                    },
+                    {
+                        provide: ACTIVITY_MODULE_OPTIONS,
+                        useValue: mockActivityModuleOptions,
+                    },
+                ],
+            }).compile();
+
+            const svc = module.get<TemporalDiscoveryService>(TemporalDiscoveryService);
+            await svc.onModuleInit();
+
+            expect(svc).toBeDefined();
+        });
+
+        it('should cover constructor with both enableLogger and logLevel false', async () => {
+            const optionsBothFalse: TemporalOptions = {
+                taskQueue: 'test',
+                connection: { address: 'localhost:7233' },
+                enableLogger: false,
+                logLevel: undefined,
+            };
+
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    TemporalDiscoveryService,
+                    {
+                        provide: DiscoveryService,
+                        useValue: discoveryService,
+                    },
+                    {
+                        provide: TemporalMetadataAccessor,
+                        useValue: metadataAccessor,
+                    },
+                    {
+                        provide: TEMPORAL_MODULE_OPTIONS,
+                        useValue: optionsBothFalse,
+                    },
+                    {
+                        provide: ACTIVITY_MODULE_OPTIONS,
+                        useValue: mockActivityModuleOptions,
+                    },
+                ],
+            }).compile();
+
+            const svc = module.get<TemporalDiscoveryService>(TemporalDiscoveryService);
+            await svc.onModuleInit();
+
+            expect(svc).toBeDefined();
+        });
+
+        it('should cover discoverComponents line 223 with non-Error exception in processWrapper', async () => {
+            const testInstance = new TestActivity();
+            const mockWrapper = {
+                instance: testInstance,
+                metatype: TestActivity,
+            };
+
+            discoveryService.getProviders.mockReturnValue([mockWrapper as any]);
+
+            // Make processWrapper throw a non-Error object
+            jest.spyOn(service as any, 'processWrapper').mockImplementation(() => {
+                throw { code: 'CUSTOM_ERROR', message: 'Not an Error instance' };
+            });
+
+            const logSpy = jest.spyOn(service['logger'], 'warn').mockImplementation();
+
+            await service.onModuleInit();
+
+            // Should handle the non-Error exception and log it
+            expect(logSpy).toHaveBeenCalledWith(
+                expect.stringContaining('Failed to process wrapper'),
+                expect.any(Object),
+            );
+
+            logSpy.mockRestore();
+        });
+
+        it('should cover getActivity with activityInfo that has no handler and is not a function', async () => {
+            // Manually create an activity info object without handler property and not a function
+            const nonFunctionActivityInfo = {
+                name: 'testActivity',
+                className: 'TestClass',
+                someOtherProperty: 'value',
+            };
+
+            (service as any).discoveredActivities.set('testActivity', nonFunctionActivityInfo);
+
+            const result = service.getActivity('testActivity');
+
+            // Should return undefined since info.handler is undefined and info itself is not a function
+            expect(result).toBeUndefined();
+        });
+
+        it('should cover getAllActivities with handler as undefined but activityInfo is a function', async () => {
+            const testInstance = new TestActivity();
+            const directFunction = testInstance.testMethod.bind(testInstance);
+
+            // Set activity as direct function (activityInfo itself is the function)
+            (service as any).discoveredActivities.set('funcActivity', directFunction);
+
+            const allActivities = service.getAllActivities();
+
+            expect(allActivities['funcActivity']).toBe(directFunction);
+            expect(typeof allActivities['funcActivity']).toBe('function');
+        });
+
+        it('should cover error path when wrapper processing throws string', async () => {
+            const mockWrapper = {
+                instance: new TestActivity(),
+                metatype: TestActivity,
+            };
+
+            discoveryService.getProviders.mockReturnValue([mockWrapper as any]);
+
+            // Make processWrapper throw a string
+            jest.spyOn(service as any, 'processWrapper').mockImplementation(() => {
+                throw 'String error message';
+            });
+
+            const logSpy = jest.spyOn(service['logger'], 'warn').mockImplementation();
+
+            await service.onModuleInit();
+
+            expect(logSpy).toHaveBeenCalled();
+
+            logSpy.mockRestore();
+        });
+
+        it('should cover error path when wrapper processing throws null', async () => {
+            const mockWrapper = {
+                instance: new TestActivity(),
+                metatype: TestActivity,
+            };
+
+            discoveryService.getProviders.mockReturnValue([mockWrapper as any]);
+
+            // Make processWrapper throw null
+            jest.spyOn(service as any, 'processWrapper').mockImplementation(() => {
+                throw null;
+            });
+
+            const logSpy = jest.spyOn(service['logger'], 'warn').mockImplementation();
+
+            await service.onModuleInit();
+
+            expect(logSpy).toHaveBeenCalled();
+
+            logSpy.mockRestore();
+        });
+
+        it('should cover error path when wrapper processing throws number', async () => {
+            const mockWrapper = {
+                instance: new TestActivity(),
+                metatype: TestActivity,
+            };
+
+            discoveryService.getProviders.mockReturnValue([mockWrapper as any]);
+
+            // Make processWrapper throw a number
+            jest.spyOn(service as any, 'processWrapper').mockImplementation(() => {
+                throw 500;
+            });
+
+            const logSpy = jest.spyOn(service['logger'], 'warn').mockImplementation();
+
+            await service.onModuleInit();
+
+            expect(logSpy).toHaveBeenCalled();
+
+            logSpy.mockRestore();
+        });
+
+        it('should handle activityInfo.handler returning undefined with typeof check', async () => {
+            // Create an activity info where handler is explicitly undefined
+            const activityInfoWithUndefinedHandler = {
+                handler: undefined,
+                name: 'testActivity',
+            };
+
+            (service as any).discoveredActivities.set(
+                'undefinedHandler',
+                activityInfoWithUndefinedHandler,
+            );
+
+            const activity = service.getActivity('undefinedHandler');
+
+            // Should check typeof info and return undefined since it's not a function
+            expect(activity).toBeUndefined();
         });
     });
 });
