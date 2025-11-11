@@ -1,8 +1,4 @@
-import {
-    SignalMethod,
-    QueryMethod,
-    ChildWorkflow,
-} from '../../src/decorators/workflow.decorator';
+import { SignalMethod, QueryMethod, ChildWorkflow } from '../../src/decorators/workflow.decorator';
 import {
     TEMPORAL_SIGNAL_METHOD,
     TEMPORAL_QUERY_METHOD,

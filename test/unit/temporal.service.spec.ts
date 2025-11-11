@@ -1218,4 +1218,246 @@ describe('TemporalService', () => {
             expect(health.details).toBeDefined();
         });
     });
+
+    describe('Multiple Workers Methods', () => {
+        beforeEach(async () => {
+            await service.onModuleInit();
+        });
+
+        describe('getWorkerManager', () => {
+            it('should return the worker manager service', () => {
+                const manager = service.getWorkerManager();
+
+                expect(manager).toBe(mockWorkerService);
+            });
+        });
+
+        describe('getWorker', () => {
+            it('should get a specific worker by task queue', () => {
+                const mockWorker = { taskQueue: 'test-queue' };
+                mockWorkerService.getWorker = jest.fn().mockReturnValue(mockWorker);
+
+                const result = service.getWorker('test-queue');
+
+                expect(mockWorkerService.getWorker).toHaveBeenCalledWith('test-queue');
+                expect(result).toBe(mockWorker);
+            });
+
+            it('should return null when worker service not available', () => {
+                (service as any).workerService = null;
+
+                const result = service.getWorker('test-queue');
+
+                expect(result).toBeNull();
+            });
+
+            it('should throw error when not initialized', () => {
+                (service as any).isInitialized = false;
+
+                expect(() => service.getWorker('test-queue')).toThrow('not initialized');
+            });
+        });
+
+        describe('getAllWorkers', () => {
+            it('should get all workers information', () => {
+                const mockWorkersInfo = {
+                    workers: new Map(),
+                    totalWorkers: 2,
+                    runningWorkers: 1,
+                    healthyWorkers: 1,
+                };
+                mockWorkerService.getAllWorkers = jest.fn().mockReturnValue(mockWorkersInfo);
+
+                const result = service.getAllWorkers();
+
+                expect(mockWorkerService.getAllWorkers).toHaveBeenCalled();
+                expect(result).toBe(mockWorkersInfo);
+            });
+
+            it('should return null when worker service not available', () => {
+                (service as any).workerService = null;
+
+                const result = service.getAllWorkers();
+
+                expect(result).toBeNull();
+            });
+        });
+
+        describe('getWorkerStatusByTaskQueue', () => {
+            it('should get worker status for a specific task queue', () => {
+                const mockStatus = {
+                    isInitialized: true,
+                    isRunning: true,
+                    isHealthy: true,
+                    taskQueue: 'test-queue',
+                };
+                mockWorkerService.getWorkerStatusByTaskQueue = jest
+                    .fn()
+                    .mockReturnValue(mockStatus);
+
+                const result = service.getWorkerStatusByTaskQueue('test-queue');
+
+                expect(mockWorkerService.getWorkerStatusByTaskQueue).toHaveBeenCalledWith(
+                    'test-queue',
+                );
+                expect(result).toBe(mockStatus);
+            });
+
+            it('should return null when worker service not available', () => {
+                (service as any).workerService = null;
+
+                const result = service.getWorkerStatusByTaskQueue('test-queue');
+
+                expect(result).toBeNull();
+            });
+        });
+
+        describe('startWorkerByTaskQueue', () => {
+            it('should start a specific worker by task queue', async () => {
+                mockWorkerService.startWorkerByTaskQueue = jest.fn().mockResolvedValue(undefined);
+
+                await service.startWorkerByTaskQueue('test-queue');
+
+                expect(mockWorkerService.startWorkerByTaskQueue).toHaveBeenCalledWith('test-queue');
+            });
+
+            it('should throw error when worker service not available', async () => {
+                (service as any).workerService = null;
+
+                await expect(service.startWorkerByTaskQueue('test-queue')).rejects.toThrow(
+                    'Worker service not available',
+                );
+            });
+        });
+
+        describe('stopWorkerByTaskQueue', () => {
+            it('should stop a specific worker by task queue', async () => {
+                mockWorkerService.stopWorkerByTaskQueue = jest.fn().mockResolvedValue(undefined);
+
+                await service.stopWorkerByTaskQueue('test-queue');
+
+                expect(mockWorkerService.stopWorkerByTaskQueue).toHaveBeenCalledWith('test-queue');
+            });
+
+            it('should throw error when worker service not available', async () => {
+                (service as any).workerService = null;
+
+                await expect(service.stopWorkerByTaskQueue('test-queue')).rejects.toThrow(
+                    'Worker service not available',
+                );
+            });
+        });
+
+        describe('registerWorker', () => {
+            it('should register and create a new worker dynamically', async () => {
+                const workerDef = {
+                    taskQueue: 'dynamic-queue',
+                    workflowsPath: './workflows',
+                };
+                const mockResult = {
+                    success: true,
+                    taskQueue: 'dynamic-queue',
+                };
+                mockWorkerService.registerWorker = jest.fn().mockResolvedValue(mockResult);
+
+                const result = await service.registerWorker(workerDef);
+
+                expect(mockWorkerService.registerWorker).toHaveBeenCalledWith(workerDef);
+                expect(result).toBe(mockResult);
+            });
+
+            it('should return error when worker service not available', async () => {
+                (service as any).workerService = null;
+
+                const workerDef = {
+                    taskQueue: 'dynamic-queue',
+                    workflowsPath: './workflows',
+                };
+
+                const result = await service.registerWorker(workerDef);
+
+                expect(result.success).toBe(false);
+                expect(result.taskQueue).toBe('dynamic-queue');
+                expect(result.error).toBeDefined();
+                expect(result.error?.message).toBe('Worker service not available');
+            });
+        });
+    });
+
+    describe('Error Handling - onModuleInit', () => {
+        it('should handle non-Error exceptions in onModuleInit', async () => {
+            // Create a spy that will throw during waitForServicesInitialization
+            const errorService = {
+                ...mockClientService,
+                isHealthy: jest.fn().mockImplementation(() => {
+                    throw 'String error'; // Non-Error exception that escapes catch
+                }),
+            };
+
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    TemporalService,
+                    {
+                        provide: TEMPORAL_MODULE_OPTIONS,
+                        useValue: mockOptions,
+                    },
+                    {
+                        provide: TemporalClientService,
+                        useValue: errorService,
+                    },
+                    {
+                        provide: TemporalWorkerManagerService,
+                        useValue: mockWorkerService,
+                    },
+                    {
+                        provide: TemporalScheduleService,
+                        useValue: mockScheduleService,
+                    },
+                    {
+                        provide: TemporalDiscoveryService,
+                        useValue: mockDiscoveryService,
+                    },
+                    {
+                        provide: TemporalMetadataAccessor,
+                        useValue: mockMetadataAccessor,
+                    },
+                ],
+            }).compile();
+
+            const testService = module.get<TemporalService>(TemporalService);
+
+            // Spy on the private method to throw an unhandled error
+            jest.spyOn(testService as any, 'waitForServicesInitialization').mockRejectedValue(
+                'Initialization failed',
+            );
+
+            const loggerSpy = jest.spyOn((testService as any).logger, 'error').mockImplementation();
+
+            const result = await testService.onModuleInit();
+
+            expect(result.success).toBe(false);
+            expect(result.error).toBeDefined();
+            loggerSpy.mockRestore();
+        });
+    });
+
+    describe('Edge Cases - getWorkerHealth', () => {
+        it('should return not_available when worker service is null', async () => {
+            await service.onModuleInit();
+            (service as any).workerService = null;
+
+            const health = await service.getWorkerHealth();
+
+            expect(health.status).toBe('not_available');
+        });
+
+        it('should return not_available when hasWorker returns false', async () => {
+            await service.onModuleInit();
+            mockWorkerService.isWorkerAvailable = jest.fn().mockReturnValue(false);
+
+            const health = await service.getWorkerHealth();
+
+            expect(health.status).toBe('not_available');
+        });
+    });
 });

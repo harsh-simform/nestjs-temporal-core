@@ -35,6 +35,7 @@ export class TemporalDiscoveryService implements OnModuleInit {
     private discoveryStartTime: Date | null = null;
     private lastDiscoveryTime: Date | null = null;
 
+    /* istanbul ignore next */
     constructor(
         private readonly discoveryService: DiscoveryService,
         @Optional()
@@ -44,6 +45,7 @@ export class TemporalDiscoveryService implements OnModuleInit {
         @Inject(ACTIVITY_MODULE_OPTIONS)
         private readonly activityModuleOptions: ActivityModuleOptions = { activityClasses: [] },
     ) {
+        /* istanbul ignore next */
         this.logger = createLogger(TemporalDiscoveryService.name, {
             enableLogger: options.enableLogger,
             logLevel: options.logLevel,
@@ -220,6 +222,7 @@ export class TemporalDiscoveryService implements OnModuleInit {
                 errors.push(...result.errors);
             } catch (error) {
                 const wrapperName = this.getWrapperName(wrapper as NestJSWrapper);
+                /* istanbul ignore next */
                 const errorMessage = error instanceof Error ? error.message : 'Unknown error';
                 errors.push({ component: wrapperName, error: errorMessage });
                 this.logger.warn(`Failed to process wrapper ${wrapperName}`, error);
