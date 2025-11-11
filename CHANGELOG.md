@@ -1,4 +1,11 @@
 # Changelog
+## [3.1.0] - 2025-11-11
+
+### Changes
+
+- feat: Enhance TemporalWorkerManagerService with multiple workers support (4d22828)
+- test: add unit tests for TemporalWorkerManagerService with multiple workers support (12aee0b)
+
 
 All notable changes to this project will be documented in this file.
 
