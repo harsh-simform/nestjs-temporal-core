@@ -411,17 +411,13 @@ export class TemporalWorkerManagerService
             } catch (shutdownError: unknown) {
                 // Handle race condition where worker state changes between check and shutdown
                 const errorMessage =
-                    shutdownError instanceof Error
-                        ? shutdownError.message
-                        : String(shutdownError);
+                    shutdownError instanceof Error ? shutdownError.message : String(shutdownError);
                 if (
                     errorMessage.includes('Not running') ||
                     errorMessage.includes('DRAINING') ||
                     errorMessage.includes('STOPPING')
                 ) {
-                    this.logger.debug(
-                        `Worker '${taskQueue}' is already shutting down or stopped`,
-                    );
+                    this.logger.debug(`Worker '${taskQueue}' is already shutting down or stopped`);
                 } else {
                     // Re-throw unexpected errors
                     throw shutdownError;
@@ -1221,7 +1217,9 @@ export class TemporalWorkerManagerService
                                     workerState === 'FAILED'
                                 ) {
                                     await workerInstance.worker.shutdown();
-                                    this.logger.debug(`Worker '${taskQueue}' shut down successfully`);
+                                    this.logger.debug(
+                                        `Worker '${taskQueue}' shut down successfully`,
+                                    );
                                 } else if (
                                     workerState === 'STOPPING' ||
                                     workerState === 'DRAINING' ||
