@@ -1,4 +1,10 @@
 # Changelog
+## [3.1.6] - 2025-11-12
+
+### Changes
+
+- chore: update release workflow to generate documentation after version bump; improve README with example project details (15cd112)
+
 ## [3.1.5] - 2025-11-12
 
 ### Changes
