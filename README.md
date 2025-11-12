@@ -8,7 +8,7 @@ A comprehensive NestJS integration framework for Temporal.io that provides enter
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![npm downloads](https://img.shields.io/npm/dm/nestjs-temporal-core.svg)](https://www.npmjs.com/package/nestjs-temporal-core)
 
-[Documentation](https://harsh-simform.github.io/nestjs-temporal-core/) • [NPM](https://www.npmjs.com/package/nestjs-temporal-core) • [GitHub](https://github.com/harsh-simform/nestjs-temporal-core) • [Examples](#examples)
+[Documentation](https://harsh-simform.github.io/nestjs-temporal-core/) • [NPM](https://www.npmjs.com/package/nestjs-temporal-core) • [GitHub](https://github.com/harsh-simform/nestjs-temporal-core) • [Example Project](https://github.com/harsh-simform/nestjs-temporal-core-example)
 
 </div>
 
@@ -845,7 +845,19 @@ Key methods:
 
 ## Examples
 
-For complete working examples, visit our [documentation](https://harsh-simform.github.io/nestjs-temporal-core/). The README includes example scenarios for:
+### 🚀 Example Project
+
+Check out our **[complete example repository](https://github.com/harsh-simform/nestjs-temporal-core-example)** featuring:
+
+- ✅ **Real-world implementations** - Production-ready examples
+- ✅ **Multiple use cases** - E-commerce, notifications, reports, and more
+- ✅ **Best practices** - Following all recommended patterns
+- ✅ **Docker setup** - Ready-to-run with docker-compose
+- ✅ **Test coverage** - Comprehensive test examples
+
+### 📚 Documentation Examples
+
+For more examples, visit our [documentation](https://harsh-simform.github.io/nestjs-temporal-core/). Key example scenarios include:
 
 1. **E-commerce Order Processing** - Complete example with compensation logic
 2. **Scheduled Reports** - Creating and managing scheduled workflows
@@ -1336,6 +1348,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - 💬 **Discussions**: [GitHub Discussions](https://github.com/harsh-simform/nestjs-temporal-core/discussions)
 - 📦 **NPM**: [nestjs-temporal-core](https://www.npmjs.com/package/nestjs-temporal-core)
 - 🔄 **Changelog**: [Releases](https://github.com/harsh-simform/nestjs-temporal-core/releases)
+- 📖 **Example Project**: [nestjs-temporal-core-example](https://github.com/harsh-simform/nestjs-temporal-core-example)
 
 ## Related Projects
 

@@ -109,16 +109,14 @@ jobs:
             - name: Build package
               run: npm run build
 
-            - name: Generate documentation
-              run: |
-                  npm run docs:generate
-                  touch docs/.nojekyll
-
             - name: Commit version bump
               run: |
                   git add package.json package-lock.json CHANGELOG.md
                   git commit -m "chore: release v$NEW_VERSION [skip ci]"
                   git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
+
+            - name: Generate documentation
+              run: npm run docs:generate
 
             - name: Push changes
               run: |
