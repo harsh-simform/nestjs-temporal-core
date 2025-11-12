@@ -1,4 +1,10 @@
 # Changelog
+## [3.1.5] - 2025-11-12
+
+### Changes
+
+- Update documentation for TIMEOUTS and WORKFLOW_PARAMS_METADATA; remove WorkflowRun documentation (c293dc5)
+
 ## [3.1.4] - 2025-11-12
 
 ### Changes
