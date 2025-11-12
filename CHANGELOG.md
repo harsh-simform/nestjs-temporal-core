@@ -1,4 +1,10 @@
 # Changelog
+## [3.1.4] - 2025-11-12
+
+### Changes
+
+- chore: add environment configuration for GitHub Pages deployment (2236d03)
+
 ## [3.1.3] - 2025-11-12
 
 ### Changes
