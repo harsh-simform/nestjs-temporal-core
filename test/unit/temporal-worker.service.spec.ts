@@ -50,6 +50,7 @@ describe('TemporalWorkerManagerService', () => {
             getHealthStatus: jest.fn().mockReturnValue({ isComplete: true, status: 'healthy' }),
             getAllActivities: jest.fn().mockReturnValue({}),
             getActivityNames: jest.fn().mockReturnValue([]),
+            getDiscoveredActivities: jest.fn().mockReturnValue(new Map()),
         };
 
         (Worker.create as jest.Mock).mockResolvedValue(mockWorker);
@@ -2223,16 +2224,38 @@ describe('TemporalWorkerManagerService', () => {
         });
 
         it('should handle worker with activityClasses', async () => {
+            class TestActivity {}
             const workerWithActivityClasses = {
                 ...multipleWorkersOptions,
                 workers: [
                     {
                         taskQueue: 'activity-queue',
                         workflowsPath: './dist/workflows',
-                        activityClasses: [class TestActivity {}],
+                        activityClasses: [TestActivity],
                     },
                 ],
             };
+
+            // Mock getDiscoveredActivities to return activities with proper metadata
+            const mockActivitiesMap = new Map();
+            mockActivitiesMap.set('testActivity', {
+                name: 'testActivity',
+                className: 'TestActivity',
+                method: {},
+                instance: new TestActivity(),
+                handler: jest.fn(),
+            });
+            mockActivitiesMap.set('otherActivity', {
+                name: 'otherActivity',
+                className: 'OtherActivity',
+                method: {},
+                instance: {},
+                handler: jest.fn(),
+            });
+
+            mockDiscoveryService.getDiscoveredActivities = jest
+                .fn()
+                .mockReturnValue(mockActivitiesMap);
 
             const module: TestingModule = await Test.createTestingModule({
                 providers: [
@@ -2257,6 +2280,7 @@ describe('TemporalWorkerManagerService', () => {
             await svc.onModuleInit();
 
             expect(Worker.create).toHaveBeenCalled();
+            expect(mockDiscoveryService.getDiscoveredActivities).toHaveBeenCalled();
         });
 
         it('should handle worker with workflowBundle', async () => {
@@ -2858,6 +2882,23 @@ describe('TemporalWorkerManagerService', () => {
                 enableLogger: false,
             };
 
+            // Mock getDiscoveredActivities to return activities with proper metadata
+            const mockActivitiesMap = new Map();
+            mockActivitiesMap.set('testActivity', {
+                name: 'testActivity',
+                className: 'TestActivity',
+                method: {},
+                instance: new TestActivity(),
+                handler: jest.fn(),
+            });
+            mockActivitiesMap.set('otherActivity', {
+                name: 'otherActivity',
+                className: 'OtherActivity',
+                method: {},
+                instance: {},
+                handler: jest.fn(),
+            });
+
             const module: TestingModule = await Test.createTestingModule({
                 providers: [
                     TemporalWorkerManagerService,
@@ -2879,14 +2920,14 @@ describe('TemporalWorkerManagerService', () => {
             const service = module.get<TemporalWorkerManagerService>(TemporalWorkerManagerService);
 
             mockDiscoveryService.getHealthStatus = jest.fn().mockReturnValue({ isComplete: true });
-            mockDiscoveryService.getAllActivities = jest.fn().mockReturnValue({
-                testActivity: jest.fn(),
-            });
+            mockDiscoveryService.getDiscoveredActivities = jest
+                .fn()
+                .mockReturnValue(mockActivitiesMap);
 
             await service.onModuleInit();
 
             expect(mockDiscoveryService.getHealthStatus).toHaveBeenCalled();
-            expect(mockDiscoveryService.getAllActivities).toHaveBeenCalled();
+            expect(mockDiscoveryService.getDiscoveredActivities).toHaveBeenCalled();
         });
     });
 
@@ -3215,7 +3256,9 @@ describe('TemporalWorkerManagerService', () => {
             };
             workerInstance.worker = errorWorker;
 
-            const loggerSpy = jest.spyOn((multiService as any).logger, 'debug').mockImplementation();
+            const loggerSpy = jest
+                .spyOn((multiService as any).logger, 'debug')
+                .mockImplementation();
 
             await multiService.stopWorkerByTaskQueue('test-queue-edge');
 

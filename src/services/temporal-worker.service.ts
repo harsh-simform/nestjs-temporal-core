@@ -5,6 +5,7 @@ import {
     OnApplicationBootstrap,
     BeforeApplicationShutdown,
     Inject,
+    Type,
 } from '@nestjs/common';
 import { Worker, NativeConnection } from '@temporalio/worker';
 import { TEMPORAL_MODULE_OPTIONS, TEMPORAL_CONNECTION } from '../constants';
@@ -252,7 +253,7 @@ export class TemporalWorkerManagerService
 
         // Get activities from discovery service
         if (workerDef.activityClasses && workerDef.activityClasses.length > 0) {
-            await this.loadActivitiesForWorker(activities);
+            await this.loadActivitiesForWorker(activities, workerDef.activityClasses);
         } else {
             // Use all discovered activities
             const allActivities = this.discoveryService.getAllActivities();
@@ -542,7 +543,10 @@ export class TemporalWorkerManagerService
     /**
      * Helper to load activities for a specific worker
      */
-    private async loadActivitiesForWorker(activities: Map<string, Function>): Promise<void> {
+    private async loadActivitiesForWorker(
+        activities: Map<string, Function>,
+        activityClasses?: Array<Type<object>>,
+    ): Promise<void> {
         // Wait for discovery service to complete
         let attempts = 0;
         const maxAttempts = 30;
@@ -556,10 +560,37 @@ export class TemporalWorkerManagerService
             attempts++;
         }
 
-        const allActivities = this.discoveryService.getAllActivities();
+        // If no activity classes specified, load all activities
+        if (!activityClasses || activityClasses.length === 0) {
+            const allActivities = this.discoveryService.getAllActivities();
+            for (const [activityName, handler] of Object.entries(allActivities)) {
+                activities.set(activityName, handler);
+            }
+            return;
+        }
 
-        for (const [activityName, handler] of Object.entries(allActivities)) {
-            activities.set(activityName, handler);
+        // Filter activities by the specified classes
+        const discoveredActivities = this.discoveryService.getDiscoveredActivities();
+        const allowedClasses = new Set(activityClasses);
+        const allowedClassNames = new Set(activityClasses.map((cls) => cls.name));
+
+        for (const [activityName, activityInfo] of discoveredActivities.entries()) {
+            // Match by constructor (robust) or class name (fallback)
+            const activityInstance = activityInfo.instance;
+            const activityConstructor =
+                activityInstance &&
+                typeof activityInstance === 'object' &&
+                'constructor' in activityInstance
+                    ? (activityInstance.constructor as Type<object>)
+                    : null;
+
+            const matchesByConstructor =
+                activityConstructor && allowedClasses.has(activityConstructor);
+            const matchesByName = allowedClassNames.has(activityInfo.className);
+
+            if (matchesByConstructor || matchesByName) {
+                activities.set(activityName, activityInfo.handler);
+            }
         }
     }
 
