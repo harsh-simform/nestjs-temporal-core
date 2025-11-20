@@ -1,154 +1,147 @@
-name: Release to NPM
+name: Release
 
 on:
-    push:
-        branches:
-            - main
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version bump type"
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+        default: "patch"
 
 permissions:
-    contents: write
-    pull-requests: read
-    pages: write
-    id-token: write
+  contents: write
+  pages: write
+  id-token: write
 
 jobs:
-    release:
-        runs-on: ubuntu-latest
-        environment:
-            name: github-pages
-            url: ${{ steps.deployment.outputs.page_url }}
+  release:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get-version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
-        steps:
-            - name: Checkout code
-              uses: actions/checkout@v4
-              with:
-                  fetch-depth: 0
-                  token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          registry-url: "https://registry.npmjs.org"
 
-            - name: Setup Node.js
-              uses: actions/setup-node@v4
-              with:
-                  node-version: "20"
-                  registry-url: "https://registry.npmjs.org"
+      - name: Install dependencies
+        run: npm ci
 
-            - name: Configure Git
-              run: |
-                  git config --global user.name "github-actions[bot]"
-                  git config --global user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Version bump
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          npm version ${{ github.event.inputs.version }} -m "chore: release v%s"
+          git push origin master --follow-tags
 
-            - name: Install dependencies
-              run: npm ci
+      - name: Run tests
+        run: npm test
 
-            - name: Run tests
-              run: npm test
+      - name: Build package
+        run: npm run build
 
-            - name: Determine version bump type
-              id: version-bump
-              run: |
-                  # Get the last commit message
-                  COMMIT_MSG=$(git log -1 --pretty=%B)
-                  echo "Commit message: $COMMIT_MSG"
+      - name: Generate coverage badges
+        run: npm run make-badges
 
-                  # Determine bump type based on conventional commits
-                  if echo "$COMMIT_MSG" | grep -qiE "^feat(\(.*\))?!:|^BREAKING CHANGE:|breaking change"; then
-                    echo "type=major" >> $GITHUB_OUTPUT
-                    echo "Version bump: MAJOR (breaking change)"
-                  elif echo "$COMMIT_MSG" | grep -qiE "^feat(\(.*\))?:"; then
-                    echo "type=minor" >> $GITHUB_OUTPUT
-                    echo "Version bump: MINOR (feature)"
-                  elif echo "$COMMIT_MSG" | grep -qiE "^fix(\(.*\))?:|^chore(\(.*\))?:|^docs(\(.*\))?:|^style(\(.*\))?:|^refactor(\(.*\))?:|^perf(\(.*\))?:|^test(\(.*\))?:"; then
-                    echo "type=patch" >> $GITHUB_OUTPUT
-                    echo "Version bump: PATCH (fix/chore/etc)"
-                  else
-                    echo "type=patch" >> $GITHUB_OUTPUT
-                    echo "Version bump: PATCH (default)"
-                  fi
+      - name: Get version
+        id: get-version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Releasing version: $VERSION"
 
-            - name: Bump version
-              run: |
-                  # Bump version without creating git tag (we'll do that after)
-                  npm version ${{ steps.version-bump.outputs.type }} --no-git-tag-version
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get the previous tag
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          CURRENT_TAG="v${{ steps.get-version.outputs.version }}"
 
-                  # Get the new version
-                  NEW_VERSION=$(node -p "require('./package.json').version")
-                  echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
-                  echo "New version: $NEW_VERSION"
+          if [ -z "$PREVIOUS_TAG" ]; then
+            echo "First release"
+            CHANGELOG="First release of nestjs-mcp"
+          else
+            echo "Generating changelog from $PREVIOUS_TAG to HEAD"
+            CHANGELOG=$(git log $PREVIOUS_TAG..HEAD --pretty=format:"- %s (%h)" --no-merges)
+          fi
 
-            - name: Update CHANGELOG
-              run: |
-                  # Get commit messages since last tag
-                  LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-                  if [ -z "$LAST_TAG" ]; then
-                    COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges)
-                  else
-                    COMMITS=$(git log ${LAST_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges)
-                  fi
+          # Save to file for GitHub release
+          echo "$CHANGELOG" > CHANGELOG.txt
 
-                  # Get current date
-                  DATE=$(date +%Y-%m-%d)
+          echo "Changelog generated"
 
-                  # Create new changelog entry
-                  cat > /tmp/new_entry.md << EOF
-                  ## [$NEW_VERSION] - $DATE
+      - name: Verify NPM token
+        run: |
+          if [ -z "${{ secrets.NPM_TOKEN }}" ]; then
+            echo "::error::NPM_TOKEN secret is not set"
+            echo "Please add your npm token to GitHub repository secrets:"
+            echo "1. Go to: https://github.com/${{ github.repository }}/settings/secrets/actions"
+            echo "2. Click 'New repository secret'"
+            echo "3. Name: NPM_TOKEN"
+            echo "4. Value: Your npm token (create one at https://www.npmjs.com/settings/YOUR_USERNAME/tokens)"
+            echo "5. Make sure the token has 'Automation' or 'Publish' permissions"
+            exit 1
+          fi
+          echo "NPM_TOKEN is configured"
 
-                  ### Changes
+      - name: Publish to npm
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-                  $COMMITS
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.get-version.outputs.version }}
+          name: Release v${{ steps.get-version.outputs.version }}
+          body_path: CHANGELOG.txt
+          draft: false
+          prerelease: false
+          files: |
+            badges/*.svg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-                  EOF
+      - name: Generate documentation
+        run: npm run docs:build
 
-                  # Update CHANGELOG.md
-                  if [ -f CHANGELOG.md ]; then
-                    # Insert new entry after the header
-                    sed -i.bak '1 r /tmp/new_entry.md' CHANGELOG.md && rm CHANGELOG.md.bak
-                  else
-                    echo "# Changelog" > CHANGELOG.md
-                    cat /tmp/new_entry.md >> CHANGELOG.md
-                  fi
+      - name: Upload documentation artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./docs
 
-            - name: Build package
-              run: npm run build
+  deploy-docs:
+    needs: release
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
 
-            - name: Commit version bump
-              run: |
-                  git add package.json package-lock.json CHANGELOG.md
-                  git commit -m "chore: release v$NEW_VERSION [skip ci]"
-                  git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
+  post-release:
+    needs: [release, deploy-docs]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-            - name: Generate documentation
-              run: npm run docs:generate
-
-            - name: Push changes
-              run: |
-                  git push origin main
-                  git push origin "v$NEW_VERSION"
-
-            - name: Publish to NPM
-              run: npm publish --access public
-              env:
-                  NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-            - name: Create GitHub Release
-              uses: actions/create-release@v1
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              with:
-                  tag_name: v${{ env.NEW_VERSION }}
-                  release_name: Release v${{ env.NEW_VERSION }}
-                  body: |
-                      ## Changes in v${{ env.NEW_VERSION }}
-
-                      See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
-
-                      📚 [View Documentation](https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }})
-                  draft: false
-                  prerelease: false
-
-            - name: Upload documentation to GitHub Pages
-              uses: actions/upload-pages-artifact@v3
-              with:
-                  path: docs
-
-            - name: Deploy to GitHub Pages
-              id: deployment
-              uses: actions/deploy-pages@v4
+      - name: Notify release completion
+        run: |
+          echo "✅ Release v${{ needs.release.outputs.version }} completed successfully!"
+          echo "📦 Package published to npm: https://www.npmjs.com/package/@nestjs-mcp/server"
+          echo "📚 Documentation deployed to GitHub Pages"
+          echo "🏷️ GitHub release created: https://github.com/${{ github.repository }}/releases/tag/v${{ needs.release.outputs.version }}"
