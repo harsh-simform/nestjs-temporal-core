@@ -25,7 +25,9 @@
   "scripts": {
     "build": "rimraf dist && tsc -p tsconfig.json",
     "format": "prettier --write \"src/**/*.{ts,js,json,md}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,js,json,md}\"",
     "lint": "eslint \"src/**/*.ts\" --fix",
+    "lint:check": "eslint \"src/**/*.ts\"",
     "type-check": "tsc --noEmit",
     "fix-all": "npm run format && npm run lint",
     "update:packages": "npx npm-check-updates -u",
