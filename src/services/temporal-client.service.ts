@@ -83,6 +83,11 @@ export class TemporalClientService implements OnModuleInit {
     ): Promise<WorkflowHandleWithMetadata> {
         this.ensureClientAvailable();
 
+        // Validate workflow ID if user provided one (including empty strings)
+        if (options?.workflowId !== undefined) {
+            this.validateWorkflowId(options.workflowId);
+        }
+
         const workflowId = options?.workflowId || this.generateWorkflowId(workflowType);
         const taskQueue = options?.taskQueue || this.options.taskQueue || 'default';
 
@@ -386,7 +391,35 @@ export class TemporalClientService implements OnModuleInit {
     private generateWorkflowId(workflowType: string): string {
         const timestamp = Date.now();
         const random = Math.random().toString(36).substring(2, 8);
-        return `${workflowType}-${timestamp}-${random}`;
+        const workflowId = `${workflowType}-${timestamp}-${random}`;
+        this.validateWorkflowId(workflowId);
+        return workflowId;
+    }
+
+    /**
+     * Validate workflow ID format and constraints
+     * Temporal has specific requirements for workflow IDs:
+     * - Cannot be empty
+     * - Cannot exceed 1000 characters
+     * - Cannot contain newlines, tabs, or other control characters
+     */
+    private validateWorkflowId(workflowId: string): void {
+        if (!workflowId || workflowId.trim() === '') {
+            throw new Error('Workflow ID cannot be empty');
+        }
+
+        if (workflowId.length > 1000) {
+            throw new Error(
+                `Workflow ID too long (${workflowId.length} characters). Maximum length is 1000 characters`,
+            );
+        }
+
+        // Temporal doesn't allow newlines, tabs, or other control characters
+        if (/[\n\r\t\u0000-\u001f\u007f]/.test(workflowId)) {
+            throw new Error(
+                'Workflow ID cannot contain newlines, tabs, or control characters',
+            );
+        }
     }
 
     private extractErrorMessage(error: unknown): string {

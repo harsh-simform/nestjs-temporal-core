@@ -284,7 +284,9 @@ export class TemporalWorkerManagerService
 
         // Create the worker
         const { Worker } = await import('@temporalio/worker');
-        const worker = await Worker.create(workerConfig as never);
+        // Type assertion: WorkerConfig extends WorkerOptions but has looser typing for flexibility
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const worker = await Worker.create(workerConfig as any);
 
         // Create worker instance
         const workerInstance: WorkerInstance = {
@@ -1068,7 +1070,9 @@ export class TemporalWorkerManagerService
 
         const workerConfig = await this.createWorkerConfig();
         const { Worker } = await import('@temporalio/worker');
-        this.worker = await Worker.create(workerConfig as never);
+        // Type assertion: WorkerConfig extends WorkerOptions but has looser typing for flexibility
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        this.worker = await Worker.create(workerConfig as any);
     }
 
     /**
@@ -1152,7 +1156,9 @@ export class TemporalWorkerManagerService
 
             // Create the worker
             const { Worker } = await import('@temporalio/worker');
-            this.worker = await Worker.create(workerConfig as never);
+            // Type assertion: WorkerConfig extends WorkerOptions but has looser typing for flexibility
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            this.worker = await Worker.create(workerConfig as any);
 
             this.logger.debug(
                 `Worker created - TaskQueue: ${workerConfig.taskQueue}, Activities: ${this.activities.size}, Source: ${this.getWorkflowSource()}`,

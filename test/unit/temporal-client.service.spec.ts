@@ -437,6 +437,92 @@ describe('TemporalClientService', () => {
 
             logSpy.mockRestore();
         });
+
+        describe('workflow ID validation', () => {
+            it('should reject empty workflow ID', async () => {
+                await expect(
+                    service.startWorkflow('testWorkflow', [], { workflowId: '' }),
+                ).rejects.toThrow('Workflow ID cannot be empty');
+            });
+
+            it('should reject workflow ID with only whitespace', async () => {
+                await expect(
+                    service.startWorkflow('testWorkflow', [], { workflowId: '   ' }),
+                ).rejects.toThrow('Workflow ID cannot be empty');
+            });
+
+            it('should reject workflow ID longer than 1000 characters', async () => {
+                const longId = 'a'.repeat(1001);
+                await expect(
+                    service.startWorkflow('testWorkflow', [], { workflowId: longId }),
+                ).rejects.toThrow('Workflow ID too long');
+                await expect(
+                    service.startWorkflow('testWorkflow', [], { workflowId: longId }),
+                ).rejects.toThrow('Maximum length is 1000 characters');
+            });
+
+            it('should accept workflow ID with exactly 1000 characters', async () => {
+                const maxLengthId = 'a'.repeat(1000);
+                await service.startWorkflow('testWorkflow', [], { workflowId: maxLengthId });
+
+                expect(mockClient.workflow!.start).toHaveBeenCalledWith('testWorkflow', {
+                    workflowId: maxLengthId,
+                    taskQueue: 'test-queue',
+                    args: [],
+                });
+            });
+
+            it('should reject workflow ID with newline characters', async () => {
+                await expect(
+                    service.startWorkflow('testWorkflow', [], { workflowId: 'test\nid' }),
+                ).rejects.toThrow('Workflow ID cannot contain newlines, tabs, or control characters');
+            });
+
+            it('should reject workflow ID with carriage return characters', async () => {
+                await expect(
+                    service.startWorkflow('testWorkflow', [], { workflowId: 'test\rid' }),
+                ).rejects.toThrow('Workflow ID cannot contain newlines, tabs, or control characters');
+            });
+
+            it('should reject workflow ID with tab characters', async () => {
+                await expect(
+                    service.startWorkflow('testWorkflow', [], { workflowId: 'test\tid' }),
+                ).rejects.toThrow('Workflow ID cannot contain newlines, tabs, or control characters');
+            });
+
+            it('should reject workflow ID with null character', async () => {
+                await expect(
+                    service.startWorkflow('testWorkflow', [], { workflowId: 'test\u0000id' }),
+                ).rejects.toThrow('Workflow ID cannot contain newlines, tabs, or control characters');
+            });
+
+            it('should reject workflow ID with other control characters', async () => {
+                await expect(
+                    service.startWorkflow('testWorkflow', [], { workflowId: 'test\u0001id' }),
+                ).rejects.toThrow('Workflow ID cannot contain newlines, tabs, or control characters');
+            });
+
+            it('should accept workflow ID with valid special characters', async () => {
+                const validId = 'test-workflow_123.abc:def';
+                await service.startWorkflow('testWorkflow', [], { workflowId: validId });
+
+                expect(mockClient.workflow!.start).toHaveBeenCalledWith('testWorkflow', {
+                    workflowId: validId,
+                    taskQueue: 'test-queue',
+                    args: [],
+                });
+            });
+
+            it('should validate auto-generated workflow IDs', async () => {
+                // Auto-generated IDs should always be valid
+                await service.startWorkflow('testWorkflow');
+
+                const callArgs = (mockClient.workflow!.start as jest.Mock).mock.calls[0][1];
+                expect(callArgs.workflowId).toBeTruthy();
+                expect(callArgs.workflowId.length).toBeLessThanOrEqual(1000);
+                expect(callArgs.workflowId).not.toMatch(/[\n\r\t\u0000-\u001f\u007f]/);
+            });
+        });
     });
 
     describe('getWorkflowHandle', () => {

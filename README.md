@@ -45,30 +45,40 @@ A comprehensive NestJS integration framework for Temporal.io that provides enter
 
 NestJS Temporal Core bridges NestJS's powerful dependency injection system with Temporal.io's robust workflow orchestration engine. It provides a declarative approach to building distributed, fault-tolerant applications with automatic service discovery, enterprise-grade monitoring, and seamless integration.
 
-### Key Benefits
+### Why NestJS Temporal Core?
 
-- 🚀 **Seamless Integration**: Native NestJS decorators and dependency injection
-- 🔍 **Auto-Discovery**: Automatic registration of activities via decorators
-- 🛡️ **Type Safety**: Full TypeScript support with comprehensive type definitions
-- 🏥 **Enterprise Ready**: Built-in health checks, monitoring, and error handling
-- ⚙️ **Zero Configuration**: Smart defaults with extensive customization options
-- 📦 **Modular Architecture**: Separate modules for client, worker, activities, and schedules
-- 🔄 **Production Grade**: Connection pooling, graceful shutdown, and fault tolerance
-
-[🔝 Back to top](#table-of-contents)
+| Feature | Description |
+|---------|-------------|
+| **Seamless Integration** | Native NestJS decorators and dependency injection support |
+| **Auto-Discovery** | Automatic registration of activities and workflows via decorators |
+| **Type Safety** | Full TypeScript support with comprehensive type definitions |
+| **Enterprise Ready** | Built-in health checks, monitoring, and error handling |
+| **Zero Configuration** | Smart defaults with extensive customization options |
+| **Modular Architecture** | Use client-only, worker-only, or full-stack configurations |
+| **Production Grade** | Connection pooling, graceful shutdown, and fault tolerance |
 
 ## Features
 
-- ✨ **Declarative Decorators**: `@Activity()` and `@ActivityMethod()` for clean activity definitions
-- 🔎 **Automatic Discovery**: Runtime discovery and registration of activities
-- 📅 **Schedule Management**: Programmatic schedule creation and management
-- 🏥 **Health Monitoring**: Built-in health checks and status reporting
-- 🔌 **Connection Management**: Automatic connection pooling and lifecycle management
-- 🛠️ **Error Handling**: Comprehensive error handling with structured logging
-- 📊 **Performance Monitoring**: Built-in metrics and performance tracking
-- 🔚 **Graceful Shutdown**: Clean resource cleanup and connection termination
-- 📦 **Modular Design**: Use only what you need (client-only, worker-only, etc.)
-- 🔄 **Multiple Workers**: Support for multiple workers with different task queues
+### Core Capabilities
+
+- **Declarative Decorators** - Use `@Activity()` and `@ActivityMethod()` for clean, intuitive activity definitions
+- **Automatic Discovery** - Runtime discovery and registration of activities with zero configuration
+- **Schedule Management** - Programmatic schedule creation, updates, and monitoring
+- **Health Monitoring** - Built-in health checks and comprehensive status reporting
+
+### Enterprise Features
+
+- **Connection Management** - Automatic connection pooling and lifecycle management
+- **Error Handling** - Structured error handling with detailed logging and retry policies
+- **Performance Monitoring** - Built-in metrics, statistics, and performance tracking
+- **Graceful Shutdown** - Clean resource cleanup and connection termination
+
+### Flexibility & Scalability
+
+- **Modular Design** - Use only what you need (client-only, worker-only, or combined)
+- **Multiple Workers** - Support for multiple workers with different task queues
+- **Advanced Configuration** - Extensive customization for production environments
+- **TLS Support** - Secure connections for Temporal Cloud deployments
 
 [🔝 Back to top](#table-of-contents)
 

@@ -100,8 +100,10 @@ export class TemporalScheduleService implements OnModuleInit, OnModuleDestroy {
             } else {
                 // Try to create a new schedule client if none exists
                 try {
+                    // Type assertion: ScheduleClient expects connection to match its internal type
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     this.scheduleClient = new ScheduleClient({
-                        connection: this.client.connection as never,
+                        connection: this.client.connection as any,
                         namespace: this.options.connection?.namespace || 'default',
                     });
                     this.logger.debug('Schedule client initialized successfully');
@@ -208,7 +210,9 @@ export class TemporalScheduleService implements OnModuleInit, OnModuleDestroy {
                     (scheduleMetadata.searchAttributes as Record<string, unknown>) || {},
             };
 
-            const scheduleHandle = await this.scheduleClient!.create(scheduleOptions as never);
+            // Type assertion: scheduleOptions interface matches Temporal SDK's expected type
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const scheduleHandle = await this.scheduleClient!.create(scheduleOptions as any);
 
             this.scheduleHandles.set(scheduleId, scheduleHandle);
 
@@ -396,7 +400,9 @@ export class TemporalScheduleService implements OnModuleInit, OnModuleDestroy {
         this.ensureInitialized();
 
         try {
-            const scheduleHandle = await this.scheduleClient!.create(options as never);
+            // Type assertion: scheduleOptions interface matches Temporal SDK's expected type
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const scheduleHandle = await this.scheduleClient!.create(options as any);
             this.scheduleHandles.set(options.scheduleId, scheduleHandle);
 
             this.logger.debug(`Created schedule: ${options.scheduleId}`);
