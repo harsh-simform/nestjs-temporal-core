@@ -7,7 +7,7 @@ import {
     Inject,
     Type,
 } from '@nestjs/common';
-import { Worker, NativeConnection } from '@temporalio/worker';
+import { Worker, NativeConnection, State } from '@temporalio/worker';
 import { TEMPORAL_MODULE_OPTIONS, TEMPORAL_CONNECTION } from '../constants';
 import {
     TemporalOptions,
@@ -445,7 +445,7 @@ export class TemporalWorkerManagerService
                     workerState === 'RUNNING' ||
                     workerState === 'FAILED'
                 ) {
-                    await workerInstance.worker.shutdown();
+                    workerInstance.worker.shutdown();
                     const uptime = workerInstance.startedAt
                         ? Math.round((Date.now() - workerInstance.startedAt.getTime()) / 1000)
                         : 0;
@@ -495,7 +495,7 @@ export class TemporalWorkerManagerService
 
         try {
             this.logger.info(`Stopping worker for task queue '${taskQueue}'...`);
-            await workerInstance.worker.shutdown();
+            workerInstance.worker.shutdown();
             workerInstance.isRunning = false;
             workerInstance.startedAt = null;
             this.logger.info(`Worker for '${taskQueue}' stopped successfully`);
@@ -522,13 +522,25 @@ export class TemporalWorkerManagerService
             ? Date.now() - workerInstance.startedAt.getTime()
             : undefined;
 
+        // Get native state from the actual Worker instance
+        let nativeState: State | null;
+        try {
+            nativeState = workerInstance.worker?.getState() as State;
+        } catch {
+            nativeState = null;
+        }
+
+        const isNativeHealthy = nativeState === 'RUNNING';
+        const isHealthy =
+            workerInstance.isInitialized &&
+            !workerInstance.lastError &&
+            workerInstance.isRunning &&
+            isNativeHealthy;
+
         return {
             isInitialized: workerInstance.isInitialized,
             isRunning: workerInstance.isRunning,
-            isHealthy:
-                workerInstance.isInitialized &&
-                !workerInstance.lastError &&
-                workerInstance.isRunning,
+            isHealthy,
             taskQueue: workerInstance.taskQueue,
             namespace: workerInstance.namespace,
             workflowSource: workerInstance.workflowSource,
@@ -694,25 +706,37 @@ export class TemporalWorkerManagerService
     }
 
     /**
-     * Auto-restart the worker (used internally for auto-restart functionality)
+     * Auto-restart the worker after a failure.
+     *
+     * The Temporal SDK's Worker.run() method checks `if (this.state !== 'INITIALIZED')`
+     * and throws "IllegalStateError: Poller was already started" if called again.
+     * Once run() executes, state changes INITIALIZED → RUNNING → ... → STOPPED,
+     * with no code path to reset back to INITIALIZED. Therefore, we must create
+     * a NEW Worker instance to restart.
+     *
+     * @see https://github.com/temporalio/sdk-typescript/blob/main/packages/worker/src/worker.ts
      */
     private async autoRestartWorker(): Promise<void> {
         this.logger.info('Auto-restarting Temporal worker...');
 
         try {
-            if (this.worker) {
-                await this.worker.shutdown();
-            }
+            // Cleanup existing worker - it cannot be reused after run() completes
+            await this.cleanupWorkerForRestart();
 
-            // Wait a bit before restarting
+            // Brief delay before reconnection attempt
             await new Promise((resolve) => setTimeout(resolve, 500));
 
-            // Reset state
+            // Create a fresh worker instance
+            const initResult = await this.initializeWorker();
+            if (!initResult.success) {
+                throw initResult.error || new Error('Failed to reinitialize worker');
+            }
+
+            // Start the new worker - clear error only after successful restart
+            this.isInitialized = true;
             this.isRunning = true;
             this.startedAt = new Date();
             this.lastError = null;
-
-            // Start the worker again with auto-restart capability
             this.runWorkerWithAutoRestart();
 
             this.logger.info('Temporal worker auto-restarted successfully');
@@ -722,6 +746,33 @@ export class TemporalWorkerManagerService
             this.isRunning = false;
             throw error;
         }
+    }
+
+    /**
+     * Cleanup the current worker before restart.
+     * Attempts graceful shutdown but continues even if it fails.
+     * Note: Does NOT reset lastError - that's done after successful restart.
+     */
+    private async cleanupWorkerForRestart(): Promise<void> {
+        if (!this.worker) {
+            return;
+        }
+
+        try {
+            const state = this.worker.getState();
+            // Only shutdown if in a state that allows it
+            if (state === 'RUNNING' || state === 'INITIALIZED' || state === 'FAILED') {
+                this.worker.shutdown();
+            }
+        } catch (error) {
+            this.logger.warn('Error during worker cleanup (continuing with restart)', error);
+        }
+
+        // Clear references - worker cannot be reused
+        // Note: Keep lastError until restart succeeds for debugging
+        this.worker = null;
+        this.isRunning = false;
+        this.startedAt = null;
     }
 
     /**
@@ -746,7 +797,7 @@ export class TemporalWorkerManagerService
                 workerState === 'RUNNING' ||
                 workerState === 'FAILED'
             ) {
-                await this.worker.shutdown();
+                this.worker.shutdown();
                 const uptime = this.startedAt
                     ? Math.round((Date.now() - this.startedAt.getTime()) / 1000)
                     : 0;
@@ -816,11 +867,15 @@ export class TemporalWorkerManagerService
      */
     getWorkerStatus(): WorkerStatus {
         const uptime = this.startedAt ? Date.now() - this.startedAt.getTime() : undefined;
+        const nativeState = this.getNativeState();
+        const isNativeHealthy = nativeState === 'RUNNING';
+        const isHealthy =
+            this.isInitialized && !this.lastError && this.isRunning && isNativeHealthy;
 
         return {
             isInitialized: this.isInitialized,
             isRunning: this.isRunning,
-            isHealthy: this.isInitialized && !this.lastError && this.isRunning,
+            isHealthy,
             taskQueue: this.options.taskQueue || 'default',
             namespace: this.options.connection?.namespace || 'default',
             workflowSource: this.getWorkflowSource(),
@@ -924,9 +979,13 @@ export class TemporalWorkerManagerService
      */
     getHealthStatus(): WorkerHealthStatus {
         const uptime = this.startedAt ? Date.now() - this.startedAt.getTime() : undefined;
+        const nativeState = this.getNativeState();
+        const isNativeHealthy = nativeState === 'RUNNING';
+        const isHealthy =
+            this.isInitialized && !this.lastError && this.isRunning && isNativeHealthy;
 
         return {
-            isHealthy: this.isInitialized && !this.lastError && this.isRunning,
+            isHealthy,
             isRunning: this.isRunning,
             isInitialized: this.isInitialized,
             lastError: this.lastError || undefined,
@@ -1315,7 +1374,7 @@ export class TemporalWorkerManagerService
                                         workerState === 'RUNNING' ||
                                         workerState === 'FAILED'
                                     ) {
-                                        await workerInstance.worker.shutdown();
+                                        workerInstance.worker.shutdown();
                                         this.logger.verbose(
                                             `Worker '${taskQueue}' shut down successfully`,
                                         );
@@ -1400,6 +1459,17 @@ export class TemporalWorkerManagerService
         if (this.options.worker?.workflowBundle) return 'bundle';
         if (this.options.worker?.workflowsPath) return 'filesystem';
         return 'none';
+    }
+
+    private getNativeState(): State | null {
+        if (!this.worker) {
+            return null;
+        }
+        try {
+            return this.worker.getState() as State;
+        } catch {
+            return null;
+        }
     }
 
     private extractErrorMessage(error: unknown): string {

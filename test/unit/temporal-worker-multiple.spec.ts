@@ -752,16 +752,23 @@ describe('TemporalWorkerManagerService - Multiple Workers', () => {
 
             service = module.get<TemporalWorkerManagerService>(TemporalWorkerManagerService);
 
-            const mockWorker = {
+            const mockWorkerHealthy = {
                 run: jest.fn(),
                 shutdown: jest.fn(),
+                getState: jest.fn().mockReturnValue('RUNNING'),
+            };
+
+            const mockWorkerUnhealthy = {
+                run: jest.fn(),
+                shutdown: jest.fn(),
+                getState: jest.fn().mockReturnValue('STOPPED'),
             };
 
             (service as any).workers = new Map([
                 [
                     'queue-1',
                     {
-                        worker: mockWorker,
+                        worker: mockWorkerHealthy,
                         taskQueue: 'queue-1',
                         namespace: 'default',
                         isRunning: true,
@@ -775,7 +782,7 @@ describe('TemporalWorkerManagerService - Multiple Workers', () => {
                 [
                     'queue-2',
                     {
-                        worker: mockWorker,
+                        worker: mockWorkerUnhealthy,
                         taskQueue: 'queue-2',
                         namespace: 'default',
                         isRunning: false,
@@ -827,11 +834,14 @@ describe('TemporalWorkerManagerService - Multiple Workers', () => {
             service = module.get<TemporalWorkerManagerService>(TemporalWorkerManagerService);
 
             const startedAt = new Date();
+            const mockWorkerRunning = {
+                getState: jest.fn().mockReturnValue('RUNNING'),
+            };
             (service as any).workers = new Map([
                 [
                     'queue-1',
                     {
-                        worker: {},
+                        worker: mockWorkerRunning,
                         taskQueue: 'queue-1',
                         namespace: 'default',
                         isRunning: true,
@@ -1275,7 +1285,7 @@ describe('TemporalWorkerManagerService - Multiple Workers', () => {
 
             const mockWorker = {
                 run: jest.fn(),
-                shutdown: jest.fn().mockRejectedValue(new Error('Shutdown failed')),
+                shutdown: jest.fn().mockImplementation(() => { throw new Error('Shutdown failed'); }),
                 getState: jest.fn().mockReturnValue('RUNNING'),
             };
 
@@ -1456,7 +1466,7 @@ describe('TemporalWorkerManagerService - Multiple Workers', () => {
                 run: jest.fn(),
                 shutdown: jest
                     .fn()
-                    .mockRejectedValue(new Error('Not running. Current state: DRAINING')),
+                    .mockImplementation(() => { throw new Error('Not running. Current state: DRAINING'); }),
                 getState: jest.fn().mockReturnValue('RUNNING'),
             };
 
@@ -1835,7 +1845,7 @@ describe('TemporalWorkerManagerService - Multiple Workers', () => {
                 run: jest.fn().mockResolvedValue(undefined),
                 shutdown: jest
                     .fn()
-                    .mockRejectedValue(new Error('Not running. Current state: DRAINING')),
+                    .mockImplementation(() => { throw new Error('Not running. Current state: DRAINING'); }),
                 getState: jest.fn().mockReturnValue('RUNNING'),
             };
 
@@ -1897,7 +1907,7 @@ describe('TemporalWorkerManagerService - Multiple Workers', () => {
 
             const mockWorker = {
                 run: jest.fn().mockResolvedValue(undefined),
-                shutdown: jest.fn().mockRejectedValue(new Error('Worker is STOPPING')),
+                shutdown: jest.fn().mockImplementation(() => { throw new Error('Worker is STOPPING'); }),
                 getState: jest.fn().mockReturnValue('RUNNING'),
             };
 
