@@ -530,7 +530,12 @@ export class TemporalWorkerManagerService
             nativeState = null;
         }
 
-        const isHealthy = this.isWorkerHealthy(workerInstance, nativeState);
+        const isNativeHealthy = nativeState === 'RUNNING';
+        const isHealthy =
+            workerInstance.isInitialized &&
+            !workerInstance.lastError &&
+            workerInstance.isRunning &&
+            isNativeHealthy;
 
         return {
             isInitialized: workerInstance.isInitialized,
@@ -863,7 +868,9 @@ export class TemporalWorkerManagerService
     getWorkerStatus(): WorkerStatus {
         const uptime = this.startedAt ? Date.now() - this.startedAt.getTime() : undefined;
         const nativeState = this.getNativeState();
-        const isHealthy = this.isWorkerHealthy(this, nativeState);
+        const isNativeHealthy = nativeState === 'RUNNING';
+        const isHealthy =
+            this.isInitialized && !this.lastError && this.isRunning && isNativeHealthy;
 
         return {
             isInitialized: this.isInitialized,
@@ -972,7 +979,10 @@ export class TemporalWorkerManagerService
      */
     getHealthStatus(): WorkerHealthStatus {
         const uptime = this.startedAt ? Date.now() - this.startedAt.getTime() : undefined;
-        const isHealthy = this.isWorkerHealthy(this, this.getNativeState());
+        const nativeState = this.getNativeState();
+        const isNativeHealthy = nativeState === 'RUNNING';
+        const isHealthy =
+            this.isInitialized && !this.lastError && this.isRunning && isNativeHealthy;
 
         return {
             isHealthy,
@@ -1460,14 +1470,6 @@ export class TemporalWorkerManagerService
         } catch {
             return null;
         }
-    }
-
-    private isWorkerHealthy(
-        worker: { isInitialized: boolean; isRunning: boolean; lastError: string | null },
-        nativeState: State | null,
-    ): boolean {
-        const isNativeHealthy = nativeState === 'RUNNING';
-        return worker.isInitialized && !worker.lastError && worker.isRunning && isNativeHealthy;
     }
 
     private extractErrorMessage(error: unknown): string {
