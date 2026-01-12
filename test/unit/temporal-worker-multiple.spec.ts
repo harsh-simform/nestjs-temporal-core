@@ -1949,6 +1949,7 @@ describe('TemporalWorkerManagerService - Multiple Workers', () => {
                     {
                         taskQueue: 'health-test-queue',
                         workflowsPath: './dist/workflows',
+                        autoStart: false,
                     },
                 ],
             };
@@ -1966,17 +1967,36 @@ describe('TemporalWorkerManagerService - Multiple Workers', () => {
                     },
                     {
                         provide: TEMPORAL_CONNECTION,
-                        useValue: null,
+                        useValue: mockConnection,
                     },
                 ],
             }).compile();
 
             service = module.get<TemporalWorkerManagerService>(TemporalWorkerManagerService);
-            await service.onModuleInit();
-            await service.startWorkerByTaskQueue('health-test-queue');
 
-            const workerInstance = (service as any).workers.get('health-test-queue');
-            workerInstance.worker.getState = jest.fn().mockReturnValue('STOPPED');
+            // Mock worker with STOPPED state to simulate unhealthy worker
+            const mockWorker = {
+                run: jest.fn().mockResolvedValue(undefined),
+                shutdown: jest.fn().mockResolvedValue(undefined),
+                getState: jest.fn().mockReturnValue('STOPPED'),
+            };
+
+            const workerInstance = {
+                worker: mockWorker,
+                taskQueue: 'health-test-queue',
+                namespace: 'default',
+                isRunning: true,
+                isInitialized: true,
+                lastError: null,
+                startedAt: new Date(),
+                restartCount: 0,
+                activities: new Map(),
+                workflowSource: 'filesystem' as const,
+            };
+
+            // Directly set the workers map to simulate an initialized worker
+            (service as any).workers = new Map([['health-test-queue', workerInstance]]);
+            (service as any).connection = mockConnection;
 
             const status = service.getWorkerStatusByTaskQueue('health-test-queue');
 

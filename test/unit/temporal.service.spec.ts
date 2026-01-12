@@ -50,14 +50,6 @@ describe('TemporalService', () => {
                 namespace: 'test-namespace',
                 activitiesCount: 5,
             }),
-            getStatus: jest.fn().mockReturnValue({
-                isInitialized: true,
-                isRunning: true,
-                isHealthy: true,
-                taskQueue: 'test-queue',
-                namespace: 'test-namespace',
-                activitiesCount: 5,
-            }),
             stopWorker: jest.fn().mockResolvedValue(undefined),
             startWorker: jest.fn().mockResolvedValue(undefined),
             restartWorker: jest
@@ -544,7 +536,7 @@ describe('TemporalService', () => {
             if (status) {
                 expect(status.isInitialized).toBe(true);
             }
-            expect(mockWorkerService.getStatus).toHaveBeenCalled();
+            expect(mockWorkerService.getWorkerStatus).toHaveBeenCalled();
         });
 
         it('should start worker', async () => {
