@@ -281,7 +281,7 @@ describe('TemporalWorkerManagerService - Edge Cases', () => {
         });
     });
 
-    describe('getWorkflowSourceFromDef', () => {
+    describe('getWorkflowSource', () => {
         it('should return "bundle" when workflowBundle is provided', async () => {
             const moduleOptions: TemporalOptions = {
                 connection: { address: 'localhost:7233' },
@@ -313,7 +313,7 @@ describe('TemporalWorkerManagerService - Edge Cases', () => {
                 workflowBundle: { code: Buffer.from(''), sourceMap: Buffer.from('') },
             };
 
-            const result = (service as any).getWorkflowSourceFromDef(workerDef);
+            const result = (service as any).getWorkflowSource(workerDef);
 
             expect(result).toBe('bundle');
         });
@@ -349,7 +349,7 @@ describe('TemporalWorkerManagerService - Edge Cases', () => {
                 workflowsPath: './workflows',
             };
 
-            const result = (service as any).getWorkflowSourceFromDef(workerDef);
+            const result = (service as any).getWorkflowSource(workerDef);
 
             expect(result).toBe('filesystem');
         });
@@ -384,7 +384,7 @@ describe('TemporalWorkerManagerService - Edge Cases', () => {
                 taskQueue: 'test',
             };
 
-            const result = (service as any).getWorkflowSourceFromDef(workerDef);
+            const result = (service as any).getWorkflowSource(workerDef);
 
             expect(result).toBe('none');
         });
@@ -636,6 +636,251 @@ describe('TemporalWorkerManagerService - Edge Cases', () => {
             const status = service.getWorkerStatusByTaskQueue('queue-1');
 
             expect(status?.uptime).toBeUndefined();
+        });
+    });
+
+    describe('Health calculation with native worker state', () => {
+        let mockWorker: any;
+
+        beforeEach(() => {
+            mockWorker = {
+                run: jest.fn().mockImplementation(() => new Promise(() => {})),
+                shutdown: jest.fn().mockResolvedValue(undefined),
+                getState: jest.fn().mockReturnValue('RUNNING'),
+            };
+
+            jest.spyOn(
+                require('@temporalio/worker').Worker,
+                'create',
+            ).mockResolvedValue(mockWorker);
+
+            jest.spyOn(
+                require('@temporalio/worker').NativeConnection,
+                'connect',
+            ).mockResolvedValue(mockConnection);
+        });
+
+        it('should report unhealthy when native worker state is STOPPED', async () => {
+            const moduleOptions: TemporalOptions = {
+                connection: { address: 'localhost:7233' },
+                taskQueue: 'test-queue',
+                worker: { workflowsPath: './dist/workflows' },
+            };
+
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    TemporalWorkerManagerService,
+                    {
+                        provide: TemporalDiscoveryService,
+                        useValue: mockDiscoveryService,
+                    },
+                    {
+                        provide: TEMPORAL_MODULE_OPTIONS,
+                        useValue: moduleOptions,
+                    },
+                    {
+                        provide: TEMPORAL_CONNECTION,
+                        useValue: null,
+                    },
+                ],
+            }).compile();
+
+            service = module.get<TemporalWorkerManagerService>(TemporalWorkerManagerService);
+            await service.onModuleInit();
+            await service.startWorker();
+            await new Promise((resolve) => setTimeout(resolve, 600));
+
+            mockWorker.getState = jest.fn().mockReturnValue('STOPPED');
+
+            const status = service.getWorkerStatus();
+
+            expect(status.isHealthy).toBe(false);
+        });
+
+        it('should report unhealthy when native worker state is STOPPING', async () => {
+            const moduleOptions: TemporalOptions = {
+                connection: { address: 'localhost:7233' },
+                taskQueue: 'test-queue',
+                worker: { workflowsPath: './dist/workflows' },
+            };
+
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    TemporalWorkerManagerService,
+                    {
+                        provide: TemporalDiscoveryService,
+                        useValue: mockDiscoveryService,
+                    },
+                    {
+                        provide: TEMPORAL_MODULE_OPTIONS,
+                        useValue: moduleOptions,
+                    },
+                    {
+                        provide: TEMPORAL_CONNECTION,
+                        useValue: null,
+                    },
+                ],
+            }).compile();
+
+            service = module.get<TemporalWorkerManagerService>(TemporalWorkerManagerService);
+            await service.onModuleInit();
+            await service.startWorker();
+            await new Promise((resolve) => setTimeout(resolve, 600));
+
+            mockWorker.getState = jest.fn().mockReturnValue('STOPPING');
+
+            const health = service.getHealthStatus();
+
+            expect(health.isHealthy).toBe(false);
+        });
+
+        it('should report healthy when native worker state is RUNNING', async () => {
+            const moduleOptions: TemporalOptions = {
+                connection: { address: 'localhost:7233' },
+                taskQueue: 'test-queue',
+                worker: { workflowsPath: './dist/workflows' },
+            };
+
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    TemporalWorkerManagerService,
+                    {
+                        provide: TemporalDiscoveryService,
+                        useValue: mockDiscoveryService,
+                    },
+                    {
+                        provide: TEMPORAL_MODULE_OPTIONS,
+                        useValue: moduleOptions,
+                    },
+                    {
+                        provide: TEMPORAL_CONNECTION,
+                        useValue: null,
+                    },
+                ],
+            }).compile();
+
+            service = module.get<TemporalWorkerManagerService>(TemporalWorkerManagerService);
+            await service.onModuleInit();
+            await service.startWorker();
+            await new Promise((resolve) => setTimeout(resolve, 600));
+
+            mockWorker.getState = jest.fn().mockReturnValue('RUNNING');
+            (service as any).lastError = null;
+
+            const status = service.getWorkerStatus();
+
+            expect(status.isHealthy).toBe(true);
+        });
+
+        it('should handle getState throwing an error gracefully', async () => {
+            const moduleOptions: TemporalOptions = {
+                connection: { address: 'localhost:7233' },
+                taskQueue: 'test-queue',
+                worker: { workflowsPath: './dist/workflows' },
+            };
+
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    TemporalWorkerManagerService,
+                    {
+                        provide: TemporalDiscoveryService,
+                        useValue: mockDiscoveryService,
+                    },
+                    {
+                        provide: TEMPORAL_MODULE_OPTIONS,
+                        useValue: moduleOptions,
+                    },
+                    {
+                        provide: TEMPORAL_CONNECTION,
+                        useValue: null,
+                    },
+                ],
+            }).compile();
+
+            service = module.get<TemporalWorkerManagerService>(TemporalWorkerManagerService);
+            await service.onModuleInit();
+            await service.startWorker();
+            await new Promise((resolve) => setTimeout(resolve, 600));
+
+            mockWorker.getState = jest.fn().mockImplementation(() => {
+                throw new Error('Cannot get state');
+            });
+
+            const health = service.getHealthStatus();
+
+            expect(health.isHealthy).toBe(false);
+        });
+    });
+
+    describe('Discovery completion timeout behavior', () => {
+        it('should proceed with available activities when discovery times out', async () => {
+            const timeoutDiscoveryService = {
+                ...mockDiscoveryService,
+                getHealthStatus: jest.fn().mockReturnValue({ isComplete: false }),
+                getAllActivities: jest.fn().mockReturnValue({
+                    existingActivity: jest.fn(),
+                }),
+            };
+
+            const moduleOptions: TemporalOptions = {
+                connection: { address: 'localhost:7233' },
+                taskQueue: 'test-queue',
+                worker: { workflowsPath: './dist/workflows' },
+            };
+
+            const testService = new TemporalWorkerManagerService(
+                timeoutDiscoveryService as any,
+                moduleOptions,
+                null,
+            );
+
+            const result = await testService.registerActivitiesFromDiscovery();
+
+            expect(result.success).toBe(true);
+            expect(result.registeredCount).toBeGreaterThanOrEqual(0);
+        }, 10000);
+
+        it('should load activities immediately when discovery is already complete', async () => {
+            const completeDiscoveryService = {
+                ...mockDiscoveryService,
+                getHealthStatus: jest.fn().mockReturnValue({ isComplete: true }),
+                getAllActivities: jest.fn().mockReturnValue({
+                    activity1: jest.fn(),
+                    activity2: jest.fn(),
+                }),
+            };
+
+            const moduleOptions: TemporalOptions = {
+                connection: { address: 'localhost:7233' },
+                taskQueue: 'test-queue',
+                worker: { workflowsPath: './dist/workflows' },
+            };
+
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    TemporalWorkerManagerService,
+                    {
+                        provide: TemporalDiscoveryService,
+                        useValue: completeDiscoveryService,
+                    },
+                    {
+                        provide: TEMPORAL_MODULE_OPTIONS,
+                        useValue: moduleOptions,
+                    },
+                    {
+                        provide: TEMPORAL_CONNECTION,
+                        useValue: mockConnection,
+                    },
+                ],
+            }).compile();
+
+            service = module.get<TemporalWorkerManagerService>(TemporalWorkerManagerService);
+
+            const startTime = Date.now();
+            await service.registerActivitiesFromDiscovery();
+            const duration = Date.now() - startTime;
+
+            expect(duration).toBeLessThan(500);
         });
     });
 });

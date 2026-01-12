@@ -63,8 +63,11 @@ describe('TemporalWorkerManagerService - Branch Coverage', () => {
 
             (service as any).worker = mockWorker;
             (service as any).restartCount = 1;
-            (service as any).maxRestarts = 3;
-            (service as any).options = { ...(service as any).options, autoRestart: true };
+            (service as any).options = {
+                ...(service as any).options,
+                autoRestart: true,
+                maxRestarts: 3,
+            };
 
             jest.spyOn(service as any, 'autoRestartWorker').mockResolvedValue(undefined);
 
@@ -80,9 +83,7 @@ describe('TemporalWorkerManagerService - Branch Coverage', () => {
 
             expect((service as any).restartCount).toBe(2);
             expect(loggerWarnSpy).toHaveBeenCalledWith(
-                `Worker failed, auto-restarting in 1s (attempt ${
-                    (service as any).restartCount
-                }/${(service as any).maxRestarts})`,
+                'Worker failed, auto-restarting in 1s (attempt 2/3)',
                 expect.any(Error),
             );
             // Note: 'Worker run failed' error is NOT logged when auto-restart is enabled
@@ -99,7 +100,7 @@ describe('TemporalWorkerManagerService - Branch Coverage', () => {
 
             (service as any).worker = mockWorker;
             (service as any).restartCount = 3;
-            (service as any).maxRestarts = 3;
+            (service as any).options = { ...(service as any).options, maxRestarts: 3 };
 
             const loggerErrorSpy = jest
                 .spyOn((service as any).logger, 'error')
@@ -111,7 +112,7 @@ describe('TemporalWorkerManagerService - Branch Coverage', () => {
             await new Promise((resolve) => setTimeout(resolve, 600));
 
             expect(loggerErrorSpy).toHaveBeenCalledWith(
-                `Worker failed after ${(service as any).maxRestarts} restart attempts, giving up`,
+                'Worker failed after 3 restart attempts, giving up',
                 expect.any(Error),
             );
 
@@ -148,8 +149,11 @@ describe('TemporalWorkerManagerService - Branch Coverage', () => {
 
             (service as any).worker = mockWorker;
             (service as any).restartCount = 0;
-            (service as any).maxRestarts = 3;
-            (service as any).options = { ...(service as any).options, autoRestart: true };
+            (service as any).options = {
+                ...(service as any).options,
+                autoRestart: true,
+                maxRestarts: 3,
+            };
 
             jest.spyOn(service as any, 'autoRestartWorker').mockRejectedValue(
                 new Error('Restart failed'),

@@ -1940,4 +1940,48 @@ describe('TemporalWorkerManagerService - Multiple Workers', () => {
             loggerVerboseSpy.mockRestore();
         });
     });
+
+    describe('Health status with native worker state', () => {
+        it('should report worker as unhealthy when native state is not RUNNING', async () => {
+            const moduleOptions: TemporalOptions = {
+                connection: { address: 'localhost:7233' },
+                workers: [
+                    {
+                        taskQueue: 'health-test-queue',
+                        workflowsPath: './dist/workflows',
+                    },
+                ],
+            };
+
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    TemporalWorkerManagerService,
+                    {
+                        provide: TemporalDiscoveryService,
+                        useValue: mockDiscoveryService,
+                    },
+                    {
+                        provide: TEMPORAL_MODULE_OPTIONS,
+                        useValue: moduleOptions,
+                    },
+                    {
+                        provide: TEMPORAL_CONNECTION,
+                        useValue: null,
+                    },
+                ],
+            }).compile();
+
+            service = module.get<TemporalWorkerManagerService>(TemporalWorkerManagerService);
+            await service.onModuleInit();
+            await service.startWorkerByTaskQueue('health-test-queue');
+
+            const workerInstance = (service as any).workers.get('health-test-queue');
+            workerInstance.worker.getState = jest.fn().mockReturnValue('STOPPED');
+
+            const status = service.getWorkerStatusByTaskQueue('health-test-queue');
+
+            expect(status).toBeDefined();
+            expect(status!.isHealthy).toBe(false);
+        });
+    });
 });

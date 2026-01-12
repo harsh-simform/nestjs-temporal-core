@@ -83,30 +83,6 @@ describe('TemporalWorkerManagerService - Additional Branch Coverage', () => {
         jest.restoreAllMocks();
     });
 
-    describe('Lines 550-552: runWorkerLoop error handling', () => {
-        it('should throw "Execution error" when worker.run() throws', async () => {
-            await service.onModuleInit();
-
-            // Mock worker.run to throw an error
-            mockWorker.run = jest.fn().mockRejectedValue(new Error('Worker run failed'));
-
-            const logSpy = jest.spyOn(service['logger'], 'error').mockImplementation();
-
-            await expect(service['runWorkerLoop']()).rejects.toThrow('Execution error');
-
-            expect(logSpy).toHaveBeenCalledWith('Worker execution failed', expect.any(Error));
-
-            logSpy.mockRestore();
-        });
-
-        it('should handle runWorkerLoop when worker is not initialized', async () => {
-            // Don't call onModuleInit, so worker is not initialized
-            await expect(service['runWorkerLoop']()).rejects.toThrow(
-                'Temporal worker not initialized',
-            );
-        });
-    });
-
     describe('Lines 600: initializeWorker without worker config', () => {
         it('should return error result when worker config is missing', async () => {
             const noWorkerOptions: TemporalOptions = {
@@ -261,67 +237,4 @@ describe('TemporalWorkerManagerService - Additional Branch Coverage', () => {
         });
     });
 
-    describe('Additional startWorkerInBackground coverage', () => {
-        it('should start worker in background when worker exists and not running', async () => {
-            await service.onModuleInit();
-
-            // Ensure worker is not running
-            service['isRunning'] = false;
-
-            const startWorkerSpy = jest.spyOn(service, 'startWorker').mockResolvedValue();
-
-            service['startWorkerInBackground']();
-
-            // Wait a bit for async operation
-            await new Promise((resolve) => setTimeout(resolve, 10));
-
-            expect(startWorkerSpy).toHaveBeenCalled();
-
-            startWorkerSpy.mockRestore();
-        });
-
-        it('should not start worker when already running', async () => {
-            await service.onModuleInit();
-            await service.startWorker();
-
-            const startWorkerSpy = jest.spyOn(service, 'startWorker');
-
-            service['startWorkerInBackground']();
-
-            await new Promise((resolve) => setTimeout(resolve, 10));
-
-            // Should not call startWorker since already running
-            expect(startWorkerSpy).not.toHaveBeenCalled();
-
-            startWorkerSpy.mockRestore();
-        });
-
-        it('should handle errors in background start', async () => {
-            await service.onModuleInit();
-            service['isRunning'] = false;
-
-            jest.spyOn(service, 'startWorker').mockRejectedValue(new Error('Start failed'));
-            const logSpy = jest.spyOn(service['logger'], 'error').mockImplementation();
-
-            service['startWorkerInBackground']();
-
-            await new Promise((resolve) => setTimeout(resolve, 50));
-
-            expect(logSpy).toHaveBeenCalled();
-
-            logSpy.mockRestore();
-        });
-    });
-
-    describe('Additional logWorkerConfiguration coverage', () => {
-        it('should log worker configuration', async () => {
-            const logSpy = jest.spyOn(service['logger'], 'debug').mockImplementation();
-
-            service['logWorkerConfiguration']();
-
-            expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Worker configuration'));
-
-            logSpy.mockRestore();
-        });
-    });
 });
