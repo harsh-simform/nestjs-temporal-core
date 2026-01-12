@@ -95,6 +95,8 @@ export interface RetryPolicyConfig {
  *   workflowsPath: './dist/workflows/payments',
  *   activityClasses: [PaymentActivity],
  *   autoStart: true,
+ *   autoRestart: true,
+ *   maxRestarts: 5,
  *   workerOptions: {
  *     maxConcurrentActivityTaskExecutions: 100
  *   }
@@ -107,6 +109,10 @@ export interface WorkerDefinition {
     workflowBundle?: Record<string, unknown>;
     activityClasses?: Array<Type<object>>;
     autoStart?: boolean;
+    /** Enable auto-restart on worker failure (default: inherits from global autoRestart) */
+    autoRestart?: boolean;
+    /** Maximum restart attempts before giving up (default: 3) */
+    maxRestarts?: number;
     workerOptions?: WorkerCreateOptions;
 }
 
@@ -126,7 +132,9 @@ export interface WorkerDefinition {
  *   worker: {
  *     workflowsPath: './dist/workflows',
  *     activityClasses: [MyActivityClass],
- *     autoStart: true
+ *     autoStart: true,
+ *     autoRestart: true,
+ *     maxRestarts: 5
  *   }
  * };
  * ```
@@ -138,11 +146,14 @@ export interface WorkerDefinition {
  *     address: 'localhost:7233',
  *     namespace: 'default'
  *   },
+ *   autoRestart: true,  // Global default for all workers
+ *   maxRestarts: 3,     // Global default for all workers
  *   workers: [
  *     {
  *       taskQueue: 'payments-queue',
  *       workflowsPath: './dist/workflows/payments',
- *       activityClasses: [PaymentActivity]
+ *       activityClasses: [PaymentActivity],
+ *       maxRestarts: 5  // Override for this worker
  *     },
  *     {
  *       taskQueue: 'notifications-queue',
@@ -179,10 +190,17 @@ export interface TemporalOptions extends LoggerConfig {
         workflowBundle?: Record<string, unknown>;
         activityClasses?: Array<Type<object>>;
         autoStart?: boolean;
+        /** Enable auto-restart on worker failure (default: inherits from global autoRestart) */
+        autoRestart?: boolean;
+        /** Maximum restart attempts before giving up (default: 3) */
+        maxRestarts?: number;
         workerOptions?: WorkerCreateOptions;
     };
     workers?: WorkerDefinition[];
+    /** Enable auto-restart on worker failure for all workers (default: true) */
     autoRestart?: boolean;
+    /** Maximum restart attempts before giving up for all workers (default: 3) */
+    maxRestarts?: number;
     isGlobal?: boolean;
     allowConnectionFailure?: boolean;
     /**
@@ -1737,7 +1755,7 @@ export interface WorkerDiscoveryResult {
     success: boolean;
     discoveredActivities: number;
     loadedActivities: number;
-    errors: Array<{ component: string; error: string }>;
+    errors: Array<{ name: string; error: string }>;
     duration: number;
 }
 

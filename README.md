@@ -407,12 +407,15 @@ TemporalModule.register({
     address: 'localhost:7233',
     namespace: 'default',
   },
+  autoRestart: true,  // Global default for all workers
+  maxRestarts: 3,     // Global default for all workers
   workers: [
     {
       taskQueue: 'payments-queue',
       workflowsPath: require.resolve('./workflows/payments'),
       activityClasses: [PaymentActivity, RefundActivity],
       autoStart: true,
+      maxRestarts: 5,  // Override for this critical worker
       workerOptions: {
         maxConcurrentActivityTaskExecutions: 100,
       },
@@ -430,7 +433,8 @@ TemporalModule.register({
       taskQueue: 'background-jobs',
       workflowsPath: require.resolve('./workflows/jobs'),
       activityClasses: [DataProcessingActivity],
-      autoStart: false, // Start manually later
+      autoStart: false,    // Start manually later
+      autoRestart: false,  // Disable auto-restart for this worker
     },
   ],
   logLevel: 'info',
@@ -637,6 +641,8 @@ interface TemporalOptions {
     workflowsPath?: string;             // Path to workflow definitions (use require.resolve)
     activityClasses?: any[];            // Array of activity classes to register
     autoStart?: boolean;                // Auto-start worker on module init (default: true)
+    autoRestart?: boolean;              // Auto-restart on failure (inherits from global)
+    maxRestarts?: number;               // Max restart attempts (inherits from global)
     maxConcurrentActivityExecutions?: number;  // Max concurrent activities (default: 100)
     maxActivitiesPerSecond?: number;    // Rate limit for activities
   };
@@ -645,9 +651,12 @@ interface TemporalOptions {
   logLevel?: 'trace' | 'debug' | 'info' | 'warn' | 'error';  // Log level (default: 'info')
   enableLogger?: boolean;               // Enable logging (default: true)
 
+  // Auto-restart configuration
+  autoRestart?: boolean;                // Auto-restart worker on failure (default: true)
+  maxRestarts?: number;                 // Max restart attempts before giving up (default: 3)
+
   // Advanced
   isGlobal?: boolean;                   // Make module global (default: false)
-  autoRestart?: boolean;                // Auto-restart worker on failure (default: true)
 }
 ```
 

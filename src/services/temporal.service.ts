@@ -368,7 +368,7 @@ export class TemporalService implements OnModuleInit, OnModuleDestroy {
         if (!this.workerService) {
             return null;
         }
-        return this.workerService.getStatus();
+        return this.workerService.getWorkerStatus();
     }
 
     /**

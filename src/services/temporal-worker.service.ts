@@ -47,7 +47,6 @@ export class TemporalWorkerManagerService
     // Legacy single worker support (for backward compatibility)
     private worker: Worker | null = null;
     private restartCount = 0;
-    private readonly maxRestarts = 3;
     private isInitialized = false;
     private isRunning = false;
     private lastError: string | null = null;
@@ -72,6 +71,26 @@ export class TemporalWorkerManagerService
             enableLogger: options.enableLogger,
             logLevel: options.logLevel,
         });
+    }
+
+    /**
+     * Get the maximum restart attempts for legacy single worker mode.
+     * Priority: worker.maxRestarts > global maxRestarts > default (3)
+     */
+    private get maxRestarts(): number {
+        return this.options.worker?.maxRestarts ?? this.options.maxRestarts ?? 3;
+    }
+
+    /**
+     * Check if auto-restart is enabled for legacy single worker mode.
+     * Priority: worker.autoRestart > global autoRestart > default (true)
+     */
+    private get autoRestartEnabled(): boolean {
+        const workerAutoRestart = this.options.worker?.autoRestart;
+        if (workerAutoRestart !== undefined) {
+            return workerAutoRestart;
+        }
+        return this.options.autoRestart !== false;
     }
 
     async onModuleInit(): Promise<void> {
@@ -293,7 +312,7 @@ export class TemporalWorkerManagerService
             startedAt: null,
             restartCount: 0,
             activities,
-            workflowSource: this.getWorkflowSourceFromDef(workerDef),
+            workflowSource: this.getWorkflowSource(workerDef),
         };
 
         // Store worker instance
@@ -397,13 +416,10 @@ export class TemporalWorkerManagerService
             workerInstance.isRunning = true;
             workerInstance.startedAt = new Date();
             workerInstance.lastError = null;
+            workerInstance.restartCount = 0; // Reset restart count on fresh start
 
-            // Start the worker in the background
-            workerInstance.worker.run().catch((error) => {
-                workerInstance.lastError = this.extractErrorMessage(error);
-                workerInstance.isRunning = false;
-                this.logger.error(`Worker '${taskQueue}' failed`, error);
-            });
+            // Start the worker with auto-restart capability
+            this.runWorkerWithAutoRestartByTaskQueue(taskQueue);
 
             this.logger.info(
                 `Worker '${taskQueue}' started (${workerInstance.activities.size} activities, ${workerInstance.workflowSource})`,
@@ -433,52 +449,7 @@ export class TemporalWorkerManagerService
 
         try {
             this.logger.verbose(`Stopping worker '${taskQueue}'...`);
-
-            try {
-                // Check worker state before attempting shutdown
-                const workerState = workerInstance.worker.getState();
-                this.logger.verbose(`Worker '${taskQueue}' state: ${workerState}`);
-
-                // Only attempt shutdown if worker is in a state that allows it
-                if (
-                    workerState === 'INITIALIZED' ||
-                    workerState === 'RUNNING' ||
-                    workerState === 'FAILED'
-                ) {
-                    workerInstance.worker.shutdown();
-                    const uptime = workerInstance.startedAt
-                        ? Math.round((Date.now() - workerInstance.startedAt.getTime()) / 1000)
-                        : 0;
-                    this.logger.info(`Worker '${taskQueue}' stopped (uptime: ${uptime}s)`);
-                } else if (
-                    workerState === 'STOPPING' ||
-                    workerState === 'DRAINING' ||
-                    workerState === 'DRAINED'
-                ) {
-                    this.logger.verbose(
-                        `Worker '${taskQueue}' already shutting down (${workerState})`,
-                    );
-                    // Wait for the worker to complete shutdown
-                    // The worker.run() promise will resolve when shutdown completes
-                } else if (workerState === 'STOPPED') {
-                    this.logger.verbose(`Worker '${taskQueue}' already stopped`);
-                }
-            } catch (shutdownError: unknown) {
-                // Handle race condition where worker state changes between check and shutdown
-                const errorMessage =
-                    shutdownError instanceof Error ? shutdownError.message : String(shutdownError);
-                if (
-                    errorMessage.includes('Not running') ||
-                    errorMessage.includes('DRAINING') ||
-                    errorMessage.includes('STOPPING')
-                ) {
-                    this.logger.verbose(`Worker '${taskQueue}' already shutting down`);
-                } else {
-                    // Re-throw unexpected errors
-                    throw shutdownError;
-                }
-            }
-
+            this.safeShutdownWorker(workerInstance.worker, taskQueue, workerInstance.startedAt);
             workerInstance.isRunning = false;
             workerInstance.startedAt = null;
         } catch (error) {
@@ -490,20 +461,115 @@ export class TemporalWorkerManagerService
     }
 
     /**
-     * Get the native connection for creating custom workers
-```
+     * Run worker with auto-restart capability for multiple workers mode.
+     * Similar to runWorkerWithAutoRestart() but for a specific task queue.
+     */
+    private runWorkerWithAutoRestartByTaskQueue(taskQueue: string): void {
+        const workerInstance = this.workers.get(taskQueue);
+        if (!workerInstance) return;
+
+        const workerDef = this.options.workers?.find((w) => w.taskQueue === taskQueue);
+        const maxRestarts = workerDef?.maxRestarts ?? this.options.maxRestarts ?? 3;
+
+        workerInstance.worker.run().catch((error) => {
+            workerInstance.lastError = this.extractErrorMessage(error);
+            workerInstance.isRunning = false;
+
+            const autoRestartEnabled = workerDef?.autoRestart ?? this.options.autoRestart;
+
+            if (autoRestartEnabled !== false && workerInstance.restartCount < maxRestarts) {
+                workerInstance.restartCount++;
+                this.logger.warn(
+                    `Worker '${taskQueue}' failed, auto-restarting in 1s (attempt ${workerInstance.restartCount}/${maxRestarts})`,
+                    error,
+                );
+                setTimeout(() => {
+                    this.autoRestartWorkerByTaskQueue(taskQueue).catch((restartError) => {
+                        this.logger.error(`Auto-restart failed for '${taskQueue}'`, restartError);
+                    });
+                }, 1000);
+            } else if (workerInstance.restartCount >= maxRestarts) {
+                this.logger.error(
+                    `Worker '${taskQueue}' failed after ${maxRestarts} restart attempts, giving up`,
+                    error,
+                );
+            } else {
+                this.logger.error(`Worker '${taskQueue}' run failed`, error);
+            }
+        });
+    }
+
+    /**
+     * Auto-restart a specific worker by task queue after a failure.
+     *
+     * The Temporal SDK's Worker.run() method is one-shot - once it completes,
+     * the worker's state becomes STOPPED with no way to reset. Therefore,
+     * we must create a NEW Worker instance to restart.
+     */
+    private async autoRestartWorkerByTaskQueue(taskQueue: string): Promise<void> {
+        this.logger.info(`Auto-restarting worker '${taskQueue}'...`);
 
         try {
-            this.logger.info(`Stopping worker for task queue '${taskQueue}'...`);
-            workerInstance.worker.shutdown();
-            workerInstance.isRunning = false;
-            workerInstance.startedAt = null;
-            this.logger.info(`Worker for '${taskQueue}' stopped successfully`);
+            const workerDef = this.options.workers?.find((w) => w.taskQueue === taskQueue);
+            if (!workerDef) {
+                throw new Error(`Worker definition for '${taskQueue}' not found`);
+            }
+
+            // Save restart count before cleanup
+            const oldInstance = this.workers.get(taskQueue);
+            const restartCount = oldInstance?.restartCount ?? 0;
+
+            // Cleanup existing worker
+            await this.cleanupWorkerForRestartByTaskQueue(taskQueue);
+
+            // Brief delay before reconnection attempt
+            await new Promise((resolve) => setTimeout(resolve, 500));
+
+            // Remove old instance and create fresh worker
+            this.workers.delete(taskQueue);
+            const newInstance = await this.createWorkerFromDefinition(workerDef);
+
+            // Preserve restart count from old instance
+            newInstance.restartCount = restartCount;
+
+            // Start the new worker
+            newInstance.isRunning = true;
+            newInstance.startedAt = new Date();
+            newInstance.lastError = null;
+            this.runWorkerWithAutoRestartByTaskQueue(taskQueue);
+
+            this.logger.info(`Worker '${taskQueue}' auto-restarted successfully`);
         } catch (error) {
-            workerInstance.lastError = this.extractErrorMessage(error);
-            this.logger.error(`Failed to stop worker for '${taskQueue}'`, error);
+            const workerInstance = this.workers.get(taskQueue);
+            if (workerInstance) {
+                workerInstance.lastError = this.extractErrorMessage(error);
+                workerInstance.isRunning = false;
+            }
+            this.logger.error(`Auto-restart failed for '${taskQueue}'`, error);
             throw error;
         }
+    }
+
+    /**
+     * Cleanup a worker before restart.
+     * Attempts graceful shutdown but continues even if it fails.
+     */
+    private async cleanupWorkerForRestartByTaskQueue(taskQueue: string): Promise<void> {
+        const workerInstance = this.workers.get(taskQueue);
+        if (!workerInstance?.worker) return;
+
+        try {
+            this.safeShutdownWorker(workerInstance.worker, taskQueue);
+        } catch (error) {
+            this.logger.warn(
+                `Error during worker '${taskQueue}' cleanup (continuing with restart)`,
+                error,
+            );
+        }
+
+        workerInstance.isRunning = false;
+        workerInstance.startedAt = null;
+        // Note: Keep restartCount - it's preserved and passed to the new instance
     }
 
     /**
@@ -522,20 +588,7 @@ export class TemporalWorkerManagerService
             ? Date.now() - workerInstance.startedAt.getTime()
             : undefined;
 
-        // Get native state from the actual Worker instance
-        let nativeState: State | null;
-        try {
-            nativeState = workerInstance.worker?.getState() as State;
-        } catch {
-            nativeState = null;
-        }
-
-        const isNativeHealthy = nativeState === 'RUNNING';
-        const isHealthy =
-            workerInstance.isInitialized &&
-            !workerInstance.lastError &&
-            workerInstance.isRunning &&
-            isNativeHealthy;
+        const isHealthy = this.calculateWorkerHealth(workerInstance);
 
         return {
             isInitialized: workerInstance.isInitialized,
@@ -559,17 +612,7 @@ export class TemporalWorkerManagerService
         activityClasses?: Array<Type<object>>,
     ): Promise<void> {
         // Wait for discovery service to complete
-        let attempts = 0;
-        const maxAttempts = 30;
-
-        while (attempts < maxAttempts) {
-            const healthStatus = this.discoveryService.getHealthStatus();
-            if (healthStatus.isComplete) {
-                break;
-            }
-            await new Promise((resolve) => setTimeout(resolve, 100));
-            attempts++;
-        }
+        await this.waitForDiscoveryCompletion();
 
         // If no activity classes specified, load all activities
         if (!activityClasses || activityClasses.length === 0) {
@@ -603,17 +646,6 @@ export class TemporalWorkerManagerService
                 activities.set(activityName, activityInfo.handler);
             }
         }
-    }
-
-    /**
-     * Helper to determine workflow source from definition
-     */
-    private getWorkflowSourceFromDef(
-        workerDef: WorkerDefinition,
-    ): 'bundle' | 'filesystem' | 'registered' | 'none' {
-        if (workerDef.workflowBundle) return 'bundle';
-        if (workerDef.workflowsPath) return 'filesystem';
-        return 'none';
     }
 
     // ==========================================
@@ -667,10 +699,7 @@ export class TemporalWorkerManagerService
                             this.isRunning = false;
 
                             // Auto-restart if enabled and within restart limits
-                            if (
-                                this.options.autoRestart !== false &&
-                                this.restartCount < this.maxRestarts
-                            ) {
+                            if (this.autoRestartEnabled && this.restartCount < this.maxRestarts) {
                                 this.restartCount++;
                                 this.logger.warn(
                                     `Worker failed, auto-restarting in 1s (attempt ${this.restartCount}/${this.maxRestarts})`,
@@ -737,7 +766,7 @@ export class TemporalWorkerManagerService
             this.isRunning = true;
             this.startedAt = new Date();
             this.lastError = null;
-            this.runWorkerWithAutoRestart();
+            await this.runWorkerWithAutoRestart();
 
             this.logger.info('Temporal worker auto-restarted successfully');
         } catch (error) {
@@ -759,11 +788,7 @@ export class TemporalWorkerManagerService
         }
 
         try {
-            const state = this.worker.getState();
-            // Only shutdown if in a state that allows it
-            if (state === 'RUNNING' || state === 'INITIALIZED' || state === 'FAILED') {
-                this.worker.shutdown();
-            }
+            this.safeShutdownWorker(this.worker, 'legacy');
         } catch (error) {
             this.logger.warn('Error during worker cleanup (continuing with restart)', error);
         }
@@ -786,34 +811,8 @@ export class TemporalWorkerManagerService
 
         try {
             this.logger.verbose('Stopping Temporal worker...');
-
-            // Check worker state before attempting shutdown
-            const workerState = this.worker.getState();
-            this.logger.verbose(`Worker state: ${workerState}`);
-
-            // Only attempt shutdown if worker is in a state that allows it
-            if (
-                workerState === 'INITIALIZED' ||
-                workerState === 'RUNNING' ||
-                workerState === 'FAILED'
-            ) {
-                this.worker.shutdown();
-                const uptime = this.startedAt
-                    ? Math.round((Date.now() - this.startedAt.getTime()) / 1000)
-                    : 0;
-                this.logger.info(`Worker stopped (uptime: ${uptime}s)`);
-            } else if (
-                workerState === 'STOPPING' ||
-                workerState === 'DRAINING' ||
-                workerState === 'DRAINED'
-            ) {
-                this.logger.verbose(`Worker already shutting down (${workerState})`);
-                // Wait for the worker to complete shutdown
-                // The worker.run() promise will resolve when shutdown completes
-            } else if (workerState === 'STOPPED') {
-                this.logger.verbose('Worker already stopped');
-            }
-
+            const taskQueue = this.options.taskQueue || 'default';
+            this.safeShutdownWorker(this.worker, taskQueue, this.startedAt);
             this.isRunning = false;
             this.startedAt = null;
         } catch (error) {
@@ -867,10 +866,7 @@ export class TemporalWorkerManagerService
      */
     getWorkerStatus(): WorkerStatus {
         const uptime = this.startedAt ? Date.now() - this.startedAt.getTime() : undefined;
-        const nativeState = this.getNativeState();
-        const isNativeHealthy = nativeState === 'RUNNING';
-        const isHealthy =
-            this.isInitialized && !this.lastError && this.isRunning && isNativeHealthy;
+        const isHealthy = this.calculateWorkerHealth();
 
         return {
             isInitialized: this.isInitialized,
@@ -906,17 +902,7 @@ export class TemporalWorkerManagerService
 
         try {
             // Wait for discovery service to complete discovery
-            let attempts = 0;
-            const maxAttempts = 30; // 3 seconds max wait
-
-            while (attempts < maxAttempts) {
-                const healthStatus = this.discoveryService.getHealthStatus();
-                if (healthStatus.isComplete) {
-                    break;
-                }
-                await new Promise((resolve) => setTimeout(resolve, 100));
-                attempts++;
-            }
+            await this.waitForDiscoveryCompletion();
 
             // Load all discovered activities
             const allActivities = this.discoveryService.getAllActivities();
@@ -968,21 +954,11 @@ export class TemporalWorkerManagerService
     }
 
     /**
-     * Get worker status (alias for getWorkerStatus)
-     */
-    getStatus(): WorkerStatus {
-        return this.getWorkerStatus();
-    }
-
-    /**
      * Get worker health status
      */
     getHealthStatus(): WorkerHealthStatus {
         const uptime = this.startedAt ? Date.now() - this.startedAt.getTime() : undefined;
-        const nativeState = this.getNativeState();
-        const isNativeHealthy = nativeState === 'RUNNING';
-        const isHealthy =
-            this.isInitialized && !this.lastError && this.isRunning && isNativeHealthy;
+        const isHealthy = this.calculateWorkerHealth();
 
         return {
             isHealthy,
@@ -1035,44 +1011,6 @@ export class TemporalWorkerManagerService
     }
 
     /**
-     * Get environment defaults for worker configuration
-     */
-    private getEnvironmentDefaults(): Record<string, unknown> {
-        return {
-            taskQueue: this.options.taskQueue || 'default',
-            namespace: this.options.connection?.namespace || 'default',
-        };
-    }
-
-    /**
-     * Build worker options from configuration
-     */
-    private buildWorkerOptions(): Record<string, unknown> {
-        const baseOptions = this.getEnvironmentDefaults();
-
-        // Add workflow configuration
-        if (this.options.worker?.workflowsPath) {
-            Object.assign(baseOptions, { workflowsPath: this.options.worker.workflowsPath });
-        } else if (this.options.worker?.workflowBundle) {
-            Object.assign(baseOptions, { workflowBundle: this.options.worker.workflowBundle });
-        }
-
-        // Add activities - ensure activities map is properly converted
-        const activitiesObj: Record<string, Function> = {};
-        for (const [name, func] of this.activities.entries()) {
-            activitiesObj[name] = func;
-        }
-        Object.assign(baseOptions, { activities: activitiesObj });
-
-        // Add additional worker options
-        if (this.options.worker?.workerOptions) {
-            Object.assign(baseOptions, this.options.worker.workerOptions);
-        }
-
-        return baseOptions;
-    }
-
-    /**
      * Create connection to Temporal server
      */
     private async createConnection(): Promise<void> {
@@ -1116,57 +1054,6 @@ export class TemporalWorkerManagerService
             }
 
             throw error;
-        }
-    }
-
-    /**
-     * Create worker instance
-     */
-    private async createWorker(): Promise<void> {
-        await this.createConnection();
-
-        if (!this.connection) {
-            throw new Error('Connection not established');
-        }
-
-        const workerConfig = await this.createWorkerConfig();
-        const { Worker } = await import('@temporalio/worker');
-        // Type assertion: WorkerConfig extends WorkerOptions but has looser typing for flexibility
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        this.worker = await Worker.create(workerConfig as any);
-    }
-
-    /**
-     * Log worker configuration for debugging
-     */
-    private logWorkerConfiguration(): void {
-        this.logger.debug(`Worker configuration: ${JSON.stringify(this.options.worker)}`);
-    }
-
-    /**
-     * Run worker loop (for testing purposes)
-     */
-    private async runWorkerLoop(): Promise<void> {
-        if (!this.worker) {
-            throw new Error('Temporal worker not initialized');
-        }
-
-        try {
-            await this.worker.run();
-        } catch (error) {
-            this.logger.error('Worker execution failed', error);
-            throw new Error('Execution error');
-        }
-    }
-
-    /**
-     * Start worker in background (for testing purposes)
-     */
-    private startWorkerInBackground(): void {
-        if (this.worker && !this.isRunning) {
-            this.startWorker().catch((error) => {
-                this.logger.error('Background worker start failed', error);
-            });
         }
     }
 
@@ -1247,23 +1134,13 @@ export class TemporalWorkerManagerService
 
     private async loadActivitiesFromDiscovery(): Promise<WorkerDiscoveryResult> {
         const startTime = Date.now();
-        const errors: Array<{ component: string; error: string }> = [];
+        const errors: Array<{ name: string; error: string }> = [];
         let discoveredActivities = 0;
         let loadedActivities = 0;
 
         try {
             // Wait for discovery service to complete discovery
-            let attempts = 0;
-            const maxAttempts = 30; // 3 seconds max wait
-
-            while (attempts < maxAttempts) {
-                const healthStatus = this.discoveryService.getHealthStatus();
-                if (healthStatus.isComplete) {
-                    break;
-                }
-                await new Promise((resolve) => setTimeout(resolve, 100));
-                attempts++;
-            }
+            await this.waitForDiscoveryCompletion();
 
             // Load all discovered activities
             const allActivities = this.discoveryService.getAllActivities();
@@ -1276,7 +1153,7 @@ export class TemporalWorkerManagerService
                     this.logger.verbose(`Loaded activity: ${activityName}`);
                 } catch (error) {
                     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-                    errors.push({ component: activityName, error: errorMessage });
+                    errors.push({ name: activityName, error: errorMessage });
                     this.logger.warn(`Failed to load activity '${activityName}': ${errorMessage}`);
                 }
             }
@@ -1300,7 +1177,7 @@ export class TemporalWorkerManagerService
                 success: false,
                 discoveredActivities,
                 loadedActivities,
-                errors: [{ component: 'discovery', error: errorMessage }],
+                errors: [{ name: 'discovery', error: errorMessage }],
                 duration: Date.now() - startTime,
             };
         }
@@ -1363,56 +1240,7 @@ export class TemporalWorkerManagerService
                         try {
                             if (workerInstance.isRunning && workerInstance.worker) {
                                 this.logger.debug(`Stopping worker for '${taskQueue}'...`);
-
-                                try {
-                                    // Check worker state before attempting shutdown
-                                    const workerState = workerInstance.worker.getState();
-
-                                    // Only attempt shutdown if worker is in a state that allows it
-                                    if (
-                                        workerState === 'INITIALIZED' ||
-                                        workerState === 'RUNNING' ||
-                                        workerState === 'FAILED'
-                                    ) {
-                                        workerInstance.worker.shutdown();
-                                        this.logger.verbose(
-                                            `Worker '${taskQueue}' shut down successfully`,
-                                        );
-                                    } else if (
-                                        workerState === 'STOPPING' ||
-                                        workerState === 'DRAINING' ||
-                                        workerState === 'DRAINED'
-                                    ) {
-                                        this.logger.verbose(
-                                            `Worker '${taskQueue}' already shutting down (${workerState})`,
-                                        );
-                                    } else if (workerState === 'STOPPED') {
-                                        this.logger.verbose(
-                                            `Worker '${taskQueue}' already stopped`,
-                                        );
-                                    }
-                                } catch (shutdownError: unknown) {
-                                    // Handle race condition where worker state changes between check and shutdown
-                                    const errorMessage =
-                                        shutdownError instanceof Error
-                                            ? shutdownError.message
-                                            : String(shutdownError);
-                                    if (
-                                        errorMessage.includes('Not running') ||
-                                        errorMessage.includes('DRAINING') ||
-                                        errorMessage.includes('STOPPING')
-                                    ) {
-                                        this.logger.verbose(
-                                            `Worker '${taskQueue}' already shutting down`,
-                                        );
-                                    } else {
-                                        // Log but don't fail shutdown for unexpected errors
-                                        this.logger.warn(
-                                            `Unexpected error shutting down worker '${taskQueue}': ${errorMessage}`,
-                                        );
-                                    }
-                                }
-
+                                this.safeShutdownWorker(workerInstance.worker, taskQueue);
                                 workerInstance.isRunning = false;
                             }
                         } catch (error) {
@@ -1455,9 +1283,17 @@ export class TemporalWorkerManagerService
         }
     }
 
-    private getWorkflowSource(): 'bundle' | 'filesystem' | 'registered' | 'none' {
-        if (this.options.worker?.workflowBundle) return 'bundle';
-        if (this.options.worker?.workflowsPath) return 'filesystem';
+    // ==========================================
+    // Shared Helpers
+    // ==========================================
+
+    private getWorkflowSource(config?: {
+        workflowBundle?: unknown;
+        workflowsPath?: string;
+    }): 'bundle' | 'filesystem' | 'registered' | 'none' {
+        const source = config ?? this.options.worker;
+        if (source?.workflowBundle) return 'bundle';
+        if (source?.workflowsPath) return 'filesystem';
         return 'none';
     }
 
@@ -1469,6 +1305,114 @@ export class TemporalWorkerManagerService
             return this.worker.getState() as State;
         } catch {
             return null;
+        }
+    }
+
+    /**
+     * Calculate if a worker is healthy based on its current state.
+     * @param workerInstance - WorkerInstance for multiple workers mode, omit for legacy single worker mode
+     */
+    private calculateWorkerHealth(workerInstance: WorkerInstance | null = null): boolean {
+        if (workerInstance) {
+            let nativeState: State | null = null;
+            try {
+                nativeState = workerInstance.worker?.getState() ?? null;
+            } catch {
+                nativeState = null;
+            }
+            return (
+                workerInstance.isInitialized &&
+                !workerInstance.lastError &&
+                workerInstance.isRunning &&
+                nativeState === 'RUNNING'
+            );
+        }
+
+        // Legacy single worker mode
+        const nativeState = this.getNativeState();
+        return this.isInitialized && !this.lastError && this.isRunning && nativeState === 'RUNNING';
+    }
+
+    /**
+     * Wait for discovery service to complete activity discovery.
+     * @param maxWaitMs Maximum time to wait (default: 3000ms)
+     * @returns true if discovery completed, false if timed out
+     */
+    private async waitForDiscoveryCompletion(maxWaitMs: number = 3000): Promise<boolean> {
+        const pollInterval = 100;
+        const maxAttempts = Math.ceil(maxWaitMs / pollInterval);
+        let attempts = 0;
+
+        while (attempts < maxAttempts) {
+            const healthStatus = this.discoveryService.getHealthStatus();
+            if (healthStatus.isComplete) {
+                return true;
+            }
+            await new Promise((resolve) => setTimeout(resolve, pollInterval));
+            attempts++;
+        }
+
+        return false;
+    }
+
+    /**
+     * Safely shutdown a worker, handling all state transitions.
+     * @param worker The worker instance to shutdown
+     * @param identifier Task queue name or identifier for logging
+     * @param startedAt Optional start time for uptime calculation
+     * @returns true if shutdown was initiated, false if already stopped/stopping
+     */
+    private safeShutdownWorker(
+        worker: Worker,
+        identifier: string,
+        startedAt?: Date | null,
+    ): boolean {
+        try {
+            const workerState = worker.getState();
+
+            if (
+                workerState === 'INITIALIZED' ||
+                workerState === 'RUNNING' ||
+                workerState === 'FAILED'
+            ) {
+                worker.shutdown();
+                if (startedAt) {
+                    const uptime = Math.round((Date.now() - startedAt.getTime()) / 1000);
+                    this.logger.info(`Worker '${identifier}' stopped (uptime: ${uptime}s)`);
+                } else {
+                    this.logger.verbose(`Worker '${identifier}' shut down`);
+                }
+                return true;
+            }
+
+            if (
+                workerState === 'STOPPING' ||
+                workerState === 'DRAINING' ||
+                workerState === 'DRAINED'
+            ) {
+                this.logger.verbose(
+                    `Worker '${identifier}' already shutting down (${workerState})`,
+                );
+                return false;
+            }
+
+            if (workerState === 'STOPPED') {
+                this.logger.verbose(`Worker '${identifier}' already stopped`);
+                return false;
+            }
+
+            return false;
+        } catch (error) {
+            const msg = error instanceof Error ? error.message : String(error);
+            if (
+                msg.includes('Not running') ||
+                msg.includes('DRAINING') ||
+                msg.includes('STOPPING')
+            ) {
+                this.logger.verbose(`Worker '${identifier}' already shutting down`);
+                return false;
+            }
+            throw error;
         }
     }
 
