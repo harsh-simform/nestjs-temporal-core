@@ -1,6 +1,7 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, Inject } from '@nestjs/common';
 import { DiscoveryService } from '@nestjs/core';
 import { ScheduleClient, ScheduleHandle } from '@temporalio/client';
+import { Duration } from '@temporalio/common';
 import { TEMPORAL_MODULE_OPTIONS, TEMPORAL_CLIENT } from '../constants';
 import {
     TemporalOptions,
@@ -329,15 +330,16 @@ export class TemporalScheduleService implements OnModuleInit, OnModuleDestroy {
         }
 
         if (scheduleMetadata.workflowExecutionTimeout) {
-            options.workflowExecutionTimeout = scheduleMetadata.workflowExecutionTimeout as string;
+            options.workflowExecutionTimeout =
+                scheduleMetadata.workflowExecutionTimeout as Duration;
         }
 
         if (scheduleMetadata.workflowRunTimeout) {
-            options.workflowRunTimeout = scheduleMetadata.workflowRunTimeout as string;
+            options.workflowRunTimeout = scheduleMetadata.workflowRunTimeout as Duration;
         }
 
         if (scheduleMetadata.workflowTaskTimeout) {
-            options.workflowTaskTimeout = scheduleMetadata.workflowTaskTimeout as string;
+            options.workflowTaskTimeout = scheduleMetadata.workflowTaskTimeout as Duration;
         }
 
         if (scheduleMetadata.retryPolicy) {

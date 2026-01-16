@@ -1,5 +1,9 @@
 import { Injectable, OnModuleInit, Inject } from '@nestjs/common';
-import { Client, WorkflowHandle } from '@temporalio/client';
+import {
+    Client,
+    WorkflowHandle,
+    WorkflowStartOptions as TemporalWorkflowStartOptions,
+} from '@temporalio/client';
 import { TEMPORAL_CLIENT, TEMPORAL_MODULE_OPTIONS } from '../constants';
 import {
     TemporalOptions,
@@ -107,12 +111,34 @@ export class TemporalClientService implements OnModuleInit {
                     `Starting workflow '${workflowType}' [${workflowId}] on queue '${taskQueue}'`,
                 );
 
-                // Use our existing client
-                const handle = await this.client!.workflow.start(workflowType, {
+                // Build workflow start options using the SDK's type
+                // Duration accepts string | number, so our string timeouts work directly
+                const workflowOptions: TemporalWorkflowStartOptions = {
                     workflowId,
                     taskQueue,
                     args,
-                });
+                    ...(options?.workflowExecutionTimeout && {
+                        workflowExecutionTimeout: options.workflowExecutionTimeout,
+                    }),
+                    ...(options?.workflowRunTimeout && {
+                        workflowRunTimeout: options.workflowRunTimeout,
+                    }),
+                    ...(options?.workflowTaskTimeout && {
+                        workflowTaskTimeout: options.workflowTaskTimeout,
+                    }),
+                    ...(options?.searchAttributes && {
+                        typedSearchAttributes: options.searchAttributes,
+                    }),
+                    ...(options?.memo && {
+                        memo: options.memo,
+                    }),
+                    ...(options?.workflowIdReusePolicy && {
+                        workflowIdReusePolicy: options.workflowIdReusePolicy,
+                    }),
+                };
+
+                // Use our existing client
+                const handle = await this.client!.workflow.start(workflowType, workflowOptions);
 
                 this.logger.info(
                     `Started workflow '${workflowType}' [${workflowId}] on '${taskQueue}'`,
