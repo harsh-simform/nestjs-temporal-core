@@ -296,6 +296,52 @@ describe('TemporalClientService', () => {
             expect(result.handle).toBe(mockWorkflowHandle);
         });
 
+        it('should pass timeout options to workflow start', async () => {
+            const workflowType = 'testWorkflow';
+            const args = [{ data: 'test' }];
+            const options = {
+                workflowId: 'custom-id',
+                taskQueue: 'custom-queue',
+                workflowExecutionTimeout: '1h',
+                workflowRunTimeout: '30m',
+                workflowTaskTimeout: '10s',
+            };
+
+            await service.startWorkflow(workflowType, args, options);
+
+            expect(mockClient.workflow!.start).toHaveBeenCalledWith(workflowType, {
+                workflowId: 'custom-id',
+                taskQueue: 'custom-queue',
+                args,
+                workflowExecutionTimeout: '1h',
+                workflowRunTimeout: '30m',
+                workflowTaskTimeout: '10s',
+            });
+        });
+
+        it('should pass other workflow options (searchAttributes, memo, workflowIdReusePolicy)', async () => {
+            const workflowType = 'testWorkflow';
+            const args = [{ data: 'test' }];
+            const options = {
+                workflowId: 'custom-id',
+                taskQueue: 'custom-queue',
+                searchAttributes: { customAttr: 'value' },
+                memo: { note: 'test memo' },
+                workflowIdReusePolicy: 'REJECT_DUPLICATE' as const,
+            };
+
+            await service.startWorkflow(workflowType, args, options);
+
+            expect(mockClient.workflow!.start).toHaveBeenCalledWith(workflowType, {
+                workflowId: 'custom-id',
+                taskQueue: 'custom-queue',
+                args,
+                typedSearchAttributes: { customAttr: 'value' },
+                memo: { note: 'test memo' },
+                workflowIdReusePolicy: 'REJECT_DUPLICATE',
+            });
+        });
+
         it('should generate workflow ID if not provided', async () => {
             await service.startWorkflow('testWorkflow');
 
@@ -476,31 +522,41 @@ describe('TemporalClientService', () => {
             it('should reject workflow ID with newline characters', async () => {
                 await expect(
                     service.startWorkflow('testWorkflow', [], { workflowId: 'test\nid' }),
-                ).rejects.toThrow('Workflow ID cannot contain newlines, tabs, or control characters');
+                ).rejects.toThrow(
+                    'Workflow ID cannot contain newlines, tabs, or control characters',
+                );
             });
 
             it('should reject workflow ID with carriage return characters', async () => {
                 await expect(
                     service.startWorkflow('testWorkflow', [], { workflowId: 'test\rid' }),
-                ).rejects.toThrow('Workflow ID cannot contain newlines, tabs, or control characters');
+                ).rejects.toThrow(
+                    'Workflow ID cannot contain newlines, tabs, or control characters',
+                );
             });
 
             it('should reject workflow ID with tab characters', async () => {
                 await expect(
                     service.startWorkflow('testWorkflow', [], { workflowId: 'test\tid' }),
-                ).rejects.toThrow('Workflow ID cannot contain newlines, tabs, or control characters');
+                ).rejects.toThrow(
+                    'Workflow ID cannot contain newlines, tabs, or control characters',
+                );
             });
 
             it('should reject workflow ID with null character', async () => {
                 await expect(
                     service.startWorkflow('testWorkflow', [], { workflowId: 'test\u0000id' }),
-                ).rejects.toThrow('Workflow ID cannot contain newlines, tabs, or control characters');
+                ).rejects.toThrow(
+                    'Workflow ID cannot contain newlines, tabs, or control characters',
+                );
             });
 
             it('should reject workflow ID with other control characters', async () => {
                 await expect(
                     service.startWorkflow('testWorkflow', [], { workflowId: 'test\u0001id' }),
-                ).rejects.toThrow('Workflow ID cannot contain newlines, tabs, or control characters');
+                ).rejects.toThrow(
+                    'Workflow ID cannot contain newlines, tabs, or control characters',
+                );
             });
 
             it('should accept workflow ID with valid special characters', async () => {
@@ -653,10 +709,7 @@ describe('TemporalClientService', () => {
 
             await expect(service.terminateWorkflow('test-id', 'reason')).rejects.toThrow();
 
-            expect(logSpy).toHaveBeenCalledWith(
-                "Failed to terminate workflow 'test-id'",
-                error,
-            );
+            expect(logSpy).toHaveBeenCalledWith("Failed to terminate workflow 'test-id'", error);
 
             logSpy.mockRestore();
         });
@@ -710,10 +763,7 @@ describe('TemporalClientService', () => {
 
             await expect(service.cancelWorkflow('test-id')).rejects.toThrow();
 
-            expect(logSpy).toHaveBeenCalledWith(
-                "Failed to cancel workflow 'test-id'",
-                error,
-            );
+            expect(logSpy).toHaveBeenCalledWith("Failed to cancel workflow 'test-id'", error);
 
             logSpy.mockRestore();
         });
@@ -1492,9 +1542,7 @@ describe('TemporalClientService', () => {
 
             await service.startWorkflow('testWorkflow');
 
-            expect(debugSpy).toHaveBeenCalledWith(
-                'Performing health check before retry attempt 2',
-            );
+            expect(debugSpy).toHaveBeenCalledWith('Performing health check before retry attempt 2');
 
             debugSpy.mockRestore();
         });

@@ -9,7 +9,7 @@ export { Worker } from '@temporalio/worker';
 import { Type } from '@nestjs/common';
 import { ScheduleClient, ScheduleHandle } from '@temporalio/client';
 import { NativeConnection, Worker } from '@temporalio/worker';
-import { TypedSearchAttributes } from '@temporalio/common';
+import { Duration, TypedSearchAttributes } from '@temporalio/common';
 import { TLSConfig } from '@temporalio/common/lib/internal-non-workflow';
 
 /**
@@ -1039,6 +1039,9 @@ export interface ScheduleAction {
     args?: unknown[];
     taskQueue: string;
     workflowId?: string;
+    workflowExecutionTimeout?: Duration;
+    workflowRunTimeout?: Duration;
+    workflowTaskTimeout?: Duration;
 }
 
 /**
@@ -1079,9 +1082,9 @@ export interface WorkflowStartOptions {
     searchAttributes?: TypedSearchAttributes;
     memo?: Record<string, string | number | boolean | object>;
     workflowIdReusePolicy?: 'ALLOW_DUPLICATE' | 'ALLOW_DUPLICATE_FAILED_ONLY' | 'REJECT_DUPLICATE';
-    workflowExecutionTimeout?: string;
-    workflowRunTimeout?: string;
-    workflowTaskTimeout?: string;
+    workflowExecutionTimeout?: Duration;
+    workflowRunTimeout?: Duration;
+    workflowTaskTimeout?: Duration;
 }
 
 /**
@@ -1591,9 +1594,9 @@ export interface ScheduleClientInitResult {
 export interface ScheduleWorkflowOptions {
     taskQueue?: string;
     workflowId?: string;
-    workflowExecutionTimeout?: string;
-    workflowRunTimeout?: string;
-    workflowTaskTimeout?: string;
+    workflowExecutionTimeout?: Duration;
+    workflowRunTimeout?: Duration;
+    workflowTaskTimeout?: Duration;
     retryPolicy?: Record<string, unknown>;
     args?: unknown[];
 }
@@ -1635,9 +1638,9 @@ export interface ScheduleWorkflowAction {
     taskQueue: string;
     args?: unknown[];
     workflowId?: string;
-    workflowExecutionTimeout?: string;
-    workflowRunTimeout?: string;
-    workflowTaskTimeout?: string;
+    workflowExecutionTimeout?: Duration;
+    workflowRunTimeout?: Duration;
+    workflowTaskTimeout?: Duration;
     retryPolicy?: Record<string, unknown>;
 }
 
