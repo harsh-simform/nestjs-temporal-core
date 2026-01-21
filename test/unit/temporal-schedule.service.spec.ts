@@ -218,7 +218,13 @@ describe('TemporalScheduleService', () => {
             expect(result.success).toBe(true);
             expect(result.scheduleId).toBe('test-schedule');
             expect(result.handle).toBeDefined();
-            expect(mockScheduleClient.create).toHaveBeenCalledWith(options);
+            expect(mockScheduleClient.create).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    scheduleId: 'test-schedule',
+                    spec: options.spec,
+                    action: options.action,
+                }),
+            );
         });
 
         it('should handle schedule creation errors', async () => {
@@ -285,6 +291,110 @@ describe('TemporalScheduleService', () => {
 
             expect(result.success).toBe(false);
             expect(result.error).toBeInstanceOf(Error);
+        });
+
+        it('should pass paused option correctly to SDK', async () => {
+            const options = {
+                scheduleId: 'paused-schedule',
+                spec: { cronExpressions: ['0 0 * * *'] },
+                action: {
+                    type: 'startWorkflow' as const,
+                    workflowType: 'TestWorkflow',
+                    taskQueue: 'test-queue',
+                    args: [],
+                },
+                paused: true,
+            };
+
+            const result = await service.createSchedule(options);
+
+            expect(result.success).toBe(true);
+            expect(mockScheduleClient.create).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    scheduleId: 'paused-schedule',
+                    state: { paused: true },
+                }),
+            );
+        });
+
+        it('should pass paused: false option correctly to SDK', async () => {
+            const options = {
+                scheduleId: 'active-schedule',
+                spec: { cronExpressions: ['0 0 * * *'] },
+                action: {
+                    type: 'startWorkflow' as const,
+                    workflowType: 'TestWorkflow',
+                    taskQueue: 'test-queue',
+                    args: [],
+                },
+                paused: false,
+            };
+
+            const result = await service.createSchedule(options);
+
+            expect(result.success).toBe(true);
+            expect(mockScheduleClient.create).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    scheduleId: 'active-schedule',
+                    state: { paused: false },
+                }),
+            );
+        });
+
+        it('should pass overlapPolicy correctly to SDK', async () => {
+            const options = {
+                scheduleId: 'overlap-schedule',
+                spec: { cronExpressions: ['0 0 * * *'] },
+                action: {
+                    type: 'startWorkflow' as const,
+                    workflowType: 'TestWorkflow',
+                    taskQueue: 'test-queue',
+                    args: [],
+                },
+                overlapPolicy: 'skip' as const,
+            };
+
+            const result = await service.createSchedule(options);
+
+            expect(result.success).toBe(true);
+            expect(mockScheduleClient.create).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    scheduleId: 'overlap-schedule',
+                    policies: expect.objectContaining({
+                        overlap: 'SKIP',
+                    }),
+                }),
+            );
+        });
+
+        it('should pass all policy options correctly to SDK', async () => {
+            const options = {
+                scheduleId: 'policy-schedule',
+                spec: { cronExpressions: ['0 0 * * *'] },
+                action: {
+                    type: 'startWorkflow' as const,
+                    workflowType: 'TestWorkflow',
+                    taskQueue: 'test-queue',
+                    args: [],
+                },
+                overlapPolicy: 'buffer_one' as const,
+                catchupWindow: '10m',
+                pauseOnFailure: true,
+            };
+
+            const result = await service.createSchedule(options);
+
+            expect(result.success).toBe(true);
+            expect(mockScheduleClient.create).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    scheduleId: 'policy-schedule',
+                    policies: expect.objectContaining({
+                        overlap: 'BUFFER_ONE',
+                        catchupWindow: '10m',
+                        pauseOnFailure: true,
+                    }),
+                }),
+            );
         });
     });
 
