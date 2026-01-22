@@ -1045,35 +1045,6 @@ export interface ScheduleAction {
 }
 
 /**
- * Schedule creation options with required spec and action
- */
-export interface ScheduleCreateOptions {
-    scheduleId: string;
-    spec: ScheduleSpec;
-    action: ScheduleAction;
-    memo?: Record<string, string | number | boolean | object>;
-    searchAttributes?: Record<string, string | number | boolean | object>;
-    workflowType?: string;
-    args?: unknown[];
-    taskQueue?: string;
-    interval?: string | number;
-    cron?: string;
-    timezone?: string;
-    overlapPolicy?:
-        | 'skip'
-        | 'buffer_one'
-        | 'buffer_all'
-        | 'cancel_other'
-        | 'terminate_other'
-        | 'allow_all';
-    catchupWindow?: string | number;
-    pauseOnFailure?: boolean;
-    description?: string;
-    paused?: boolean;
-    limitedActions?: number;
-}
-
-/**
  * Workflow start options with proper typing
  */
 export interface WorkflowStartOptions {
@@ -1483,6 +1454,18 @@ export interface ScheduleCreationOptions {
     action: ScheduleAction;
     memo?: Record<string, unknown>;
     searchAttributes?: Record<string, unknown>;
+    paused?: boolean;
+    overlapPolicy?:
+        | 'skip'
+        | 'buffer_one'
+        | 'buffer_all'
+        | 'cancel_other'
+        | 'terminate_other'
+        | 'allow_all';
+    catchupWindow?: string | number;
+    pauseOnFailure?: boolean;
+    description?: string;
+    limitedActions?: number;
 }
 
 /**

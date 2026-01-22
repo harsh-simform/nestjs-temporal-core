@@ -416,9 +416,41 @@ export class TemporalScheduleService implements OnModuleInit, OnModuleDestroy {
         this.ensureInitialized();
 
         try {
-            // Type assertion: scheduleOptions interface matches Temporal SDK's expected type
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const scheduleHandle = await this.scheduleClient!.create(options as any);
+            type ScheduleCreateOptions = Parameters<ScheduleClient['create']>[0];
+
+            const policies: ScheduleCreateOptions['policies'] = {};
+            if (options.overlapPolicy) {
+                policies.overlap = options.overlapPolicy.toUpperCase() as
+                    | 'SKIP'
+                    | 'BUFFER_ONE'
+                    | 'BUFFER_ALL'
+                    | 'CANCEL_OTHER'
+                    | 'TERMINATE_OTHER'
+                    | 'ALLOW_ALL';
+            }
+            if (options.catchupWindow) {
+                policies.catchupWindow = options.catchupWindow as Duration;
+            }
+            if (options.pauseOnFailure !== undefined) {
+                policies.pauseOnFailure = options.pauseOnFailure;
+            }
+
+            const scheduleOptions: ScheduleCreateOptions = {
+                scheduleId: options.scheduleId,
+                spec: options.spec as ScheduleCreateOptions['spec'],
+                action: options.action as ScheduleCreateOptions['action'],
+                ...(options.memo && { memo: options.memo }),
+                ...(options.searchAttributes && {
+                    typedSearchAttributes:
+                        options.searchAttributes as unknown as ScheduleCreateOptions['typedSearchAttributes'],
+                }),
+                ...(Object.keys(policies).length > 0 && { policies }),
+                ...(options.paused !== undefined && { state: { paused: options.paused } }),
+                ...(options.description && { description: options.description }),
+                ...(options.limitedActions && { limitedActions: options.limitedActions }),
+            };
+
+            const scheduleHandle = await this.scheduleClient!.create(scheduleOptions);
             this.scheduleHandles.set(options.scheduleId, scheduleHandle);
 
             this.logger.info(`Created schedule '${options.scheduleId}'`);
