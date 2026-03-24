@@ -179,6 +179,7 @@ export class TemporalConnectionFactory implements OnModuleDestroy {
             const client = new Client({
                 connection,
                 namespace: options.connection!.namespace || 'default',
+                ...(options.dataConverter && { dataConverter: options.dataConverter }),
             });
 
             // Cache the successful connection
