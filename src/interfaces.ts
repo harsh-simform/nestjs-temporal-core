@@ -203,24 +203,7 @@ export interface TemporalOptions extends LoggerConfig {
     maxRestarts?: number;
     isGlobal?: boolean;
     allowConnectionFailure?: boolean;
-    /**
-     * Custom DataConverter for serializing and deserializing Temporal payloads.
-     * Use this to enable payload encryption (e.g. via a codec server) on the client side.
-     * The same DataConverter should be configured on the worker via `workerOptions.dataConverter`.
-     *
-     * @see https://docs.temporal.io/dataconversion
-     * @example
-     * ```typescript
-     * import { DataConverter } from '@temporalio/common';
-     *
-     * TemporalModule.registerAsync({
-     *   useFactory: (): TemporalOptions => ({
-     *     connection: { address: 'localhost:7233' },
-     *     dataConverter: myDataConverter,
-     *   }),
-     * });
-     * ```
-     */
+    /** Custom DataConverter for payload serialization/encryption. Also set on the worker via `workerOptions.dataConverter`. */
     dataConverter?: DataConverter;
     /**
      * Enable NestJS shutdown hooks to properly handle SIGTERM/SIGINT signals.
