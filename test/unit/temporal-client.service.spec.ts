@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { TemporalClientService } from '../../src/services/temporal-client.service';
 import { TEMPORAL_CLIENT, TEMPORAL_MODULE_OPTIONS, TEMPORAL_CONNECTION } from '../../src/constants';
 import { TemporalOptions } from '../../src/interfaces';
-import { Client, WorkflowHandle } from '@temporalio/client';
+import { Client, WorkflowHandle, WorkflowExecutionAlreadyStartedError } from '@temporalio/client';
 
 describe('TemporalClientService', () => {
     let service: TemporalClientService;
@@ -437,6 +437,27 @@ describe('TemporalClientService', () => {
             );
 
             expect(mockClient.workflow!.start).toHaveBeenCalledTimes(1);
+        });
+
+        it('should re-throw WorkflowExecutionAlreadyStartedError without wrapping', async () => {
+            const alreadyStartedError = new WorkflowExecutionAlreadyStartedError(
+                'Workflow execution already started',
+                'my-workflow-id',
+                'testWorkflow',
+            );
+            (mockClient.workflow!.start as jest.Mock).mockRejectedValue(alreadyStartedError);
+
+            await expect(service.startWorkflow('testWorkflow')).rejects.toThrow(
+                WorkflowExecutionAlreadyStartedError,
+            );
+
+            const thrownError = await service
+                .startWorkflow('testWorkflow')
+                .catch((e) => e);
+            expect(thrownError).toBeInstanceOf(WorkflowExecutionAlreadyStartedError);
+            expect(thrownError.workflowId).toBe('my-workflow-id');
+            expect(thrownError.workflowType).toBe('testWorkflow');
+            expect(mockClient.workflow!.start).toHaveBeenCalledTimes(2);
         });
 
         it('should throw after max retries', async () => {
