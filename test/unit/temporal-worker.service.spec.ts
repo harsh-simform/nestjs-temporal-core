@@ -3297,4 +3297,272 @@ describe('TemporalWorkerManagerService', () => {
             expect(workerInstance.isRunning).toBe(false);
         });
     });
+
+    describe('Branch Coverage - autoRestartEnabled getter', () => {
+        it('should return worker.autoRestart when explicitly set to false', async () => {
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    TemporalWorkerManagerService,
+                    {
+                        provide: TEMPORAL_MODULE_OPTIONS,
+                        useValue: {
+                            ...mockOptions,
+                            worker: { workflowsPath: './workflows', autoRestart: false },
+                        },
+                    },
+                    { provide: TEMPORAL_CONNECTION, useValue: null },
+                    { provide: TemporalDiscoveryService, useValue: mockDiscoveryService },
+                ],
+            }).compile();
+
+            const svc = module.get<TemporalWorkerManagerService>(TemporalWorkerManagerService);
+            expect((svc as any).autoRestartEnabled).toBe(false);
+        });
+
+        it('should return worker.autoRestart when explicitly set to true', async () => {
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    TemporalWorkerManagerService,
+                    {
+                        provide: TEMPORAL_MODULE_OPTIONS,
+                        useValue: {
+                            ...mockOptions,
+                            worker: { workflowsPath: './workflows', autoRestart: true },
+                        },
+                    },
+                    { provide: TEMPORAL_CONNECTION, useValue: null },
+                    { provide: TemporalDiscoveryService, useValue: mockDiscoveryService },
+                ],
+            }).compile();
+
+            const svc = module.get<TemporalWorkerManagerService>(TemporalWorkerManagerService);
+            expect((svc as any).autoRestartEnabled).toBe(true);
+        });
+    });
+
+    describe('Branch Coverage - cleanupWorkerForRestart', () => {
+        it('should return early when worker is null', async () => {
+            await service.onModuleInit();
+            (service as any).worker = null;
+
+            // Should not throw
+            await expect((service as any).cleanupWorkerForRestart()).resolves.toBeUndefined();
+        });
+    });
+
+    describe('Branch Coverage - safeShutdownWorker unknown state', () => {
+        it('should return false for unrecognized worker state', async () => {
+            const unknownStateWorker = {
+                getState: jest.fn().mockReturnValue('UNKNOWN_STATE'),
+                shutdown: jest.fn(),
+            };
+
+            const result = (service as any).safeShutdownWorker(unknownStateWorker, 'test-queue');
+            expect(result).toBe(false);
+            expect(unknownStateWorker.shutdown).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('Branch Coverage - autoRestartWorker with null initResult.error', () => {
+        it('should throw generic error when initResult has no error', async () => {
+            await service.onModuleInit();
+
+            jest.spyOn(service as any, 'cleanupWorkerForRestart').mockResolvedValue(undefined);
+            jest.spyOn(service as any, 'initializeWorker').mockResolvedValue({
+                success: false,
+                error: null,
+                activitiesCount: 0,
+            });
+
+            await expect((service as any).autoRestartWorker()).rejects.toThrow(
+                'Failed to reinitialize worker',
+            );
+        });
+    });
+
+    describe('Branch Coverage - autoRestartWorkerByTaskQueue', () => {
+        const multiOptions = {
+            connection: { namespace: 'test-namespace', address: 'localhost:7233' },
+            workers: [{ taskQueue: 'defined-queue', workflowsPath: './dist/workflows' }],
+            enableLogger: false,
+        };
+
+        async function createMultiService() {
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    TemporalWorkerManagerService,
+                    { provide: TEMPORAL_MODULE_OPTIONS, useValue: multiOptions },
+                    { provide: TEMPORAL_CONNECTION, useValue: null },
+                    { provide: TemporalDiscoveryService, useValue: mockDiscoveryService },
+                ],
+            }).compile();
+            const svc = module.get<TemporalWorkerManagerService>(TemporalWorkerManagerService);
+            await svc.onModuleInit();
+            return svc;
+        }
+
+        it('should throw when worker definition is not found (line 515)', async () => {
+            const svc = await createMultiService();
+            const loggerSpy = jest.spyOn((svc as any).logger, 'error').mockImplementation();
+
+            await expect(
+                (svc as any).autoRestartWorkerByTaskQueue('nonexistent-queue'),
+            ).rejects.toThrow("Worker definition for 'nonexistent-queue' not found");
+
+            loggerSpy.mockRestore();
+        });
+
+        it('should set workerInstance error when restart fails before worker is deleted (lines 544-546)', async () => {
+            const svc = await createMultiService();
+            await svc.startWorkerByTaskQueue('defined-queue');
+
+            // Make cleanup throw so the catch block runs while workerInstance is still in the map
+            // (workers.delete happens AFTER cleanup, so if cleanup throws, the instance is still there)
+            jest.spyOn(svc as any, 'cleanupWorkerForRestartByTaskQueue').mockRejectedValue(
+                new Error('Cleanup failed'),
+            );
+            const loggerSpy = jest.spyOn((svc as any).logger, 'error').mockImplementation();
+
+            await expect(
+                (svc as any).autoRestartWorkerByTaskQueue('defined-queue'),
+            ).rejects.toThrow('Cleanup failed');
+
+            const workerInstance = (svc as any).workers.get('defined-queue');
+            expect(workerInstance?.lastError).toBeDefined();
+            expect(workerInstance?.isRunning).toBe(false);
+            loggerSpy.mockRestore();
+        });
+
+        it('should log warn when safeShutdownWorker throws in cleanupWorkerForRestartByTaskQueue (line 564)', async () => {
+            const svc = await createMultiService();
+            await svc.startWorkerByTaskQueue('defined-queue');
+
+            const workerInstance = (svc as any).workers.get('defined-queue');
+            // Make safeShutdownWorker throw via the worker's getState throwing
+            jest.spyOn(svc as any, 'safeShutdownWorker').mockImplementation(() => {
+                throw new Error('Shutdown error');
+            });
+
+            const loggerWarnSpy = jest.spyOn((svc as any).logger, 'warn').mockImplementation();
+
+            await (svc as any).cleanupWorkerForRestartByTaskQueue('defined-queue');
+
+            expect(loggerWarnSpy).toHaveBeenCalledWith(
+                expect.stringContaining('cleanup'),
+                expect.any(Error),
+            );
+            loggerWarnSpy.mockRestore();
+        });
+
+        it('should log error when auto-restart setTimeout callback fails (line 488)', async () => {
+            jest.useFakeTimers();
+            const svc = await createMultiService();
+            await svc.startWorkerByTaskQueue('defined-queue');
+
+            // Make autoRestartWorkerByTaskQueue throw so the .catch handler runs
+            jest.spyOn(svc as any, 'autoRestartWorkerByTaskQueue').mockRejectedValue(
+                new Error('Restart cascade fail'),
+            );
+            const loggerSpy = jest.spyOn((svc as any).logger, 'error').mockImplementation();
+
+            // Manually set up what runWorkerWithAutoRestartByTaskQueue does (the setTimeout path)
+            const workerInstance = (svc as any).workers.get('defined-queue');
+            workerInstance.restartCount = 0; // below maxRestarts
+            // autoRestart is undefined (not set), so autoRestartEnabled !== false is true
+
+            // Call the private method directly so it sets up the setTimeout
+            (svc as any).runWorkerWithAutoRestartByTaskQueue('defined-queue');
+            // But first make the worker's run() reject immediately
+            workerInstance.worker.run.mockRejectedValue(new Error('Worker crash'));
+            // Re-call so we get the new rejection
+            (svc as any).workers.get('defined-queue').worker.run = jest
+                .fn()
+                .mockRejectedValue(new Error('Worker crash'));
+            (svc as any).runWorkerWithAutoRestartByTaskQueue('defined-queue');
+
+            // Wait for the run().catch to fire
+            await Promise.resolve();
+            await Promise.resolve();
+
+            // Advance timers past the 1s delay
+            jest.advanceTimersByTime(1100);
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+
+            expect(loggerSpy).toHaveBeenCalledWith(
+                expect.stringContaining("Auto-restart failed for 'defined-queue'"),
+                expect.any(Error),
+            );
+
+            jest.useRealTimers();
+            loggerSpy.mockRestore();
+        });
+
+        it('should log error when max restart attempts exceeded (line 492)', async () => {
+            const svc = await createMultiService();
+            await svc.startWorkerByTaskQueue('defined-queue');
+
+            const workerInstance = (svc as any).workers.get('defined-queue');
+            const maxRestarts = 3;
+            // Set restartCount to maxRestarts so the else-if branch runs
+            workerInstance.restartCount = maxRestarts;
+            // Make run() fail - setup a new crashing worker
+            workerInstance.worker.run = jest.fn().mockRejectedValue(new Error('Worker crash'));
+
+            const loggerSpy = jest.spyOn((svc as any).logger, 'error').mockImplementation();
+
+            (svc as any).runWorkerWithAutoRestartByTaskQueue('defined-queue');
+            // Wait for run().catch to process
+            await new Promise((resolve) => setTimeout(resolve, 50));
+
+            expect(loggerSpy).toHaveBeenCalledWith(
+                expect.stringContaining('giving up'),
+                expect.any(Error),
+            );
+            loggerSpy.mockRestore();
+        });
+    });
+
+    describe('Branch Coverage - multi-worker autoRestart disabled else branch', () => {
+        it('should log error when autoRestart is disabled and worker run fails', async () => {
+            const multiOptions = {
+                connection: { namespace: 'test-namespace', address: 'localhost:7233' },
+                workers: [{ taskQueue: 'auto-off-queue', workflowsPath: './dist/workflows' }],
+                autoRestart: false,
+                enableLogger: false,
+            };
+
+            const crashingWorker = {
+                run: jest.fn().mockRejectedValue(new Error('Worker crash')),
+                shutdown: jest.fn(),
+                getState: jest.fn().mockReturnValue('RUNNING'),
+            };
+            (Worker.create as jest.Mock).mockResolvedValue(crashingWorker);
+
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    TemporalWorkerManagerService,
+                    { provide: TEMPORAL_MODULE_OPTIONS, useValue: multiOptions },
+                    { provide: TEMPORAL_CONNECTION, useValue: null },
+                    { provide: TemporalDiscoveryService, useValue: mockDiscoveryService },
+                ],
+            }).compile();
+
+            const svc = module.get<TemporalWorkerManagerService>(TemporalWorkerManagerService);
+            await svc.onModuleInit();
+
+            const loggerSpy = jest.spyOn((svc as any).logger, 'error').mockImplementation();
+
+            await svc.startWorkerByTaskQueue('auto-off-queue');
+            // Wait for the run promise to reject and the handler to execute
+            await new Promise((resolve) => setTimeout(resolve, 100));
+
+            expect(loggerSpy).toHaveBeenCalledWith(
+                expect.stringContaining("run failed"),
+                expect.any(Error),
+            );
+            loggerSpy.mockRestore();
+        });
+    });
 });

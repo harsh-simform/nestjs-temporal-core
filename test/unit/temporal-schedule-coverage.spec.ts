@@ -300,6 +300,19 @@ describe('TemporalScheduleService - Coverage Improvements', () => {
             expect(result.error.message).toBe('Property error');
         });
 
+        it('should skip intervals when all fail to parse (parsedIntervals empty, line 282 false branch)', () => {
+            // parseInterval will fail for these values, producing empty parsedIntervals
+            jest.spyOn(service as any, 'parseInterval').mockReturnValue({ success: false });
+
+            const metadata = {
+                interval: ['invalid1', 'invalid2'],
+            };
+            const result = (service as any).buildScheduleSpec(metadata);
+            // parsedIntervals.length === 0, so spec.intervals should NOT be set
+            expect(result.success).toBe(true);
+            expect(result.spec.intervals).toBeUndefined();
+        });
+
         it('should handle buildScheduleSpec error - non-Error', () => {
             const metadata: any = {
                 get cron() {

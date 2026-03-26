@@ -182,6 +182,21 @@ describe('TemporalScheduleService', () => {
             expect(stats.total).toBe(0);
         });
 
+        it('should log singular "schedule" when exactly 1 schedule exists on destroy', async () => {
+            await service.onModuleInit();
+
+            // Add exactly one schedule handle to the map
+            (service as any).scheduleHandles.set('one-schedule', mockScheduleHandle);
+
+            const loggerSpy = jest.spyOn((service as any).logger, 'info').mockImplementation();
+            await service.onModuleDestroy();
+
+            expect(loggerSpy).toHaveBeenCalledWith(
+                expect.stringContaining('1 schedule cleared'),
+            );
+            loggerSpy.mockRestore();
+        });
+
         it('should handle errors during destroy gracefully', async () => {
             await service.onModuleInit();
 
@@ -223,6 +238,36 @@ describe('TemporalScheduleService', () => {
                     scheduleId: 'test-schedule',
                     spec: options.spec,
                     action: options.action,
+                }),
+            );
+        });
+
+        it('should create a schedule with memo, searchAttributes, and limitedActions (lines 442-450)', async () => {
+            const options = {
+                scheduleId: 'test-schedule-full',
+                spec: { cronExpressions: ['0 0 * * *'] },
+                action: {
+                    type: 'startWorkflow' as const,
+                    workflowType: 'TestWorkflow',
+                    taskQueue: 'test-queue',
+                    args: [],
+                },
+                memo: { key: 'value' },
+                searchAttributes: { CustomAttr: ['value'] },
+                limitedActions: true,
+                paused: false,
+                description: 'Test schedule description',
+                overlapPolicy: 'SCHEDULE_OVERLAP_POLICY_SKIP' as any,
+                catchupWindow: '1d' as any,
+                pauseOnFailure: true,
+            };
+
+            const result = await service.createSchedule(options);
+
+            expect(result.success).toBe(true);
+            expect(mockScheduleClient.create).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    scheduleId: 'test-schedule-full',
                 }),
             );
         });
@@ -1560,6 +1605,104 @@ describe('TemporalScheduleService', () => {
             expect(errorService.getScheduleStats()).toBeDefined();
 
             loggerErrorSpy.mockRestore();
+        });
+    });
+
+    describe('Branch Coverage - outer catch non-Error string throw', () => {
+        it('should handle non-Error string thrown from outer catch (line 148)', async () => {
+            // If client.schedule getter throws a string, the outer try-catch handles it
+            const clientWithThrowingSchedule = {
+                get schedule() {
+                    throw 'Outer string error - not an Error instance';
+                },
+                connection: { address: 'localhost:7233' },
+            };
+
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    TemporalScheduleService,
+                    {
+                        provide: TEMPORAL_MODULE_OPTIONS,
+                        useValue: mockOptions,
+                    },
+                    {
+                        provide: TEMPORAL_CLIENT,
+                        useValue: clientWithThrowingSchedule,
+                    },
+                    {
+                        provide: DiscoveryService,
+                        useValue: {
+                            getProviders: jest.fn().mockReturnValue([]),
+                            getControllers: jest.fn().mockReturnValue([]),
+                        },
+                    },
+                    {
+                        provide: TemporalMetadataAccessor,
+                        useValue: { isScheduledWorkflow: jest.fn() },
+                    },
+                ],
+            }).compile();
+
+            const svc = module.get<TemporalScheduleService>(TemporalScheduleService);
+            const loggerErrorSpy = jest.spyOn((svc as any).logger, 'error').mockImplementation();
+
+            const result = await (svc as any).initializeScheduleClient();
+
+            expect(result.success).toBe(false);
+            // The outer catch catches the string error - error instanceof Error is false
+            // so error: new Error(this.extractErrorMessage(error)) where extractErrorMessage('Outer string error...') = 'Outer string error...'
+            expect(result.error).toBeInstanceOf(Error);
+            loggerErrorSpy.mockRestore();
+        });
+    });
+
+    describe('Branch Coverage - inner catch non-Error string throw', () => {
+        it('should handle non-Error string thrown when accessing client.connection', async () => {
+            // When client.schedule is null/falsy, the service calls new ScheduleClient({ connection: this.client.connection })
+            // If accessing this.client.connection throws a string (non-Error), it hits the inner catch
+            // with errorMessage = 'Unknown error' (the false branch of error instanceof Error)
+            const clientWithThrowingConnection = {
+                schedule: null,
+                get connection() {
+                    throw 'String error - not an Error instance';
+                },
+            };
+
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    TemporalScheduleService,
+                    {
+                        provide: TEMPORAL_MODULE_OPTIONS,
+                        useValue: mockOptions,
+                    },
+                    {
+                        provide: TEMPORAL_CLIENT,
+                        useValue: clientWithThrowingConnection,
+                    },
+                    {
+                        provide: DiscoveryService,
+                        useValue: {
+                            getProviders: jest.fn().mockReturnValue([]),
+                            getControllers: jest.fn().mockReturnValue([]),
+                        },
+                    },
+                    {
+                        provide: TemporalMetadataAccessor,
+                        useValue: { isScheduledWorkflow: jest.fn() },
+                    },
+                ],
+            }).compile();
+
+            const svc = module.get<TemporalScheduleService>(TemporalScheduleService);
+            const loggerWarnSpy = jest.spyOn((svc as any).logger, 'warn').mockImplementation();
+
+            const result = await (svc as any).initializeScheduleClient();
+
+            expect(result.success).toBe(false);
+            expect(loggerWarnSpy).toHaveBeenCalledWith(
+                expect.stringContaining('Unknown error'),
+            );
+            loggerWarnSpy.mockRestore();
         });
     });
 });

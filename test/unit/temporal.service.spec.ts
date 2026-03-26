@@ -1452,4 +1452,102 @@ describe('TemporalService', () => {
             expect(health.status).toBe('not_available');
         });
     });
+
+    describe('Branch Coverage - performShutdown', () => {
+        it('should log without worker stopped when worker was not running', async () => {
+            mockWorkerService.isWorkerRunning = jest.fn().mockReturnValue(false);
+            await service.onModuleInit();
+
+            const loggerSpy = jest.spyOn((service as any).logger, 'info').mockImplementation();
+            await service.onModuleDestroy();
+
+            expect(mockWorkerService.stopWorker).not.toHaveBeenCalled();
+            expect(loggerSpy).toHaveBeenCalledWith('Temporal Service shut down');
+            loggerSpy.mockRestore();
+        });
+    });
+
+    describe('Branch Coverage - getOverallHealth details fallback', () => {
+        it('should use empty object when worker details is undefined', async () => {
+            await service.onModuleInit();
+            jest.spyOn(service as any, 'getWorkerHealthStatus').mockReturnValue({ status: 'healthy' });
+
+            const result = await service.getOverallHealth();
+
+            expect(result.components.worker.details).toEqual({});
+        });
+    });
+
+    describe('Branch Coverage - namespace fallback', () => {
+        it('should use default namespace when connection namespace is not set', async () => {
+            const optionsWithoutNamespace = {
+                taskQueue: 'test-queue',
+                connection: { address: 'localhost:7233' },
+                enableLogger: false,
+            };
+
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    TemporalService,
+                    { provide: TEMPORAL_MODULE_OPTIONS, useValue: optionsWithoutNamespace },
+                    { provide: TemporalClientService, useValue: mockClientService },
+                    { provide: TemporalWorkerManagerService, useValue: mockWorkerService },
+                    { provide: TemporalScheduleService, useValue: mockScheduleService },
+                    { provide: TemporalDiscoveryService, useValue: mockDiscoveryService },
+                    { provide: TemporalMetadataAccessor, useValue: mockMetadataAccessor },
+                ],
+            }).compile();
+
+            const svc = module.get<TemporalService>(TemporalService);
+            await svc.onModuleInit();
+
+            const health = svc.getHealth();
+            expect(health.namespace).toBe('default');
+
+            const stats = svc.getStats();
+            expect(stats.client.namespace).toBe('default');
+        });
+    });
+
+    describe('Branch Coverage - enhanceWorkflowOptions taskQueue fallback', () => {
+        it('should use DEFAULT_TASK_QUEUE when neither options nor service has taskQueue', async () => {
+            const optionsWithoutTaskQueue = {
+                connection: { address: 'localhost:7233', namespace: 'test' },
+                enableLogger: false,
+            };
+
+            const module: TestingModule = await Test.createTestingModule({
+                providers: [
+                    TemporalService,
+                    { provide: TEMPORAL_MODULE_OPTIONS, useValue: optionsWithoutTaskQueue },
+                    { provide: TemporalClientService, useValue: mockClientService },
+                    { provide: TemporalWorkerManagerService, useValue: mockWorkerService },
+                    { provide: TemporalScheduleService, useValue: mockScheduleService },
+                    { provide: TemporalDiscoveryService, useValue: mockDiscoveryService },
+                    { provide: TemporalMetadataAccessor, useValue: mockMetadataAccessor },
+                ],
+            }).compile();
+
+            const svc = module.get<TemporalService>(TemporalService);
+            await svc.onModuleInit();
+
+            // startWorkflow without taskQueue should use DEFAULT_TASK_QUEUE
+            await svc.startWorkflow('testWorkflow', [], {});
+            expect(mockClientService.startWorkflow).toHaveBeenCalled();
+        });
+    });
+
+    describe('Branch Coverage - getActivityHealth unhealthy', () => {
+        it('should return unhealthy when discovery status is not healthy', async () => {
+            mockDiscoveryService.getHealthStatus = jest.fn().mockReturnValue({
+                isComplete: true,
+                status: 'unhealthy',
+                timestamp: Date.now(),
+            });
+            await service.onModuleInit();
+
+            const actHealth = (service as any).getActivityHealth();
+            expect(actHealth.status).toBe('unhealthy');
+        });
+    });
 });

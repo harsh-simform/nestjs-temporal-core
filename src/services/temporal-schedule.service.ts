@@ -1,6 +1,6 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, Inject } from '@nestjs/common';
 import { DiscoveryService } from '@nestjs/core';
-import { ScheduleClient, ScheduleHandle } from '@temporalio/client';
+import { Client, ScheduleClient, ScheduleHandle } from '@temporalio/client';
 import { Duration } from '@temporalio/common';
 import { TEMPORAL_MODULE_OPTIONS, TEMPORAL_CLIENT } from '../constants';
 import {
@@ -17,7 +17,6 @@ import {
     ScheduleWorkflowOptions,
     ScheduleSpecBuilderResult,
     ScheduleIntervalParseResult,
-    TemporalConnection,
     ScheduleWorkflowAction,
     ScheduleOptions,
 } from '../interfaces';
@@ -38,7 +37,7 @@ export class TemporalScheduleService implements OnModuleInit, OnModuleDestroy {
         @Inject(TEMPORAL_MODULE_OPTIONS)
         private readonly options: TemporalOptions,
         @Inject(TEMPORAL_CLIENT)
-        private readonly client: { schedule?: ScheduleClient; connection?: TemporalConnection },
+        private readonly client: Client | null,
         private readonly discoveryService: DiscoveryService,
         private readonly metadataAccessor: TemporalMetadataAccessor,
     ) {
@@ -120,7 +119,7 @@ export class TemporalScheduleService implements OnModuleInit, OnModuleDestroy {
                     // Type assertion: ScheduleClient expects connection to match its internal type
 
                     this.scheduleClient = new ScheduleClient({
-                        connection: this.client.connection as any,
+                        connection: this.client?.connection,
                         namespace: this.options.connection?.namespace || 'default',
                     });
                     this.logger.verbose('Schedule client initialized successfully');

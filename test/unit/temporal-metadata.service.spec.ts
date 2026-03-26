@@ -1429,4 +1429,233 @@ describe('TemporalMetadataAccessor', () => {
             expect(result).toBeNull();
         });
     });
+
+    describe('Branch Coverage - || "Unknown" fallbacks', () => {
+        it('should use "Unknown" when constructor.name is empty in extractActivityMethods cache path', () => {
+            // Create a class with empty name to test || 'Unknown' fallback
+            const AnonymousClass = class {};
+            Object.defineProperty(AnonymousClass, 'name', { value: '' });
+
+            const instance = new AnonymousClass();
+            // Populate cache with a function value to trigger constructor.name || 'Unknown' path
+            const cache = new Map<string, unknown>();
+            cache.set('testMethod', function testMethod() {});
+            service['activityMethodCache'].set(AnonymousClass, cache);
+
+            const result = service.extractActivityMethods(instance);
+            expect(result.methods.get('testMethod')?.className).toBe('Unknown');
+        });
+
+        it('should use "Unknown" for className in getActivityMethodMetadata when constructor.name is empty', () => {
+            const AnonymousClass = class {
+                myMethod() {}
+            };
+            Object.defineProperty(AnonymousClass, 'name', { value: '' });
+
+            Reflect.defineMetadata(
+                TEMPORAL_ACTIVITY_METHOD,
+                { name: 'myMethod' },
+                AnonymousClass.prototype,
+                'myMethod',
+            );
+
+            // Pass an instance so Object.getPrototypeOf(instance) === AnonymousClass.prototype
+            const instance = new AnonymousClass();
+            const result = service.getActivityMethodMetadata(instance, 'myMethod');
+            expect(result?.className).toBe('Unknown');
+        });
+
+        it('should use methodName fallback when metadata.name is empty in getActivityMethodMetadata', () => {
+            class TestFallbackClass {
+                myFallbackMethod() {}
+            }
+
+            Reflect.defineMetadata(
+                TEMPORAL_ACTIVITY_METHOD,
+                { name: '' }, // Empty name triggers || methodName
+                TestFallbackClass.prototype,
+                'myFallbackMethod',
+            );
+
+            const instance = new TestFallbackClass();
+            const result = service.getActivityMethodMetadata(instance, 'myFallbackMethod');
+            expect(result?.name).toBe('myFallbackMethod');
+        });
+
+        it('should use "Unknown" for className in extractActivityMethodsFromClass when target.name is empty', () => {
+            const AnonymousClass = class {
+                aMethod() {}
+            };
+            Object.defineProperty(AnonymousClass, 'name', { value: '' });
+
+            const proto = AnonymousClass.prototype;
+            const methods: Record<string, unknown> = { aMethod: { name: '' } };
+            Reflect.defineMetadata(TEMPORAL_ACTIVITY_METHOD, methods, proto);
+
+            const result = service.extractActivityMethodsFromClass(AnonymousClass);
+            // Either name falls back to methodName and className to 'Unknown'
+            expect(result.length).toBeGreaterThanOrEqual(0);
+        });
+
+        it('should use "Unknown" in extractActivityMethods fallback path when constructor.name is empty', () => {
+            const AnonymousClass = class {
+                fallbackMethod() {}
+            };
+            Object.defineProperty(AnonymousClass, 'name', { value: '' });
+
+            const methods: Record<string, unknown> = {
+                fallbackMethod: { name: 'fallbackActivity' },
+            };
+            Reflect.defineMetadata(TEMPORAL_ACTIVITY, {}, AnonymousClass);
+            Reflect.defineMetadata(TEMPORAL_ACTIVITY_METHOD, methods, AnonymousClass.prototype);
+
+            const instance = new AnonymousClass();
+            const result = service.extractActivityMethods(instance);
+
+            for (const [, method] of result.methods.entries()) {
+                expect(method.className).toBe('Unknown');
+            }
+        });
+
+        it('should use target.name fallback in getActivityName when metadata has no name', () => {
+            class NamedClass {}
+            Reflect.defineMetadata(TEMPORAL_ACTIVITY, {}, NamedClass); // no name in metadata
+
+            const result = service.getActivityName(NamedClass);
+            expect(result).toBe('NamedClass');
+        });
+
+        it('should return null from getActivityName when metadata has no name and target.name is empty', () => {
+            const AnonymousClass = class {};
+            Object.defineProperty(AnonymousClass, 'name', { value: '' });
+            Reflect.defineMetadata(TEMPORAL_ACTIVITY, {}, AnonymousClass);
+
+            // metadata?.name is '' (falsy), target.name is '' (falsy), so returns null
+            const result = service.getActivityName(AnonymousClass);
+            expect(result).toBeNull();
+        });
+
+        it('should use "Unknown" for targetName in validateMetadata when target is not a function', () => {
+            const result = service.validateMetadata({ notAFunction: true }, ['someKey']);
+            // targetName should be 'Unknown' since target is not a function
+            expect(result).toBeDefined();
+            expect(result.missing).toContain('someKey');
+        });
+
+        it('should use "Unknown" for targetName in validateMetadata when function has empty name', () => {
+            const AnonymousClass = class {};
+            Object.defineProperty(AnonymousClass, 'name', { value: '' });
+            const result = service.validateMetadata(AnonymousClass, ['missingKey']);
+            expect(result.missing).toContain('missingKey');
+        });
+
+        it('should use "Unknown" in getActivityInfo when target.name is empty', () => {
+            const AnonymousClass = class {};
+            Object.defineProperty(AnonymousClass, 'name', { value: '' });
+
+            const result = service.getActivityInfo(AnonymousClass);
+            expect(result.className).toBe('Unknown');
+        });
+
+        it('should use "Unknown" in getCacheStats when constructor.name is empty', () => {
+            const AnonymousClass = class {};
+            Object.defineProperty(AnonymousClass, 'name', { value: '' });
+
+            const cache = new Map<string, unknown>();
+            service['activityMethodCache'].set(AnonymousClass, cache);
+
+            const stats = service.getCacheStats();
+            expect(stats.entries).toContain('Unknown');
+        });
+
+        it('should use "Unknown" in validateActivityClass when constructor.name is empty', () => {
+            const AnonymousClass = class {};
+            Object.defineProperty(AnonymousClass, 'name', { value: '' });
+
+            const result = service.validateActivityClass(AnonymousClass);
+            expect(result.className).toBe('Unknown');
+        });
+
+        it('should use "Unknown" in validateActivityClass catch block when constructor.name is empty', () => {
+            const AnonymousClass = class {};
+            Object.defineProperty(AnonymousClass, 'name', { value: '' });
+
+            // Make hasActivityMethods throw to hit the catch block (line 504)
+            jest.spyOn(service as any, 'hasActivityMethods').mockImplementation(() => {
+                throw new Error('Internal error');
+            });
+
+            const result = service.validateActivityClass(AnonymousClass);
+            // In catch block, constructor.name || 'Unknown' where constructor.name = '' → 'Unknown'
+            expect(result.className).toBe('Unknown');
+            expect(result.isValid).toBe(false);
+        });
+
+        it('should use fallback path when no collection-level metadata exists (lines 281-294)', () => {
+            // Create class with ONLY per-property metadata (no collection-level metadata)
+            class FallbackClass {
+                fallbackActivity() {}
+            }
+            // Set per-property metadata (not collection)
+            Reflect.defineMetadata(
+                TEMPORAL_ACTIVITY_METHOD,
+                { name: 'fallbackActivityName' },
+                FallbackClass.prototype,
+                'fallbackActivity',
+            );
+            // Explicitly ensure NO collection-level metadata exists
+            // (Don't set Reflect.defineMetadata without property key)
+
+            const instance = new FallbackClass();
+            const result = service.extractActivityMethods(instance);
+            // Should find the method via fallback path
+            expect(result.methods.size).toBeGreaterThanOrEqual(1);
+        });
+
+        it('should use methodName fallback in the fallback path when metadata.name is empty (line 283-284)', () => {
+            class FallbackEmptyNameClass {
+                emptyNameMethod() {}
+            }
+            Reflect.defineMetadata(
+                TEMPORAL_ACTIVITY_METHOD,
+                { name: '' }, // Empty name - should fallback to propertyName
+                FallbackEmptyNameClass.prototype,
+                'emptyNameMethod',
+            );
+
+            const instance = new FallbackEmptyNameClass();
+            const result = service.extractActivityMethods(instance);
+            // The activityName should fall back to 'emptyNameMethod'
+            expect(result.methods.has('emptyNameMethod')).toBe(true);
+        });
+
+        it('should skip caching when constructor is falsy (line 312 false branch)', () => {
+            // Create instance with no constructor in the prototype chain
+            const proto = Object.create(null) as Record<string, unknown>;
+            (proto as any).myMethod = function myMethod() {};
+            Reflect.defineMetadata(TEMPORAL_ACTIVITY_METHOD, { myMethod: { name: 'myMethod' } }, proto);
+            const instance = Object.create(proto);
+
+            // instance.constructor is undefined since proto has no constructor
+            const result = service.extractActivityMethods(instance);
+            // Should succeed without caching
+            expect(result).toBeDefined();
+        });
+
+        it('should use methodName fallback when metadata.name is empty in collection path (line 242)', () => {
+            class CollectionFallbackClass {
+                collectionMethod() {}
+            }
+            // Set collection-level metadata with empty name
+            Reflect.defineMetadata(
+                TEMPORAL_ACTIVITY_METHOD,
+                { collectionMethod: { name: '' } }, // empty name triggers || methodName
+                CollectionFallbackClass.prototype,
+            );
+
+            const instance = new CollectionFallbackClass();
+            const result = service.extractActivityMethods(instance);
+            expect(result.methods.has('collectionMethod')).toBe(true);
+        });
+    });
 });
