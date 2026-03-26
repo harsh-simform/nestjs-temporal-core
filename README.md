@@ -8,6 +8,7 @@ A comprehensive NestJS integration framework for Temporal.io that provides enter
 ![Branches](https://img.shields.io/badge/branches-95.25%25-brightgreen.svg?style=flat)
 ![Functions](https://img.shields.io/badge/functions-100%25-brightgreen.svg?style=flat)
 ![Lines](https://img.shields.io/badge/lines-100%25-brightgreen.svg?style=flat)
+[![Coverage](https://codecov.io/gh/harsh-simform/nestjs-temporal-core/graph/badge.svg)](https://codecov.io/gh/harsh-simform/nestjs-temporal-core)
 
 [Documentation](https://harsh-simform.github.io/nestjs-temporal-core/) • [NPM](https://www.npmjs.com/package/nestjs-temporal-core) • [GitHub](https://github.com/harsh-simform/nestjs-temporal-core) • [Example Project](https://github.com/harsh-simform/nestjs-temporal-core-example)
 
