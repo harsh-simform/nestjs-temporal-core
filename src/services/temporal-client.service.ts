@@ -146,7 +146,7 @@ export class TemporalClientService implements OnModuleInit {
                 );
                 return { ...handle, handle };
             } catch (error) {
-                // Re-throw typed Temporal errors as-is so callers can catch them by type
+                // Re-throw WorkflowExecutionAlreadyStartedError as-is so callers can catch it by type
                 if (error instanceof WorkflowExecutionAlreadyStartedError) {
                     throw error;
                 }
