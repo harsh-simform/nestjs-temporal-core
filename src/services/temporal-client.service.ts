@@ -3,6 +3,7 @@ import {
     Client,
     WorkflowHandle,
     WorkflowStartOptions as TemporalWorkflowStartOptions,
+    WorkflowExecutionAlreadyStartedError,
 } from '@temporalio/client';
 import { TEMPORAL_CLIENT, TEMPORAL_MODULE_OPTIONS } from '../constants';
 import {
@@ -145,6 +146,11 @@ export class TemporalClientService implements OnModuleInit {
                 );
                 return { ...handle, handle };
             } catch (error) {
+                // Re-throw WorkflowExecutionAlreadyStartedError as-is so callers can catch it by type
+                if (error instanceof WorkflowExecutionAlreadyStartedError) {
+                    throw error;
+                }
+
                 const message = this.extractErrorMessage(error);
 
                 // Check if this is a gRPC connection error that we should retry
