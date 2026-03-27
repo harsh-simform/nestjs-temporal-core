@@ -9,7 +9,7 @@ export { Worker } from '@temporalio/worker';
 import { Type } from '@nestjs/common';
 import { ScheduleClient, ScheduleHandle } from '@temporalio/client';
 import { NativeConnection, Worker } from '@temporalio/worker';
-import { Duration, TypedSearchAttributes } from '@temporalio/common';
+import { DataConverter, Duration, TypedSearchAttributes } from '@temporalio/common';
 import { TLSConfig } from '@temporalio/common/lib/internal-non-workflow';
 
 /**
@@ -203,6 +203,8 @@ export interface TemporalOptions extends LoggerConfig {
     maxRestarts?: number;
     isGlobal?: boolean;
     allowConnectionFailure?: boolean;
+    /** Custom DataConverter for payload serialization/encryption. Also set on the worker via `workerOptions.dataConverter`. */
+    dataConverter?: DataConverter;
     /**
      * Enable NestJS shutdown hooks to properly handle SIGTERM/SIGINT signals.
      * When enabled, the module will register shutdown hooks to ensure graceful worker termination.
@@ -284,7 +286,7 @@ export interface WorkerCreateOptions {
     /**
      * Provide a custom DataConverter.
      */
-    dataConverter?: Record<string, unknown>;
+    dataConverter?: DataConverter;
 
     // Tuning and concurrency
     /**
