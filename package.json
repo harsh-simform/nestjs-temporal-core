@@ -44,7 +44,7 @@
     "test": "jest --coverage --passWithNoTests --forceExit",
     "test:unit": "jest --testPathPatterns=test/unit --testPathIgnorePatterns=test/performance --coverage --passWithNoTests --forceExit",
     "test:integration": "jest --testPathPatterns=test/integration --coverage --passWithNoTests --forceExit",
-    "test:ci": "npm run test:unit && npm run test:integration",
+    "test:ci": "jest --coverage --passWithNoTests --forceExit",
     "make-badges": "istanbul-badges-readme",
     "docs:generate": "typedoc src --out docs --excludePrivate --excludeProtected",
     "docs:serve": "npx http-server docs -p 3001 -o",
