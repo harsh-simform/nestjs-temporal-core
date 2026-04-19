@@ -44,3 +44,6 @@ lerna-debug.log*
 /docs/temp
 /docs/API.md
 
+# Claude Code
+.claude/
+

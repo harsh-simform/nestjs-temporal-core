@@ -287,6 +287,36 @@ export class TemporalClientService implements OnModuleInit {
      * @param signalArgs - Arguments for the signal
      * @param workflowArgs - Arguments to start the workflow with (used only when starting)
      * @param options - Workflow start options (taskQueue, workflowId, etc.)
+     *
+     * @example Ensure a cart workflow is running, then apply an item
+     * ```typescript
+     * // Idempotent: starts the cart the first time, signals it every time.
+     * await clientService.signalWithStart(
+     *   'cartWorkflow',
+     *   'addItem',
+     *   [{ sku: 'SKU-123', qty: 2 }],
+     *   [userId],                                 // args passed to cartWorkflow on first start
+     *   { workflowId: `cart-${userId}`, taskQueue: 'carts' },
+     * );
+     * ```
+     *
+     * @example With reuse policy and timeouts
+     * ```typescript
+     * const handle = await clientService.signalWithStart(
+     *   'orderWorkflow',
+     *   'approve',
+     *   ['manager-approval'],
+     *   [orderId, customerId],
+     *   {
+     *     workflowId: `order-${orderId}`,
+     *     taskQueue: 'orders',
+     *     workflowIdReusePolicy: 'ALLOW_DUPLICATE',
+     *     workflowExecutionTimeout: '1h',
+     *     memo: { source: 'api' },
+     *   },
+     * );
+     * console.log(`Signaled + maybe-started: ${handle.workflowId}`);
+     * ```
      */
     async signalWithStart(
         workflowType: string,

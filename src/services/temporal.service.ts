@@ -238,6 +238,24 @@ export class TemporalService implements OnModuleInit, OnModuleDestroy {
     /**
      * Atomically start a workflow and send a signal to it.
      * If the workflow is already running, only the signal is delivered.
+     *
+     * Returns a structured `WorkflowSignalResult` (unlike the lower-level
+     * `TemporalClientService.signalWithStart`, which returns the raw handle).
+     *
+     * @example Idempotent "ensure running + signal"
+     * ```typescript
+     * const result = await temporalService.signalWithStart(
+     *   'cartWorkflow',
+     *   'addItem',
+     *   [{ sku: 'SKU-123', qty: 2 }],
+     *   [userId],
+     *   { workflowId: `cart-${userId}`, taskQueue: 'carts' },
+     * );
+     *
+     * if (result.success) {
+     *   this.logger.log(`Signal '${result.signalName}' delivered to ${result.workflowId}`);
+     * }
+     * ```
      */
     async signalWithStart(
         workflowType: string,

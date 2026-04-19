@@ -36,6 +36,16 @@ export interface IWorkflowProxy<T extends Workflow> {
     /**
      * Start a new execution of this workflow.
      * Args are typed as `Parameters<T>` — TypeScript enforces the workflow's signature.
+     *
+     * @example
+     * ```typescript
+     * // orderWorkflow: (orderId: string, customerId: number) => Promise<{ status: string }>
+     * const handle = await this.orderProxy.start(
+     *   ['order-42', 7],
+     *   { workflowId: 'order-42', workflowIdReusePolicy: 'ALLOW_DUPLICATE' },
+     * );
+     * const { status } = await handle.result(); // typed: { status: string }
+     * ```
      */
     start(
         args: Parameters<T>,
@@ -45,12 +55,24 @@ export interface IWorkflowProxy<T extends Workflow> {
     /**
      * Get a typed handle to an existing workflow execution.
      * `result()` on the handle returns `Promise<WorkflowResultType<T>>`.
+     *
+     * @example
+     * ```typescript
+     * const handle = await this.orderProxy.getHandle('order-42');
+     * const result = await handle.result(); // typed as the workflow's return type
+     * ```
      */
     getHandle(workflowId: string, runId?: string): Promise<WorkflowHandle<T>>;
 
     /**
      * Send a typed signal using a `SignalDefinition` created with `defineSignal`.
      * TypeScript infers `TArgs` from the definition — call site is fully type-checked.
+     *
+     * @example
+     * ```typescript
+     * // in workflow file: export const approveSignal = defineSignal<[string]>('approve');
+     * await this.orderProxy.signal('order-42', approveSignal, 'manager-approval');
+     * ```
      */
     signal<TArgs extends unknown[]>(
         workflowId: string,
@@ -61,12 +83,27 @@ export interface IWorkflowProxy<T extends Workflow> {
     /**
      * Send a signal by string name. Use when a `SignalDefinition` is unavailable.
      * Args are `readonly unknown[]` — no implicit `any`.
+     *
+     * @example
+     * ```typescript
+     * await this.orderProxy.signalByName('order-42', 'approve', ['manager-approval']);
+     * ```
      */
     signalByName(workflowId: string, signalName: string, args?: readonly unknown[]): Promise<void>;
 
     /**
      * Query the workflow using a typed `QueryDefinition` created with `defineQuery`.
      * `TResult` and `TArgs` are both inferred from the definition.
+     *
+     * @example
+     * ```typescript
+     * // in workflow file: export const statusQuery = defineQuery<OrderStatus>('getStatus');
+     * const status = await this.orderProxy.query('order-42', statusQuery); // typed: OrderStatus
+     *
+     * // query with args:
+     * // export const itemQuery = defineQuery<Item, [string]>('getItem');
+     * const item = await this.orderProxy.query('order-42', itemQuery, 'item-id');
+     * ```
      */
     query<TResult, TArgs extends unknown[] = []>(
         workflowId: string,
@@ -77,6 +114,14 @@ export interface IWorkflowProxy<T extends Workflow> {
     /**
      * Query by string name. Use when a `QueryDefinition` is unavailable.
      * Caller must supply `TResult` explicitly (e.g. `queryByName<OrderStatus>(...)`).
+     *
+     * @example
+     * ```typescript
+     * const status = await this.orderProxy.queryByName<OrderStatus>(
+     *   'order-42',
+     *   'getStatus',
+     * );
+     * ```
      */
     queryByName<TResult>(
         workflowId: string,
@@ -88,6 +133,17 @@ export interface IWorkflowProxy<T extends Workflow> {
      * Atomically start the workflow and send a signal.
      * If the workflow is already running, only the signal is delivered (no duplicate start).
      * Both `signalArgs` and `workflowArgs` are fully typed via the respective definitions.
+     *
+     * @example Idempotent "ensure running + signal"
+     * ```typescript
+     * // export const addItemSignal = defineSignal<[CartItem]>('addItem');
+     * await this.cartProxy.signalWithStart(
+     *   addItemSignal,
+     *   [{ sku: 'SKU-123', qty: 2 }],   // signalArgs — typed
+     *   [userId],                        // workflowArgs — typed as Parameters<cartWorkflow>
+     *   { workflowId: `cart-${userId}`, taskQueue: 'carts' },
+     * );
+     * ```
      */
     signalWithStart<TSignalArgs extends unknown[]>(
         signalDef: SignalDefinition<TSignalArgs>,

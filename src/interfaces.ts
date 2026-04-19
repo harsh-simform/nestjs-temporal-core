@@ -1047,6 +1047,21 @@ export interface WorkflowSignalConfig {
  * When `T` is known (e.g. inside `IWorkflowProxy<T>`), `result()` returns
  * `Promise<WorkflowResultType<T>>` and signal/query methods are fully typed.
  * Defaults to the base `Workflow` type for untyped call sites (e.g. `TemporalClientService`).
+ *
+ * @example Typed handle via the workflow proxy
+ * ```typescript
+ * // orderWorkflow: (orderId: string, customerId: number) => Promise<{ status: string }>
+ * const handle = await this.orderProxy.start(['order-1', 42]);
+ * // handle.result() is Promise<{ status: string }> — no cast required
+ * const { status } = await handle.result();
+ * ```
+ *
+ * @example Untyped handle from the low-level client service
+ * ```typescript
+ * // Defaults to WorkflowHandleWithMetadata<Workflow>; result() is Promise<unknown>
+ * const handle = await clientService.startWorkflow('orderWorkflow', [orderId]);
+ * const raw = await handle.result(); // caller narrows
+ * ```
  */
 export type WorkflowHandleWithMetadata<T extends Workflow = Workflow> = WorkflowHandle<T> & {
     handle: WorkflowHandle<T>;
