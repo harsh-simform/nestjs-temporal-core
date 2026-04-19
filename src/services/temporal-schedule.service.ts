@@ -1,7 +1,7 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, Inject } from '@nestjs/common';
 import { DiscoveryService } from '@nestjs/core';
 import { Client, ScheduleClient, ScheduleHandle } from '@temporalio/client';
-import { Duration } from '@temporalio/common';
+import { Duration, SearchAttributes } from '@temporalio/common';
 import { TEMPORAL_MODULE_OPTIONS, TEMPORAL_CLIENT } from '../constants';
 import {
     TemporalOptions,
@@ -19,6 +19,7 @@ import {
     ScheduleIntervalParseResult,
     ScheduleWorkflowAction,
     ScheduleOptions,
+    ScheduleSpec,
 } from '../interfaces';
 import { TemporalMetadataAccessor } from './temporal-metadata.service';
 import { createLogger, TemporalLogger } from '../utils/logger';
@@ -58,6 +59,40 @@ export class TemporalScheduleService implements OnModuleInit, OnModuleDestroy {
             return error;
         }
         return 'Unknown error';
+    }
+
+    /**
+     * Normalize a user-facing ScheduleOptions (which may include deprecated
+     * compat fields like `spec.timezones` or `action.retryPolicy`) into the
+     * exact shape consumed by `ScheduleClient.create()`.
+     *
+     * Rules:
+     * - `spec.timezones[0]` promotes to `spec.timezone` when `timezone` absent.
+     * - `action.retryPolicy` promotes to `action.retry` when `retry` absent.
+     * - `searchAttributes` is passed through as the deprecated-but-valid
+     *   `SearchAttributes` SDK shape.
+     */
+    private normalizeScheduleOptions(opts: ScheduleOptions): ScheduleOptions {
+        const { timezones, ...specRest } = opts.spec as ScheduleSpec;
+        const sdkSpec = {
+            ...specRest,
+            ...(timezones && timezones.length > 0 && !specRest.timezone
+                ? { timezone: timezones[0] }
+                : {}),
+        } as ScheduleOptions['spec'];
+
+        const action = opts.action as ScheduleWorkflowAction;
+        const { retryPolicy, ...actionRest } = action;
+        const sdkAction = {
+            ...actionRest,
+            ...(retryPolicy && !actionRest.retry ? { retry: retryPolicy } : {}),
+        } as ScheduleOptions['action'];
+
+        return {
+            ...opts,
+            spec: sdkSpec,
+            action: sdkAction,
+        };
     }
 
     /**
@@ -206,7 +241,8 @@ export class TemporalScheduleService implements OnModuleInit, OnModuleDestroy {
 
             const workflowOptions = this.buildWorkflowOptions(scheduleMetadata);
 
-            // Create the schedule
+            // Create the schedule (user-facing shape, may include deprecated fields).
+            // Normalized to the SDK shape by `normalizeScheduleOptions` before sending.
             const action: ScheduleWorkflowAction = {
                 type: 'startWorkflow',
                 workflowType,
@@ -215,18 +251,16 @@ export class TemporalScheduleService implements OnModuleInit, OnModuleDestroy {
                 ...workflowOptions,
             };
 
-            const scheduleOptions: ScheduleOptions = {
+            const sdkOptions = this.normalizeScheduleOptions({
                 scheduleId,
-                spec: scheduleSpecResult.spec!,
+                spec: scheduleSpecResult.spec as ScheduleOptions['spec'],
                 action,
-                memo: (scheduleMetadata.memo as Record<string, unknown>) || {},
+                memo: (scheduleMetadata.memo as Record<string, unknown>) || undefined,
                 searchAttributes:
-                    (scheduleMetadata.searchAttributes as Record<string, unknown>) || {},
-            };
+                    (scheduleMetadata.searchAttributes as SearchAttributes) || undefined,
+            });
 
-            // Type assertion: scheduleOptions interface matches Temporal SDK's expected type
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const scheduleHandle = await this.scheduleClient!.create(scheduleOptions as any);
+            const scheduleHandle = await this.scheduleClient!.create(sdkOptions);
 
             this.scheduleHandles.set(scheduleId, scheduleHandle);
 
@@ -257,26 +291,30 @@ export class TemporalScheduleService implements OnModuleInit, OnModuleDestroy {
         scheduleMetadata: Record<string, unknown>,
     ): ScheduleSpecBuilderResult {
         try {
-            const spec: Record<string, unknown> = {};
+            const spec: Partial<ScheduleSpec> = {};
 
             // Handle cron schedules
             if (scheduleMetadata.cron) {
-                spec.cronExpressions = Array.isArray(scheduleMetadata.cron)
-                    ? scheduleMetadata.cron
-                    : [scheduleMetadata.cron];
+                spec.cronExpressions = (
+                    Array.isArray(scheduleMetadata.cron)
+                        ? scheduleMetadata.cron
+                        : [scheduleMetadata.cron]
+                ) as string[];
             }
 
             // Handle interval schedules
             if (scheduleMetadata.interval) {
-                const intervals = Array.isArray(scheduleMetadata.interval)
-                    ? scheduleMetadata.interval
-                    : [scheduleMetadata.interval];
+                const intervals = (
+                    Array.isArray(scheduleMetadata.interval)
+                        ? scheduleMetadata.interval
+                        : [scheduleMetadata.interval]
+                ) as Array<string | number>;
                 const parsedIntervals = intervals
                     .map((interval) => {
                         const result = this.parseInterval(interval);
                         return result.success ? result.interval : null;
                     })
-                    .filter(Boolean);
+                    .filter((interval): interval is { every: Duration } => interval !== null);
 
                 if (parsedIntervals.length > 0) {
                     spec.intervals = parsedIntervals;
@@ -285,19 +323,21 @@ export class TemporalScheduleService implements OnModuleInit, OnModuleDestroy {
 
             // Handle calendar schedules
             if (scheduleMetadata.calendar) {
-                spec.calendars = Array.isArray(scheduleMetadata.calendar)
-                    ? scheduleMetadata.calendar
-                    : [scheduleMetadata.calendar];
+                spec.calendars = (
+                    Array.isArray(scheduleMetadata.calendar)
+                        ? scheduleMetadata.calendar
+                        : [scheduleMetadata.calendar]
+                ) as ScheduleSpec['calendars'];
             }
 
             // Handle timezone
             if (scheduleMetadata.timezone) {
-                spec.timeZone = scheduleMetadata.timezone;
+                spec.timezone = scheduleMetadata.timezone as string;
             }
 
             // Handle jitter
             if (scheduleMetadata.jitter) {
-                spec.jitter = scheduleMetadata.jitter;
+                spec.jitter = scheduleMetadata.jitter as Duration;
             }
 
             return {
@@ -342,7 +382,8 @@ export class TemporalScheduleService implements OnModuleInit, OnModuleDestroy {
         }
 
         if (scheduleMetadata.retryPolicy) {
-            options.retryPolicy = scheduleMetadata.retryPolicy as Record<string, unknown>;
+            options.retryPolicy =
+                scheduleMetadata.retryPolicy as import('@temporalio/common').RetryPolicy;
         }
 
         if (scheduleMetadata.args) {
@@ -360,7 +401,7 @@ export class TemporalScheduleService implements OnModuleInit, OnModuleDestroy {
             if (typeof interval === 'number') {
                 return {
                     success: true,
-                    interval: { every: `${interval}ms` },
+                    interval: { every: `${interval}ms` as Duration },
                 };
             }
 
@@ -370,35 +411,35 @@ export class TemporalScheduleService implements OnModuleInit, OnModuleDestroy {
             if (intervalStr.includes('ms')) {
                 return {
                     success: true,
-                    interval: { every: intervalStr },
+                    interval: { every: intervalStr as Duration },
                 };
             }
 
             if (intervalStr.includes('s')) {
                 return {
                     success: true,
-                    interval: { every: intervalStr },
+                    interval: { every: intervalStr as Duration },
                 };
             }
 
             if (intervalStr.includes('m')) {
                 return {
                     success: true,
-                    interval: { every: intervalStr },
+                    interval: { every: intervalStr as Duration },
                 };
             }
 
             if (intervalStr.includes('h')) {
                 return {
                     success: true,
-                    interval: { every: intervalStr },
+                    interval: { every: intervalStr as Duration },
                 };
             }
 
             // Default to milliseconds if no unit specified
             return {
                 success: true,
-                interval: { every: `${interval}ms` },
+                interval: { every: `${interval}ms` as Duration },
             };
         } catch (error) {
             return {
@@ -415,17 +456,14 @@ export class TemporalScheduleService implements OnModuleInit, OnModuleDestroy {
         this.ensureInitialized();
 
         try {
-            type ScheduleCreateOptions = Parameters<ScheduleClient['create']>[0];
-
-            const policies: ScheduleCreateOptions['policies'] = {};
+            const policies: NonNullable<ScheduleOptions['policies']> = {};
             if (options.overlapPolicy) {
-                policies.overlap = options.overlapPolicy.toUpperCase() as
-                    | 'SKIP'
-                    | 'BUFFER_ONE'
-                    | 'BUFFER_ALL'
-                    | 'CANCEL_OTHER'
-                    | 'TERMINATE_OTHER'
-                    | 'ALLOW_ALL';
+                policies.overlap =
+                    options.overlapPolicy.toUpperCase() as ScheduleOptions['policies'] extends {
+                        overlap?: infer O;
+                    }
+                        ? O
+                        : never;
             }
             if (options.catchupWindow) {
                 policies.catchupWindow = options.catchupWindow as Duration;
@@ -434,20 +472,24 @@ export class TemporalScheduleService implements OnModuleInit, OnModuleDestroy {
                 policies.pauseOnFailure = options.pauseOnFailure;
             }
 
-            const scheduleOptions: ScheduleCreateOptions = {
+            // `state.note` carries the (previously-ignored) `description` field.
+            // `limitedActions` is intentionally NOT forwarded to `state.remainingActions`
+            // to preserve prior no-op behavior (was a top-level field SDK ignored).
+            const state: NonNullable<ScheduleOptions['state']> = {};
+            if (options.paused !== undefined) state.paused = options.paused;
+            if (options.description) state.note = options.description;
+
+            const scheduleOptions: ScheduleOptions = this.normalizeScheduleOptions({
                 scheduleId: options.scheduleId,
-                spec: options.spec as ScheduleCreateOptions['spec'],
-                action: options.action as ScheduleCreateOptions['action'],
+                spec: options.spec as ScheduleOptions['spec'],
+                action: options.action,
                 ...(options.memo && { memo: options.memo }),
                 ...(options.searchAttributes && {
-                    typedSearchAttributes:
-                        options.searchAttributes as unknown as ScheduleCreateOptions['typedSearchAttributes'],
+                    searchAttributes: options.searchAttributes as SearchAttributes,
                 }),
                 ...(Object.keys(policies).length > 0 && { policies }),
-                ...(options.paused !== undefined && { state: { paused: options.paused } }),
-                ...(options.description && { description: options.description }),
-                ...(options.limitedActions && { limitedActions: options.limitedActions }),
-            };
+                ...(Object.keys(state).length > 0 && { state }),
+            });
 
             const scheduleHandle = await this.scheduleClient!.create(scheduleOptions);
             this.scheduleHandles.set(options.scheduleId, scheduleHandle);

@@ -35,6 +35,7 @@ describe('TemporalClientService', () => {
             workflow: {
                 start: jest.fn().mockResolvedValue(mockWorkflowHandle),
                 getHandle: jest.fn().mockResolvedValue(mockWorkflowHandle),
+                signalWithStart: jest.fn().mockResolvedValue(mockWorkflowHandle),
             } as any,
         };
 
@@ -879,6 +880,145 @@ describe('TemporalClientService', () => {
             await expect(
                 service.signalWorkflowHandle(mockWorkflowHandle as WorkflowHandle, 'signal'),
             ).rejects.toThrow(error);
+        });
+    });
+
+    describe('signalWithStart', () => {
+        beforeEach(async () => {
+            await service.onModuleInit();
+        });
+
+        it('should call client signalWithStart with workflowId, taskQueue, args, signal, and signalArgs', async () => {
+            const result = await service.signalWithStart(
+                'OrderWorkflow',
+                'approve',
+                ['manager'],
+                ['order-1', 42],
+                { workflowId: 'order-1', taskQueue: 'orders' },
+            );
+
+            expect(mockClient.workflow!.signalWithStart).toHaveBeenCalledWith(
+                'OrderWorkflow',
+                expect.objectContaining({
+                    workflowId: 'order-1',
+                    taskQueue: 'orders',
+                    args: ['order-1', 42],
+                    signal: 'approve',
+                    signalArgs: ['manager'],
+                }),
+            );
+            expect(result).toMatchObject({ workflowId: 'test-workflow-123' });
+            expect(result.handle).toBeDefined();
+        });
+
+        it('should generate a workflow ID when one is not supplied', async () => {
+            await service.signalWithStart(
+                'AutoIdWorkflow',
+                'sig',
+                [],
+                ['arg'],
+            );
+
+            const callArgs = (mockClient.workflow!.signalWithStart as jest.Mock).mock.calls[0][1];
+            expect(callArgs.workflowId).toMatch(/^AutoIdWorkflow-\d+-[a-z0-9]+$/);
+        });
+
+        it('should fall back to module default taskQueue when not provided', async () => {
+            await service.signalWithStart('W', 's', [], [], { workflowId: 'id' });
+
+            const callArgs = (mockClient.workflow!.signalWithStart as jest.Mock).mock.calls[0][1];
+            expect(callArgs.taskQueue).toBe('test-queue');
+        });
+
+        it('should default taskQueue to "default" when neither options nor module options provide one', async () => {
+            const moduleWithoutTq: TestingModule = await Test.createTestingModule({
+                providers: [
+                    TemporalClientService,
+                    { provide: TEMPORAL_CLIENT, useValue: mockClient },
+                    {
+                        provide: TEMPORAL_MODULE_OPTIONS,
+                        useValue: { connection: { address: 'localhost:7233' } },
+                    },
+                ],
+            }).compile();
+
+            const svc = moduleWithoutTq.get<TemporalClientService>(TemporalClientService);
+            await svc.onModuleInit();
+
+            await svc.signalWithStart('W', 's', [], [], { workflowId: 'id' });
+
+            const callArgs = (mockClient.workflow!.signalWithStart as jest.Mock).mock.calls[0][1];
+            expect(callArgs.taskQueue).toBe('default');
+        });
+
+        it('should forward optional timeouts, memo, and workflowIdReusePolicy when provided', async () => {
+            await service.signalWithStart('W', 's', [], [], {
+                workflowId: 'id',
+                workflowExecutionTimeout: '1h',
+                workflowRunTimeout: '30m',
+                workflowTaskTimeout: '10s',
+                memo: { tag: 'priority' },
+                workflowIdReusePolicy: 'ALLOW_DUPLICATE',
+            });
+
+            const callArgs = (mockClient.workflow!.signalWithStart as jest.Mock).mock.calls[0][1];
+            expect(callArgs.workflowExecutionTimeout).toBe('1h');
+            expect(callArgs.workflowRunTimeout).toBe('30m');
+            expect(callArgs.workflowTaskTimeout).toBe('10s');
+            expect(callArgs.memo).toEqual({ tag: 'priority' });
+            expect(callArgs.workflowIdReusePolicy).toBe('ALLOW_DUPLICATE');
+        });
+
+        it('should omit optional fields that are not provided', async () => {
+            await service.signalWithStart('W', 's', [], []);
+
+            const callArgs = (mockClient.workflow!.signalWithStart as jest.Mock).mock.calls[0][1];
+            expect(callArgs).not.toHaveProperty('workflowExecutionTimeout');
+            expect(callArgs).not.toHaveProperty('workflowRunTimeout');
+            expect(callArgs).not.toHaveProperty('workflowTaskTimeout');
+            expect(callArgs).not.toHaveProperty('memo');
+            expect(callArgs).not.toHaveProperty('workflowIdReusePolicy');
+        });
+
+        it('should copy signalArgs and workflowArgs into fresh arrays (defensive spread)', async () => {
+            const signalArgs = ['a'];
+            const workflowArgs = ['b'];
+
+            await service.signalWithStart('W', 's', signalArgs, workflowArgs, {
+                workflowId: 'id',
+            });
+
+            const callArgs = (mockClient.workflow!.signalWithStart as jest.Mock).mock.calls[0][1];
+            expect(callArgs.args).toEqual(workflowArgs);
+            expect(callArgs.args).not.toBe(workflowArgs);
+            expect(callArgs.signalArgs).toEqual(signalArgs);
+            expect(callArgs.signalArgs).not.toBe(signalArgs);
+        });
+
+        it('should throw a wrapped error when the client call fails with an Error', async () => {
+            (mockClient.workflow!.signalWithStart as jest.Mock).mockRejectedValue(
+                new Error('grpc down'),
+            );
+
+            await expect(
+                service.signalWithStart('W', 's', [], [], { workflowId: 'id' }),
+            ).rejects.toThrow("Failed to signalWithStart workflow 'W': grpc down");
+        });
+
+        it('should throw a wrapped error when the client call rejects with a non-Error value', async () => {
+            (mockClient.workflow!.signalWithStart as jest.Mock).mockRejectedValue('string error');
+
+            await expect(
+                service.signalWithStart('W', 's', [], [], { workflowId: 'id' }),
+            ).rejects.toThrow("Failed to signalWithStart workflow 'W':");
+        });
+
+        it('should throw when the client is not available', async () => {
+            const svcNoClient = new TemporalClientService(null, mockOptions);
+
+            await expect(
+                svcNoClient.signalWithStart('W', 's', [], []),
+            ).rejects.toThrow();
         });
     });
 
