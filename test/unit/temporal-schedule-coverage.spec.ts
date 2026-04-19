@@ -276,7 +276,7 @@ describe('TemporalScheduleService - Coverage Improvements', () => {
             };
             const result = (service as any).buildScheduleSpec(metadata);
             expect(result.success).toBe(true);
-            expect(result.spec.timeZone).toBe('America/New_York');
+            expect(result.spec.timezone).toBe('America/New_York');
         });
 
         it('should build spec with jitter', () => {

@@ -236,6 +236,60 @@ export class TemporalService implements OnModuleInit, OnModuleDestroy {
     }
 
     /**
+     * Atomically start a workflow and send a signal to it.
+     * If the workflow is already running, only the signal is delivered.
+     *
+     * Returns a structured `WorkflowSignalResult` (unlike the lower-level
+     * `TemporalClientService.signalWithStart`, which returns the raw handle).
+     *
+     * @example Idempotent "ensure running + signal"
+     * ```typescript
+     * const result = await temporalService.signalWithStart(
+     *   'cartWorkflow',
+     *   'addItem',
+     *   [{ sku: 'SKU-123', qty: 2 }],
+     *   [userId],
+     *   { workflowId: `cart-${userId}`, taskQueue: 'carts' },
+     * );
+     *
+     * if (result.success) {
+     *   this.logger.log(`Signal '${result.signalName}' delivered to ${result.workflowId}`);
+     * }
+     * ```
+     */
+    async signalWithStart(
+        workflowType: string,
+        signalName: string,
+        signalArgs: unknown[],
+        workflowArgs: unknown[],
+        options?: WorkflowStartOptions,
+    ): Promise<WorkflowSignalResult> {
+        try {
+            this.ensureInitialized();
+            const enhancedOptions = this.enhanceWorkflowOptions(options || {});
+            const result = await this.clientService.signalWithStart(
+                workflowType,
+                signalName,
+                signalArgs,
+                workflowArgs,
+                enhancedOptions,
+            );
+
+            return {
+                success: true,
+                workflowId: result.workflowId,
+                signalName,
+            };
+        } catch (error) {
+            this.logger.error(
+                `Failed to signalWithStart workflow '${workflowType}' with signal '${signalName}'`,
+                error,
+            );
+            throw error instanceof Error ? error : new Error(this.extractErrorMessage(error));
+        }
+    }
+
+    /**
      * Query a workflow
      */
     async queryWorkflow<T = unknown>(

@@ -16,6 +16,7 @@ import { TemporalLoggerManager } from './utils/logger';
 import { TemporalOptions } from './interfaces';
 import { TemporalAsyncOptions, TemporalOptionsFactory } from './interfaces';
 import { TemporalConnectionFactory } from './providers/temporal-connection.factory';
+import { WorkflowProxyFactory } from './workflow-proxy/workflow-proxy.factory';
 
 /**
  * Main Temporal module for NestJS applications.
@@ -52,7 +53,12 @@ export class TemporalModule {
             module: TemporalModule,
             imports: [DiscoveryModule],
             providers,
-            exports: [TemporalService, TemporalLoggerManager, TEMPORAL_MODULE_OPTIONS],
+            exports: [
+                TemporalService,
+                TemporalLoggerManager,
+                TEMPORAL_MODULE_OPTIONS,
+                WorkflowProxyFactory,
+            ],
             global: options.isGlobal,
         };
     }
@@ -93,7 +99,12 @@ export class TemporalModule {
             module: TemporalModule,
             imports,
             providers,
-            exports: [TemporalService, TemporalLoggerManager, TEMPORAL_MODULE_OPTIONS],
+            exports: [
+                TemporalService,
+                TemporalLoggerManager,
+                TEMPORAL_MODULE_OPTIONS,
+                WorkflowProxyFactory,
+            ],
             global: options.isGlobal,
         };
     }
@@ -165,6 +176,7 @@ export class TemporalModule {
             TemporalWorkerManagerService,
             TemporalMetadataAccessor,
             TemporalService,
+            WorkflowProxyFactory,
         ];
     }
 
@@ -232,6 +244,7 @@ export class TemporalModule {
             TemporalWorkerManagerService,
             TemporalMetadataAccessor,
             TemporalService,
+            WorkflowProxyFactory,
         ];
     }
 

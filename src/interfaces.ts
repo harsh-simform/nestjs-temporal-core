@@ -3,14 +3,27 @@ export {
     WorkflowHandle,
     Client,
     ConnectionOptions as TemporalConnectionOptions,
+    WorkflowIdReusePolicy,
 } from '@temporalio/client';
 export { Worker } from '@temporalio/worker';
+export type { Workflow, WorkflowResultType } from '@temporalio/workflow';
 
 import { Type } from '@nestjs/common';
-import { ScheduleClient, ScheduleHandle } from '@temporalio/client';
-import { NativeConnection, Worker } from '@temporalio/worker';
-import { Duration, TypedSearchAttributes } from '@temporalio/common';
+import {
+    ScheduleClient,
+    ScheduleHandle,
+    WorkflowHandle,
+    WorkflowIdReusePolicy,
+    ScheduleOptions as SdkScheduleOptions,
+    ScheduleSpec as SdkScheduleSpec,
+    ScheduleOptionsAction,
+    ScheduleOptionsStartWorkflowAction,
+    ScheduleDescription as SdkScheduleDescription,
+} from '@temporalio/client';
+import { NativeConnection, Worker, WorkerOptions, WorkflowBundleOption } from '@temporalio/worker';
+import { Duration, RetryPolicy, TypedSearchAttributes } from '@temporalio/common';
 import { TLSConfig } from '@temporalio/common/lib/internal-non-workflow';
+import type { Workflow } from '@temporalio/workflow';
 
 /**
  * Configuration options for Temporal client connection.
@@ -26,6 +39,24 @@ import { TLSConfig } from '@temporalio/common/lib/internal-non-workflow';
  * };
  * ```
  */
+/**
+ * Configuration for a typed workflow proxy created by `WorkflowProxyFactory`.
+ *
+ * @example
+ * ```typescript
+ * const config: WorkflowProxyConfig = {
+ *   workflowType: 'orderWorkflow',
+ *   taskQueue: 'orders',
+ * };
+ * ```
+ */
+export interface WorkflowProxyConfig {
+    /** Temporal workflow type name (must match the registered workflow function name). */
+    workflowType: string;
+    /** Optional task queue override. Falls back to the module-level default when omitted. */
+    taskQueue?: string;
+}
+
 export interface ClientConnectionOptions {
     address: string;
     tls?: boolean | TLSConfig;
@@ -106,7 +137,12 @@ export interface RetryPolicyConfig {
 export interface WorkerDefinition {
     taskQueue: string;
     workflowsPath?: string;
-    workflowBundle?: Record<string, unknown>;
+    /**
+     * Workflow bundle. Prefer Temporal SDK's `WorkflowBundleOption`
+     * (`{ code }` or `{ codePath }`). Loose shape accepted for backward
+     * compatibility.
+     */
+    workflowBundle?: WorkflowBundleOption | Record<string, unknown>;
     activityClasses?: Array<Type<object>>;
     autoStart?: boolean;
     /** Enable auto-restart on worker failure (default: inherits from global autoRestart) */
@@ -187,7 +223,12 @@ export interface TemporalOptions extends LoggerConfig {
     taskQueue?: string;
     worker?: {
         workflowsPath?: string;
-        workflowBundle?: Record<string, unknown>;
+        /**
+         * Workflow bundle. Prefer Temporal SDK's `WorkflowBundleOption`
+         * (`{ code }` or `{ codePath }`). Loose shape accepted for backward
+         * compatibility.
+         */
+        workflowBundle?: WorkflowBundleOption | Record<string, unknown>;
         activityClasses?: Array<Type<object>>;
         autoStart?: boolean;
         /** Enable auto-restart on worker failure (default: inherits from global autoRestart) */
@@ -220,9 +261,10 @@ export interface TemporalOptions extends LoggerConfig {
 /**
  * Advanced configuration options for Temporal Worker creation.
  * Controls worker behavior, concurrency, and performance settings.
- * This interface includes all options from Temporal SDK's WorkerOptions except for
- * connection, taskQueue, activities, workflowsPath, and workflowBundle which are
- * managed by the framework.
+ *
+ * This is a direct subset of Temporal SDK's `WorkerOptions` from `@temporalio/worker`,
+ * omitting fields that are managed by the framework (`connection`, `taskQueue`,
+ * `activities`, `workflowsPath`, `workflowBundle`, `namespace`).
  *
  * For complete documentation of each option, see:
  * https://typescript.temporal.io/api/interfaces/worker.WorkerOptions
@@ -240,206 +282,21 @@ export interface TemporalOptions extends LoggerConfig {
  * };
  * ```
  */
-export interface WorkerCreateOptions {
-    // Identity and versioning
+export type WorkerCreateOptions = Omit<
+    WorkerOptions,
+    'connection' | 'taskQueue' | 'activities' | 'workflowsPath' | 'workflowBundle' | 'namespace'
+> & {
     /**
-     * A human-readable string that can identify your worker.
-     * @default `${process.pid}@${os.hostname()}`
-     */
-    identity?: string;
-
-    /**
-     * A string that should be unique to the exact worker code/binary being executed.
-     * @deprecated Use workerDeploymentOptions instead
-     */
-    buildId?: string;
-
-    /**
-     * If set true, this worker opts into the worker versioning feature.
-     * @deprecated Use workerDeploymentOptions instead
-     */
-    useVersioning?: boolean;
-
-    /**
-     * Deployment options for the worker.
-     * @experimental
-     */
-    workerDeploymentOptions?: Record<string, unknown>;
-
-    // Shutdown behavior
-    /**
-     * Time to wait for pending tasks to drain after shutdown was requested.
-     * @format number of milliseconds or ms-formatted string
-     * @default 0
-     */
-    shutdownGraceTime?: string | number;
-
-    /**
-     * Time to wait before giving up on graceful shutdown and forcefully terminating the worker.
-     * @format number of milliseconds or ms-formatted string
-     */
-    shutdownForceTime?: string | number;
-
-    // Data conversion
-    /**
-     * Provide a custom DataConverter.
-     */
-    dataConverter?: Record<string, unknown>;
-
-    // Tuning and concurrency
-    /**
-     * Provide a custom WorkerTuner.
-     * Mutually exclusive with maxConcurrentWorkflowTaskExecutions,
-     * maxConcurrentActivityTaskExecutions, and maxConcurrentLocalActivityExecutions.
-     * @experimental
-     */
-    tuner?: Record<string, unknown>;
-
-    /**
-     * Maximum number of Activity tasks to execute concurrently.
-     * Mutually exclusive with tuner.
-     * @default 100 if no tuner is set
-     */
-    maxConcurrentActivityTaskExecutions?: number;
-
-    /**
-     * Maximum number of Local Activity tasks to execute concurrently.
-     * Mutually exclusive with tuner.
-     * @default 100 if no tuner is set
-     */
-    maxConcurrentLocalActivityExecutions?: number;
-
-    /**
-     * Maximum number of concurrent Activity task polls.
-     * @default 5
-     */
-    maxConcurrentActivityTaskPolls?: number;
-
-    /**
-     * Whether or not to poll on the Activity task queue.
-     * @default true
-     */
-    enableNonLocalActivities?: boolean;
-
-    // Activity rate limiting
-    /**
-     * Limits the number of Activities per second that this Worker will process.
-     */
-    maxActivitiesPerSecond?: number;
-
-    /**
-     * Sets the maximum number of activities per second the task queue will dispatch (server-side).
-     */
-    maxTaskQueueActivitiesPerSecond?: number;
-
-    // Workflow concurrency and polling
-    /**
-     * Maximum number of Workflow Tasks to execute concurrently.
-     * Mutually exclusive with tuner.
-     * @default 100 if no tuner is set
-     */
-    maxConcurrentWorkflowTaskExecutions?: number;
-
-    /**
-     * Maximum number of concurrent Workflow task polls.
-     * @default 5
-     */
-    maxConcurrentWorkflowTaskPolls?: number;
-
-    /**
-     * Ratio of non-sticky to sticky workflow task polls.
-     */
-    nonStickyToStickyPollRatio?: number;
-
-    // Workflow caching and threading
-    /**
-     * Maximum number of cached workflows.
-     * @default 600
-     */
-    maxCachedWorkflows?: number;
-
-    /**
-     * Timeout for sticky queue schedule to start.
-     * @format number of milliseconds or ms-formatted string
-     * @default 5s
-     */
-    stickyQueueScheduleToStartTimeout?: string | number;
-
-    /**
-     * Number of threads for workflow execution.
-     * @default 2
-     */
-    workflowThreadPoolSize?: number;
-
-    /**
-     * Whether to reuse V8 context between workflow executions.
-     * @default false
-     */
-    reuseV8Context?: boolean;
-
-    // Heartbeat configuration
-    /**
-     * Maximum heartbeat throttle interval.
-     * @format number of milliseconds or ms-formatted string
-     */
-    maxHeartbeatThrottleInterval?: string | number;
-
-    /**
-     * Default heartbeat throttle interval.
-     * @format number of milliseconds or ms-formatted string
-     */
-    defaultHeartbeatThrottleInterval?: string | number;
-
-    // Debugging and observability
-    /**
-     * Enable debug mode.
-     */
-    debugMode?: boolean;
-
-    /**
-     * Enable logging in replay.
-     * @default false
-     */
-    enableLoggingInReplay?: boolean;
-
-    /**
-     * Show stack trace sources in error messages.
-     */
-    showStackTraceSources?: boolean;
-
-    // Interceptors
-    /**
-     * Activity interceptors.
-     */
-    interceptors?: {
-        activityInbound?: unknown[];
-        activity?: unknown[];
-        workflowModules?: string[];
-    };
-
-    // Sink configuration
-    /**
-     * Custom sink function for workflow logs and metrics.
-     */
-    sinks?: Record<string, unknown>;
-
-    // Bundler options (when using workflowsPath)
-    /**
-     * Options for the Webpack bundler when using workflowsPath.
-     */
-    bundlerOptions?: Record<string, unknown>;
-
-    // Additional worker options
-    /**
-     * Enable SDK metrics.
+     * @deprecated Not forwarded to Temporal SDK — there is no matching SDK
+     * option. Kept for backward compatibility; value is ignored at runtime.
      */
     enableSDKTracing?: boolean;
-
     /**
-     * Enable opentelemetry.
+     * @deprecated Not forwarded to Temporal SDK — there is no matching SDK
+     * option. Kept for backward compatibility; value is ignored at runtime.
      */
     enableOpenTelemetry?: boolean;
-}
+};
 
 /**
  * Legacy worker module options interface.
@@ -1019,43 +876,65 @@ export interface ActivityContext {
 }
 
 /**
- * Schedule specification structure
+ * Schedule specification — extends Temporal SDK's `ScheduleSpec` from
+ * `@temporalio/client`. Defines when actions should be taken (calendars,
+ * intervals, cron expressions, timezone, jitter, etc.).
+ *
+ * `intervals[].every`, `intervals[].offset`, and `jitter` are typed loosely
+ * as `Duration | string | number` so prior user code using plain strings still
+ * compiles. `timezones?: string[]` is retained as a deprecated alias for
+ * `timezone`.
  */
-export interface ScheduleSpec {
-    intervals?: Array<{ every: string | number }>;
-    cronExpressions?: string[];
+export type ScheduleSpec = Omit<SdkScheduleSpec, 'intervals' | 'jitter'> & {
+    /** Interval-based specifications of times. */
+    intervals?: Array<{ every: Duration | string | number; offset?: Duration | string | number }>;
+    /**
+     * All times will be incremented by a random value from 0 to this amount of jitter.
+     * @format Duration (ms-formatted string or number of milliseconds)
+     */
+    jitter?: Duration | string | number;
+    /**
+     * @deprecated Use `timezone` (singular) from the SDK. Kept for backward
+     * compatibility; at runtime the first entry is used as `timezone`.
+     */
     timezones?: string[];
-    startAt?: Date;
-    endAt?: Date;
-    jitter?: string | number;
-}
+};
 
 /**
- * Schedule action definition
+ * Schedule action — Temporal SDK's `ScheduleOptionsAction` from `@temporalio/client`
+ * extended with the back-compat `retryPolicy` alias. Currently only `startWorkflow`
+ * actions are supported (matches the SDK).
  */
-export interface ScheduleAction {
-    type: 'startWorkflow';
-    workflowType: string;
-    args?: unknown[];
-    taskQueue: string;
-    workflowId?: string;
-    workflowExecutionTimeout?: Duration;
-    workflowRunTimeout?: Duration;
-    workflowTaskTimeout?: Duration;
-}
+export type ScheduleAction = ScheduleOptionsAction & {
+    /**
+     * @deprecated Use `retry`. Kept for backward compatibility; forwarded to
+     * `retry` at runtime. Typed loosely so prior `Record<string, unknown>`
+     * usages still compile.
+     */
+    retryPolicy?: RetryPolicy | Record<string, unknown>;
+};
 
 /**
- * Workflow start options with proper typing
+ * Workflow start options aligned with Temporal's official SDK types.
+ *
+ * `taskQueue` is optional here because the module-level default is applied by
+ * `TemporalClientService` when omitted. All other fields map 1:1 to Temporal's
+ * `WorkflowStartOptions` from `@temporalio/client`.
  */
 export interface WorkflowStartOptions {
     workflowId?: string;
     taskQueue?: string;
+    /** Typed search attributes — maps to `typedSearchAttributes` in Temporal's SDK. */
     searchAttributes?: TypedSearchAttributes;
-    memo?: Record<string, string | number | boolean | object>;
-    workflowIdReusePolicy?: 'ALLOW_DUPLICATE' | 'ALLOW_DUPLICATE_FAILED_ONLY' | 'REJECT_DUPLICATE';
+    /** Freeform workflow annotations. Temporal accepts `Record<string, unknown>`. */
+    memo?: Record<string, unknown>;
+    /** Use `WorkflowIdReusePolicy` enum from `@temporalio/client`. */
+    workflowIdReusePolicy?: WorkflowIdReusePolicy;
     workflowExecutionTimeout?: Duration;
     workflowRunTimeout?: Duration;
     workflowTaskTimeout?: Duration;
+    /** Retry policy for the workflow execution. */
+    retryPolicy?: RetryPolicy;
 }
 
 /**
@@ -1163,10 +1042,29 @@ export interface WorkflowSignalConfig {
 }
 
 /**
- * Workflow handle with additional metadata
+ * Workflow handle with additional metadata, generic on the workflow function type `T`.
+ *
+ * When `T` is known (e.g. inside `IWorkflowProxy<T>`), `result()` returns
+ * `Promise<WorkflowResultType<T>>` and signal/query methods are fully typed.
+ * Defaults to the base `Workflow` type for untyped call sites (e.g. `TemporalClientService`).
+ *
+ * @example Typed handle via the workflow proxy
+ * ```typescript
+ * // orderWorkflow: (orderId: string, customerId: number) => Promise<{ status: string }>
+ * const handle = await this.orderProxy.start(['order-1', 42]);
+ * // handle.result() is Promise<{ status: string }> — no cast required
+ * const { status } = await handle.result();
+ * ```
+ *
+ * @example Untyped handle from the low-level client service
+ * ```typescript
+ * // Defaults to WorkflowHandleWithMetadata<Workflow>; result() is Promise<unknown>
+ * const handle = await clientService.startWorkflow('orderWorkflow', [orderId]);
+ * const raw = await handle.result(); // caller narrows
+ * ```
  */
-export type WorkflowHandleWithMetadata = import('@temporalio/client').WorkflowHandle & {
-    handle: import('@temporalio/client').WorkflowHandle;
+export type WorkflowHandleWithMetadata<T extends Workflow = Workflow> = WorkflowHandle<T> & {
+    handle: WorkflowHandle<T>;
 };
 
 /**
@@ -1201,22 +1099,10 @@ export interface GenericClient {
 }
 
 /**
- * Schedule description from Temporal
+ * Schedule description — re-exports Temporal SDK's `ScheduleDescription` from
+ * `@temporalio/client`. Returned by `ScheduleHandle.describe()`.
  */
-export interface ScheduleDescription {
-    spec: ScheduleSpec;
-    action: ScheduleAction;
-    policies: {
-        overlap: TemporalOverlapPolicy;
-        catchupWindow: number;
-        pauseOnFailure: boolean;
-    };
-    state: {
-        paused: boolean;
-        note?: string;
-        remainingActions?: number;
-    };
-}
+export type ScheduleDescription = SdkScheduleDescription;
 
 // ==========================================
 // Discovery Service Interfaces
@@ -1446,13 +1332,20 @@ export interface ActivityMethodExtractionContext {
 // ==========================================
 
 /**
- * Schedule creation options
+ * Schedule creation options — user-facing input for `TemporalScheduleService.createSchedule`.
+ * `spec` and `action` are typed against the Temporal SDK directly. `searchAttributes`
+ * and `catchupWindow` are intentionally loose for backward compatibility.
  */
 export interface ScheduleCreationOptions {
     scheduleId: string;
     spec: ScheduleSpec;
     action: ScheduleAction;
     memo?: Record<string, unknown>;
+    /**
+     * Search attributes. Values are arrays of string/number/Date/boolean
+     * (matches Temporal's legacy `SearchAttributes` shape). Typed loosely
+     * here for backward compatibility.
+     */
     searchAttributes?: Record<string, unknown>;
     paused?: boolean;
     overlapPolicy?:
@@ -1464,7 +1357,13 @@ export interface ScheduleCreationOptions {
         | 'allow_all';
     catchupWindow?: string | number;
     pauseOnFailure?: boolean;
+    /** Informative message — forwarded to Temporal's `state.note`. */
     description?: string;
+    /**
+     * Limit on number of actions. @deprecated Was not applied in prior releases;
+     * continues to be a no-op for backward compatibility. Set
+     * `state.remainingActions` via the SDK directly if you need this behavior.
+     */
     limitedActions?: number;
 }
 
@@ -1572,7 +1471,8 @@ export interface ScheduleClientInitResult {
 }
 
 /**
- * Schedule workflow options
+ * Schedule workflow options. `retryPolicy` is loosely typed for backward
+ * compatibility; prefer the SDK's `RetryPolicy` shape.
  */
 export interface ScheduleWorkflowOptions {
     taskQueue?: string;
@@ -1580,7 +1480,7 @@ export interface ScheduleWorkflowOptions {
     workflowExecutionTimeout?: Duration;
     workflowRunTimeout?: Duration;
     workflowTaskTimeout?: Duration;
-    retryPolicy?: Record<string, unknown>;
+    retryPolicy?: RetryPolicy | Record<string, unknown>;
     args?: unknown[];
 }
 
@@ -1589,16 +1489,16 @@ export interface ScheduleWorkflowOptions {
  */
 export interface ScheduleSpecBuilderResult {
     success: boolean;
-    spec?: Record<string, unknown>;
+    spec?: Partial<ScheduleSpec>;
     error?: Error;
 }
 
 /**
- * Schedule interval parsing result
+ * Schedule interval parsing result — a single entry shaped like Temporal SDK's `IntervalSpec`.
  */
 export interface ScheduleIntervalParseResult {
     success: boolean;
-    interval?: Record<string, unknown>;
+    interval?: { every: Duration };
     error?: Error;
 }
 
@@ -1613,30 +1513,26 @@ export interface TemporalConnection {
 }
 
 /**
- * Schedule action interface for workflow start
+ * Schedule workflow action — Temporal SDK's `ScheduleOptionsStartWorkflowAction<Workflow>`
+ * extended with a back-compat `retryPolicy` alias.
+ *
+ * Prefer SDK's `retry` field. The legacy `retryPolicy` field is accepted and
+ * forwarded to `retry` at runtime.
  */
-export interface ScheduleWorkflowAction {
-    type: 'startWorkflow';
-    workflowType: string;
-    taskQueue: string;
-    args?: unknown[];
-    workflowId?: string;
-    workflowExecutionTimeout?: Duration;
-    workflowRunTimeout?: Duration;
-    workflowTaskTimeout?: Duration;
-    retryPolicy?: Record<string, unknown>;
-}
+export type ScheduleWorkflowAction = ScheduleOptionsStartWorkflowAction<Workflow> & {
+    /**
+     * @deprecated Use `retry` (maps to Temporal's `RetryPolicy`). Kept for
+     * backward compatibility; at runtime this is forwarded to `retry`. Typed
+     * loosely so prior `Record<string, unknown>` usages still compile.
+     */
+    retryPolicy?: RetryPolicy | Record<string, unknown>;
+};
 
 /**
- * Schedule options interface
+ * Schedule options — re-exports Temporal SDK's `ScheduleOptions` from
+ * `@temporalio/client`. This is the exact shape consumed by `ScheduleClient.create()`.
  */
-export interface ScheduleOptions {
-    scheduleId: string;
-    spec: Record<string, unknown>;
-    action: ScheduleWorkflowAction;
-    memo?: Record<string, unknown>;
-    searchAttributes?: Record<string, unknown>;
-}
+export type ScheduleOptions = SdkScheduleOptions;
 
 /**
  * Worker connection options interface
@@ -1650,18 +1546,15 @@ export interface WorkerConnectionOptions {
 }
 
 /**
- * Worker configuration interface
+ * Worker configuration — Temporal SDK's `WorkerOptions` from `@temporalio/worker`
+ * with `namespace`, `connection`, and `activities` required (as they were in
+ * prior versions of this package).
  */
-export interface WorkerConfig {
-    taskQueue: string;
+export type WorkerConfig = WorkerOptions & {
     namespace: string;
     connection: NativeConnection;
     activities: Record<string, Function>;
-    workflowsPath?: string;
-    workflowBundle?: unknown;
-    workerOptions?: Record<string, unknown>;
-    [key: string]: unknown;
-}
+};
 
 /**
  * Worker initialization result

@@ -27,6 +27,9 @@ export { TemporalMetadataAccessor } from './services/temporal-metadata.service';
 /** Service for schedule management */
 export { TemporalScheduleService } from './services/temporal-schedule.service';
 
+/** Typed workflow proxy — factory service, interface, and class */
+export { WorkflowProxyFactory, IWorkflowProxy, WorkflowProxy } from './workflow-proxy';
+
 /** All utility functions (validation, metadata, logging) */
 export * from './utils';
 

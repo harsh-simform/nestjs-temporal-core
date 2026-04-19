@@ -21,3 +21,6 @@ export {
     isActivity,
     isActivityMethod,
 } from './metadata';
+
+// Workflow proxy token helpers
+export { createWorkflowToken, createWorkflowProvider } from './workflow-token';

@@ -37,6 +37,9 @@ describe('TemporalService', () => {
             getWorkflowHandle: jest.fn().mockReturnValue({ workflowId: 'test-wf-123' }),
             terminateWorkflow: jest.fn().mockResolvedValue(undefined),
             cancelWorkflow: jest.fn().mockResolvedValue(undefined),
+            signalWithStart: jest
+                .fn()
+                .mockResolvedValue({ workflowId: 'test-wf-123', firstExecutionRunId: 'run-456' }),
         };
 
         mockWorkerService = {
@@ -128,13 +131,6 @@ describe('TemporalService', () => {
         });
 
         it('should continue initialization even if services are not immediately ready', async () => {
-            // Mock setTimeout to immediately call the callback
-            const originalSetTimeout = global.setTimeout;
-            global.setTimeout = ((cb: any) => {
-                cb();
-                return 0 as any;
-            }) as any;
-
             const module: TestingModule = await Test.createTestingModule({
                 providers: [
                     TemporalService,
@@ -174,9 +170,20 @@ describe('TemporalService', () => {
             }).compile();
 
             const timeoutService = module.get<TemporalService>(TemporalService);
-            const result = await timeoutService.onModuleInit();
 
-            global.setTimeout = originalSetTimeout;
+            // Simulate the timeout path without spinning the real 30s loop.
+            // The original approach (replacing global.setTimeout with a synchronous
+            // callback) caused the while-loop in waitForServicesInitialization to spin
+            // millions of times with zero delay, exhausting the JS heap.
+            jest.spyOn(timeoutService as any, 'waitForServicesInitialization').mockResolvedValue({
+                client: false,
+                worker: false,
+                schedule: false,
+                discovery: false,
+                metadata: false,
+            });
+
+            const result = await timeoutService.onModuleInit();
 
             // The service still initializes successfully even if not all services are ready
             expect(result.success).toBe(true);
@@ -319,6 +326,85 @@ describe('TemporalService', () => {
             mockClientService.signalWorkflow = jest.fn().mockRejectedValue('String error');
 
             await expect(service.signalWorkflow('test-wf-123', 'testSignal')).rejects.toThrow();
+        });
+    });
+
+    describe('signalWithStart', () => {
+        beforeEach(async () => {
+            await service.onModuleInit();
+        });
+
+        it('should delegate to clientService.signalWithStart with enhanced options', async () => {
+            const result = await service.signalWithStart(
+                'OrderWorkflow',
+                'approve',
+                ['manager'],
+                ['order-1'],
+                { workflowId: 'order-1' },
+            );
+
+            expect(mockClientService.signalWithStart).toHaveBeenCalledWith(
+                'OrderWorkflow',
+                'approve',
+                ['manager'],
+                ['order-1'],
+                expect.objectContaining({ workflowId: 'order-1' }),
+            );
+            expect(result).toEqual({
+                success: true,
+                workflowId: 'test-wf-123',
+                signalName: 'approve',
+            });
+        });
+
+        it('should pass an empty options object when none supplied', async () => {
+            await service.signalWithStart('W', 'sig', [], ['a']);
+
+            expect(mockClientService.signalWithStart).toHaveBeenCalledWith(
+                'W',
+                'sig',
+                [],
+                ['a'],
+                expect.any(Object),
+            );
+        });
+
+        it('should rethrow Error instances from the client service', async () => {
+            mockClientService.signalWithStart = jest
+                .fn()
+                .mockRejectedValue(new Error('start failed'));
+
+            await expect(
+                service.signalWithStart('W', 'sig', [], ['a'], { workflowId: 'id' }),
+            ).rejects.toThrow('start failed');
+        });
+
+        it('should wrap non-Error rejections into an Error', async () => {
+            mockClientService.signalWithStart = jest.fn().mockRejectedValue('string error');
+
+            await expect(
+                service.signalWithStart('W', 'sig', [], ['a'], { workflowId: 'id' }),
+            ).rejects.toBeInstanceOf(Error);
+        });
+
+        it('should throw when the service is not initialized', async () => {
+            const freshModule: TestingModule = await Test.createTestingModule({
+                providers: [
+                    TemporalService,
+                    { provide: TEMPORAL_MODULE_OPTIONS, useValue: mockOptions },
+                    { provide: TemporalClientService, useValue: mockClientService },
+                    { provide: TemporalWorkerManagerService, useValue: mockWorkerService },
+                    { provide: TemporalScheduleService, useValue: mockScheduleService },
+                    { provide: TemporalDiscoveryService, useValue: mockDiscoveryService },
+                    { provide: TemporalMetadataAccessor, useValue: mockMetadataAccessor },
+                ],
+            }).compile();
+
+            const uninitialized = freshModule.get<TemporalService>(TemporalService);
+
+            await expect(
+                uninitialized.signalWithStart('W', 'sig', [], ['a']),
+            ).rejects.toThrow();
         });
     });
 

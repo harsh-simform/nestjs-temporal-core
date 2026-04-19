@@ -4,10 +4,10 @@
 
 A comprehensive NestJS integration framework for Temporal.io that provides enterprise-ready workflow orchestration with automatic discovery, declarative decorators, and robust monitoring capabilities.
 
-![Statements](https://img.shields.io/badge/statements-99.9%25-brightgreen.svg?style=flat)
-![Branches](https://img.shields.io/badge/branches-95.25%25-brightgreen.svg?style=flat)
-![Functions](https://img.shields.io/badge/functions-100%25-brightgreen.svg?style=flat)
-![Lines](https://img.shields.io/badge/lines-100%25-brightgreen.svg?style=flat)
+![Statements](https://img.shields.io/badge/statements-99.81%25-brightgreen.svg?style=flat)
+![Branches](https://img.shields.io/badge/branches-94.6%25-brightgreen.svg?style=flat)
+![Functions](https://img.shields.io/badge/functions-98.29%25-brightgreen.svg?style=flat)
+![Lines](https://img.shields.io/badge/lines-99.95%25-brightgreen.svg?style=flat)
 [![Coverage](https://codecov.io/gh/harsh-simform/nestjs-temporal-core/graph/badge.svg)](https://codecov.io/gh/harsh-simform/nestjs-temporal-core)
 
 [Documentation](https://harsh-simform.github.io/nestjs-temporal-core/) • [NPM](https://www.npmjs.com/package/nestjs-temporal-core) • [GitHub](https://github.com/harsh-simform/nestjs-temporal-core) • [Example Project](https://github.com/harsh-simform/nestjs-temporal-core-example)
@@ -32,6 +32,8 @@ A comprehensive NestJS integration framework for Temporal.io that provides enter
   - [Activities](#activities)
   - [Workflows](#workflows)
   - [Signals and Queries](#signals-and-queries)
+  - [Typed Workflow Proxy](#typed-workflow-proxy)
+  - [Signal-with-Start](#signal-with-start)
 - [API Reference](#api-reference)
 - [Examples](#examples)
 - [Advanced Usage](#advanced-usage)
@@ -66,6 +68,8 @@ NestJS Temporal Core bridges NestJS's powerful dependency injection system with 
 - **Automatic Discovery** - Runtime discovery and registration of activities with zero configuration
 - **Schedule Management** - Programmatic schedule creation, updates, and monitoring
 - **Health Monitoring** - Built-in health checks and comprehensive status reporting
+- **Typed Workflow Proxy** - Generic `IWorkflowProxy<T>` that infers start args, signal args, and query return types from your workflow function signature
+- **Signal-with-Start** - Atomic "ensure running + signal" on both the low-level client service and the high-level `TemporalService`
 
 ### Enterprise Features
 
@@ -842,6 +846,234 @@ export class OrderService {
 
 [🔝 Back to top](#table-of-contents)
 
+### Typed Workflow Proxy
+
+The typed workflow proxy gives you end-to-end type safety when interacting with a specific workflow. Instead of passing workflow names and args as strings/`unknown[]`, you get a generic `IWorkflowProxy<T>` where `T` is your workflow function type — all method signatures are inferred from `T`.
+
+**What it solves:**
+
+```typescript
+// Before: string names, unknown args, manual casts on query results
+const handle = await this.temporal.startWorkflow('orderWorkflow', [orderId, customerId]);
+const status = await this.temporal.queryWorkflow<OrderStatus>(workflowId, 'getStatus');
+```
+
+```typescript
+// After: fully typed against the workflow signature
+const handle = await this.orderProxy.start([orderId, customerId]);   // args typed as Parameters<typeof orderWorkflow>
+const status = await this.orderProxy.query(workflowId, statusQuery); // return type inferred from QueryDefinition
+```
+
+If you rename a workflow parameter or change its return type, every call site becomes a compile error until fixed.
+
+#### 1. Define signal/query definitions in your workflow file
+
+```typescript
+// workflows/order.workflow.ts
+import { defineSignal, defineQuery, setHandler, condition } from '@temporalio/workflow';
+
+export interface OrderStatus {
+  orderId: string;
+  state: 'pending' | 'approved' | 'shipped' | 'cancelled';
+}
+
+export const approveSignal = defineSignal<[string]>('approve');             // signal takes one string arg
+export const cancelSignal = defineSignal<[string]>('cancel');
+export const statusQuery = defineQuery<OrderStatus>('getStatus');           // query returns OrderStatus
+
+export async function orderWorkflow(orderId: string, customerId: number): Promise<OrderStatus> {
+  let status: OrderStatus = { orderId, state: 'pending' };
+
+  setHandler(approveSignal, (approver) => {
+    status = { ...status, state: 'approved' };
+  });
+  setHandler(cancelSignal, (reason) => {
+    status = { ...status, state: 'cancelled' };
+  });
+  setHandler(statusQuery, () => status);
+
+  await condition(() => status.state !== 'pending');
+  return status;
+}
+```
+
+#### 2. Register a typed proxy as a NestJS provider
+
+```typescript
+// order.module.ts
+import { Module } from '@nestjs/common';
+import { createWorkflowToken, createWorkflowProvider } from 'nestjs-temporal-core';
+import { orderWorkflow } from './workflows/order.workflow';
+import { OrderService } from './order.service';
+
+export const ORDER_WORKFLOW = createWorkflowToken('orderWorkflow');
+
+@Module({
+  providers: [
+    OrderService,
+    createWorkflowProvider<typeof orderWorkflow>(ORDER_WORKFLOW, {
+      workflowType: 'orderWorkflow',
+      taskQueue: 'orders',
+    }),
+  ],
+  exports: [ORDER_WORKFLOW],
+})
+export class OrderModule {}
+```
+
+#### 3. Inject and use — fully typed
+
+```typescript
+// order.service.ts
+import { Injectable, Inject } from '@nestjs/common';
+import { IWorkflowProxy } from 'nestjs-temporal-core';
+import {
+  orderWorkflow,
+  approveSignal,
+  cancelSignal,
+  statusQuery,
+  OrderStatus,
+} from './workflows/order.workflow';
+import { ORDER_WORKFLOW } from './order.module';
+
+@Injectable()
+export class OrderService {
+  constructor(
+    @Inject(ORDER_WORKFLOW)
+    private readonly orderProxy: IWorkflowProxy<typeof orderWorkflow>,
+  ) {}
+
+  async createOrder(orderId: string, customerId: number) {
+    // start() args are typed as Parameters<typeof orderWorkflow> = [string, number]
+    const handle = await this.orderProxy.start([orderId, customerId], {
+      workflowId: `order-${orderId}`,
+    });
+    return { workflowId: handle.workflowId };
+  }
+
+  async approve(workflowId: string, approver: string) {
+    // signal() infers TArgs from approveSignal — passing a number here is a compile error
+    await this.orderProxy.signal(workflowId, approveSignal, approver);
+  }
+
+  async getStatus(workflowId: string): Promise<OrderStatus> {
+    // query() return type is inferred from statusQuery
+    return this.orderProxy.query(workflowId, statusQuery);
+  }
+
+  async waitForCompletion(workflowId: string): Promise<OrderStatus> {
+    const handle = await this.orderProxy.getHandle(workflowId);
+    // handle.result() is Promise<OrderStatus>, not Promise<unknown>
+    return handle.result();
+  }
+
+  async cancelOrder(orderId: string, reason: string) {
+    // signalWithStart: atomically starts the workflow and signals it
+    await this.orderProxy.signalWithStart(
+      cancelSignal,
+      [reason],                  // signal args — typed
+      [orderId, 0],              // workflow args — typed as Parameters<typeof orderWorkflow>
+      { workflowId: `order-${orderId}` },
+    );
+  }
+}
+```
+
+#### Alternative: use `WorkflowProxyFactory` directly
+
+If you don't want a token-bound provider, inject the factory and create proxies on demand:
+
+```typescript
+import { Injectable } from '@nestjs/common';
+import { WorkflowProxyFactory, IWorkflowProxy } from 'nestjs-temporal-core';
+import { orderWorkflow } from './workflows/order.workflow';
+
+@Injectable()
+export class OrderService {
+  private readonly orderProxy: IWorkflowProxy<typeof orderWorkflow>;
+
+  constructor(factory: WorkflowProxyFactory) {
+    this.orderProxy = factory.createProxy<typeof orderWorkflow>({
+      workflowType: 'orderWorkflow',
+      taskQueue: 'orders',
+    });
+  }
+}
+```
+
+`WorkflowProxyFactory` is registered globally by `TemporalModule`, so no imports are needed in feature modules.
+
+#### Proxy method reference
+
+| Method | Purpose | Typing |
+|---|---|---|
+| `start(args, options?)` | Start a new workflow execution | `args` typed as `Parameters<T>`; returns `WorkflowHandleWithMetadata<T>` |
+| `getHandle(workflowId, runId?)` | Get a handle to an existing execution | Returns `WorkflowHandle<T>`; `result()` returns `Promise<WorkflowResultType<T>>` |
+| `signal(workflowId, signalDef, ...args)` | Send a typed signal | `args` typed from `SignalDefinition<TArgs>` |
+| `signalByName(workflowId, signalName, args?)` | Send a signal by string name | Fallback when no `SignalDefinition` is available |
+| `query(workflowId, queryDef, ...args)` | Query with a typed definition | Return type inferred from `QueryDefinition<TResult, TArgs>` |
+| `queryByName<TResult>(workflowId, queryName, args?)` | Query by string name | Caller specifies `TResult` |
+| `signalWithStart(signalDef, signalArgs, workflowArgs, options?)` | Atomic start + signal | Both arg lists fully typed |
+
+[🔝 Back to top](#table-of-contents)
+
+### Signal-with-Start
+
+`signalWithStart` atomically starts a workflow and sends it a signal in one operation. If the workflow is already running, only the signal is delivered — no duplicate start, no race condition.
+
+Use it for **idempotent "ensure running + signal"** patterns, e.g. a cart that should be started on the first item-add and signaled on every subsequent one.
+
+#### Via the typed proxy (recommended)
+
+```typescript
+// in workflows/cart.workflow.ts:
+// export const addItemSignal = defineSignal<[CartItem]>('addItem');
+// export async function cartWorkflow(userId: string) { ... }
+
+await this.cartProxy.signalWithStart(
+  addItemSignal,
+  [{ sku: 'SKU-123', qty: 2 }],   // signal args — typed from SignalDefinition
+  [userId],                        // workflow args — typed as Parameters<typeof cartWorkflow>
+  { workflowId: `cart-${userId}`, taskQueue: 'carts' },
+);
+```
+
+#### Via `TemporalService` (structured result)
+
+```typescript
+const result = await this.temporal.signalWithStart(
+  'cartWorkflow',
+  'addItem',
+  [{ sku: 'SKU-123', qty: 2 }],
+  [userId],
+  { workflowId: `cart-${userId}`, taskQueue: 'carts' },
+);
+
+if (result.success) {
+  this.logger.log(`Signal '${result.signalName}' delivered to ${result.workflowId}`);
+}
+```
+
+#### Via `TemporalClientService` (raw handle)
+
+```typescript
+const handle = await this.clientService.signalWithStart(
+  'orderWorkflow',
+  'approve',
+  ['manager-approval'],
+  [orderId, customerId],
+  {
+    workflowId: `order-${orderId}`,
+    taskQueue: 'orders',
+    workflowIdReusePolicy: 'ALLOW_DUPLICATE',
+    workflowExecutionTimeout: '1h',
+    memo: { source: 'api' },
+  },
+);
+```
+
+[🔝 Back to top](#table-of-contents)
+
 ## API Reference
 
 For detailed API documentation, visit the [Full API Documentation](https://harsh-simform.github.io/nestjs-temporal-core/).
@@ -853,6 +1085,7 @@ The main unified service providing access to all Temporal functionality. See the
 Key methods:
 - `startWorkflow()` - Start a workflow execution
 - `signalWorkflow()` - Send a signal to a running workflow
+- `signalWithStart()` - Atomically start a workflow and send it a signal (see [Signal-with-Start](#signal-with-start))
 - `queryWorkflow()` - Query a running workflow
 - `getWorkflowHandle()` - Get a workflow handle to interact with it
 - `terminateWorkflow()` - Terminate a workflow execution
@@ -861,6 +1094,17 @@ Key methods:
 - `createSchedule()` - Create a schedule
 - `listSchedules()` - List all schedules
 - `deleteSchedule()` - Delete a schedule
+
+### WorkflowProxyFactory
+
+Creates typed `IWorkflowProxy<T>` instances. Registered globally by `TemporalModule`. See [Typed Workflow Proxy](#typed-workflow-proxy) for the full pattern.
+
+- `createProxy<T>(config)` - Create a typed proxy for a workflow function type `T`
+
+### Proxy provider helpers
+
+- `createWorkflowToken(workflowType)` - Generate a unique NestJS injection token for a workflow proxy
+- `createWorkflowProvider<T>(token, config)` - Build a `FactoryProvider` that resolves to `IWorkflowProxy<T>`
 
 [🔝 Back to top](#table-of-contents)
 
@@ -1311,6 +1555,60 @@ const result = await temporal.registerWorker({
   activityClasses: [NewActivity],
   autoStart: true,
 });
+```
+
+### Migrating to v3.3.0 (Typed Workflow Proxy + Schedule fixes)
+
+This release is **backward-compatible** — existing code continues to compile and run. The headline additions are a typed workflow proxy, `signalWithStart` on both service layers, and correctness fixes for a few schedule fields that were previously silently ignored.
+
+#### No changes required
+
+Every type that was previously exported is still exported with the same name. Old field shapes continue to compile:
+
+- `spec.timezones?: string[]` on `ScheduleSpec` (deprecated — prefer SDK `timezone` singular, automatically normalized at runtime)
+- `action.retryPolicy?` on schedule actions (deprecated — prefer SDK `retry`, automatically forwarded)
+- `searchAttributes?: Record<string, unknown>` on `ScheduleCreationOptions`
+- `enableSDKTracing?` / `enableOpenTelemetry?` on `WorkerCreateOptions` (deprecated no-ops — had no effect in prior versions either)
+
+#### Runtime behavior fixes
+
+Three schedule fields were previously declared in the API but silently dropped by the SDK because of wrong field names or wrong shapes. They now work as the field name promises:
+
+| Field | Before v3.3.0 | After v3.3.0 |
+|---|---|---|
+| `spec.timezone` on a schedule | Written to `spec.timeZone` (wrong casing) — SDK ignored it, schedules always ran in UTC | Routed to SDK's `timezone` — schedule honors the zone |
+| `description` on `createSchedule()` | Passed as a top-level field SDK ignored | Flows to `state.note` |
+| `searchAttributes` on `createSchedule()` | Cast to `typedSearchAttributes` with the wrong shape | Routed to the correct `searchAttributes` SDK field |
+
+**Action**: if you had set `timezone` on a `@Scheduled` or `createSchedule()` call and configured your schedule times assuming UTC (because the timezone was being ignored), double-check your schedule timing after upgrade — the timezone will now actually apply.
+
+`limitedActions` on `createSchedule()` remains a no-op for backward compatibility; set `state.remainingActions` directly via the SDK if you need that behavior.
+
+#### New APIs in v3.3.0
+
+```typescript
+import {
+  IWorkflowProxy,
+  WorkflowProxyFactory,
+  createWorkflowToken,
+  createWorkflowProvider,
+} from 'nestjs-temporal-core';
+
+// Typed proxy — see "Typed Workflow Proxy" section for the full pattern
+const ORDER_WORKFLOW = createWorkflowToken('orderWorkflow');
+const provider = createWorkflowProvider<typeof orderWorkflow>(ORDER_WORKFLOW, {
+  workflowType: 'orderWorkflow',
+  taskQueue: 'orders',
+});
+
+// Atomic start + signal — see "Signal-with-Start" section
+await temporal.signalWithStart(
+  'cartWorkflow',
+  'addItem',
+  [{ sku: 'SKU-123', qty: 2 }],
+  [userId],
+  { workflowId: `cart-${userId}`, taskQueue: 'carts' },
+);
 ```
 
 [🔝 Back to top](#table-of-contents)

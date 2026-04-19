@@ -277,6 +277,7 @@ export class TemporalWorkerManagerService
 
         // Create worker config
         const workerConfig: WorkerConfig = {
+            ...workerDef.workerOptions,
             taskQueue: workerDef.taskQueue,
             namespace: this.options.connection?.namespace || 'default',
             connection: this.connection!,
@@ -287,19 +288,15 @@ export class TemporalWorkerManagerService
         if (workerDef.workflowsPath) {
             workerConfig.workflowsPath = workerDef.workflowsPath;
         } else if (workerDef.workflowBundle) {
-            workerConfig.workflowBundle = workerDef.workflowBundle;
-        }
-
-        // Add worker options
-        if (workerDef.workerOptions) {
-            Object.assign(workerConfig, workerDef.workerOptions);
+            // `workflowBundle` on WorkerDefinition is intentionally loose for
+            // back-compat; Temporal SDK validates the shape at runtime.
+            workerConfig.workflowBundle =
+                workerDef.workflowBundle as WorkerConfig['workflowBundle'];
         }
 
         // Create the worker
         const { Worker } = await import('@temporalio/worker');
-        // Type assertion: WorkerConfig extends WorkerOptions but has looser typing for flexibility
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const worker = await Worker.create(workerConfig as any);
+        const worker = await Worker.create(workerConfig);
 
         // Create worker instance
         const workerInstance: WorkerInstance = {
@@ -1104,9 +1101,7 @@ export class TemporalWorkerManagerService
 
             // Create the worker
             const { Worker } = await import('@temporalio/worker');
-            // Type assertion: WorkerConfig extends WorkerOptions but has looser typing for flexibility
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            this.worker = await Worker.create(workerConfig as any);
+            this.worker = await Worker.create(workerConfig);
 
             this.logger.verbose(
                 `Worker created: queue='${workerConfig.taskQueue}', activities=${this.activities.size}, workflows=${this.getWorkflowSource()}`,
@@ -1117,7 +1112,8 @@ export class TemporalWorkerManagerService
                 worker: this.worker,
                 activitiesCount: this.activities.size,
                 taskQueue: workerConfig.taskQueue,
-                namespace: workerConfig.namespace,
+                namespace:
+                    workerConfig.namespace ?? this.options.connection?.namespace ?? 'default',
             };
         } catch (error) {
             this.lastError = this.extractErrorMessage(error);
@@ -1192,6 +1188,7 @@ export class TemporalWorkerManagerService
         }
 
         const config: WorkerConfig = {
+            ...this.options.worker?.workerOptions,
             taskQueue,
             namespace,
             connection: this.connection,
@@ -1203,18 +1200,16 @@ export class TemporalWorkerManagerService
             config.workflowsPath = this.options.worker.workflowsPath;
             this.logger.verbose(`Using workflows from: ${this.options.worker.workflowsPath}`);
         } else if (this.options.worker?.workflowBundle) {
-            config.workflowBundle = this.options.worker.workflowBundle;
+            // `workflowBundle` on TemporalOptions is intentionally loose for
+            // back-compat; Temporal SDK validates the shape at runtime.
+            config.workflowBundle = this.options.worker
+                .workflowBundle as WorkerConfig['workflowBundle'];
             this.logger.verbose('Using workflow bundle');
         } else {
             this.logger.warn('No workflow configuration - worker will only handle activities');
         }
 
-        // Add additional worker options
-        if (this.options.worker?.workerOptions) {
-            Object.assign(config, this.options.worker.workerOptions);
-        }
-
-        return config as WorkerConfig;
+        return config;
     }
 
     private async shutdownWorker(): Promise<void> {
