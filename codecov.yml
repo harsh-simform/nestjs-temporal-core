@@ -21,9 +21,29 @@ coverage:
     - '**/*.d.ts'
 
 comment:
-  layout: 'header, diff, flags, files, footer'
+  # Sections rendered in the bot comment, in order.
+  # - reach:      sunburst diagram of coverage impact
+  # - diff:       line-by-line coverage diff for files touched by the PR
+  # - flags:      per-flag breakdown (if flags are configured)
+  # - files:      file-level coverage table
+  # - footer:     link back to the Codecov report
+  layout: 'reach, diff, flags, files, footer'
+
+  # `default` = post a new comment on the first relevant push and edit
+  # it in place on subsequent pushes. No comment spam.
   behavior: default
-  require_changes: true
+
+  # Always post the comment, even when coverage percentage is unchanged.
+  # Ensures reviewers always have a direct link to the Codecov report.
+  require_changes: false
+
+  # Post even when the base/head lack coverage data (e.g. first CI run
+  # on a new PR where base hasn't been measured yet).
+  require_base: false
+  require_head: false
+
+  # Show the bot comment on PRs only, not on direct pushes to main.
+  show_carryforward_flags: false
 
 github_checks:
   annotations: true

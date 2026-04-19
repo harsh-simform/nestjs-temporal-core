@@ -47,3 +47,6 @@ lerna-debug.log*
 # Claude Code
 .claude/
 
+# Test reporter output (regenerated on every `jest` run)
+junit.xml
+
