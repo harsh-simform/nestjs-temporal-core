@@ -55,10 +55,18 @@ jobs:
 
       - name: Upload coverage
         if: matrix.node-version == 20
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
+          # Explicit token — tokenless OIDC is flaky on GitHub Actions.
+          # Was silently failing before, producing the 0% coverage you
+          # saw on the Codecov dashboard.
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: harsh-simform/nestjs-temporal-core
           files: ./coverage/lcov.info
-          fail_ci_if_error: false
+          # Fail the job if upload fails so silent failures don't
+          # masquerade as green CI (the root cause of the 0% bug).
+          fail_ci_if_error: true
+          verbose: true
 
       # Upload JUnit results to Codecov Test Analytics so flaky-test
       # detection and per-test timing data show up on the dashboard and
@@ -69,7 +77,10 @@ jobs:
         uses: codecov/test-results-action@v1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+          slug: harsh-simform/nestjs-temporal-core
           files: ./junit.xml
+          fail_ci_if_error: true
+          verbose: true
 
   build:
     name: Build
