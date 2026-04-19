@@ -59,9 +59,7 @@ export class WorkflowProxyFactory {
      * @typeParam T - The workflow function type
      * @param config - Workflow type name and optional task queue override
      */
-    createProxy<T extends Workflow>(
-        config: WorkflowProxyConfig,
-    ): IWorkflowProxy<T> {
+    createProxy<T extends Workflow>(config: WorkflowProxyConfig): IWorkflowProxy<T> {
         return new WorkflowProxy<T>(this.clientService, config);
     }
 }

@@ -1199,8 +1199,9 @@ export interface WorkflowSignalConfig {
  * `Promise<WorkflowResultType<T>>` and signal/query methods are fully typed.
  * Defaults to the base `Workflow` type for untyped call sites (e.g. `TemporalClientService`).
  */
-export type WorkflowHandleWithMetadata<T extends Workflow = Workflow> =
-    WorkflowHandle<T> & { handle: WorkflowHandle<T> };
+export type WorkflowHandleWithMetadata<T extends Workflow = Workflow> = WorkflowHandle<T> & {
+    handle: WorkflowHandle<T>;
+};
 
 /**
  * Client service status information

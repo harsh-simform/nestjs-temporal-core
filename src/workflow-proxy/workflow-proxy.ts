@@ -1,7 +1,11 @@
 import type { Workflow, SignalDefinition, QueryDefinition } from '@temporalio/workflow';
 import { WorkflowHandle } from '@temporalio/client';
 import { TemporalClientService } from '../services/temporal-client.service';
-import { WorkflowHandleWithMetadata, WorkflowStartOptions, WorkflowProxyConfig } from '../interfaces';
+import {
+    WorkflowHandleWithMetadata,
+    WorkflowStartOptions,
+    WorkflowProxyConfig,
+} from '../interfaces';
 
 /**
  * Typed proxy interface for interacting with a specific workflow type.
@@ -33,7 +37,10 @@ export interface IWorkflowProxy<T extends Workflow> {
      * Start a new execution of this workflow.
      * Args are typed as `Parameters<T>` — TypeScript enforces the workflow's signature.
      */
-    start(args: Parameters<T>, options?: WorkflowStartOptions): Promise<WorkflowHandleWithMetadata<T>>;
+    start(
+        args: Parameters<T>,
+        options?: WorkflowStartOptions,
+    ): Promise<WorkflowHandleWithMetadata<T>>;
 
     /**
      * Get a typed handle to an existing workflow execution.
@@ -71,7 +78,11 @@ export interface IWorkflowProxy<T extends Workflow> {
      * Query by string name. Use when a `QueryDefinition` is unavailable.
      * Caller must supply `TResult` explicitly (e.g. `queryByName<OrderStatus>(...)`).
      */
-    queryByName<TResult>(workflowId: string, queryName: string, args?: readonly unknown[]): Promise<TResult>;
+    queryByName<TResult>(
+        workflowId: string,
+        queryName: string,
+        args?: readonly unknown[],
+    ): Promise<TResult>;
 
     /**
      * Atomically start the workflow and send a signal.

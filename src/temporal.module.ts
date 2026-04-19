@@ -53,7 +53,12 @@ export class TemporalModule {
             module: TemporalModule,
             imports: [DiscoveryModule],
             providers,
-            exports: [TemporalService, TemporalLoggerManager, TEMPORAL_MODULE_OPTIONS, WorkflowProxyFactory],
+            exports: [
+                TemporalService,
+                TemporalLoggerManager,
+                TEMPORAL_MODULE_OPTIONS,
+                WorkflowProxyFactory,
+            ],
             global: options.isGlobal,
         };
     }
@@ -94,7 +99,12 @@ export class TemporalModule {
             module: TemporalModule,
             imports,
             providers,
-            exports: [TemporalService, TemporalLoggerManager, TEMPORAL_MODULE_OPTIONS, WorkflowProxyFactory],
+            exports: [
+                TemporalService,
+                TemporalLoggerManager,
+                TEMPORAL_MODULE_OPTIONS,
+                WorkflowProxyFactory,
+            ],
             global: options.isGlobal,
         };
     }
