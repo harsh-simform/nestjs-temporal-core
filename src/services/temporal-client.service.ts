@@ -83,7 +83,7 @@ export class TemporalClientService implements OnModuleInit {
      */
     async startWorkflow(
         workflowType: string,
-        args: unknown[] = [],
+        args: readonly unknown[] = [],
         options?: WorkflowStartOptions,
     ): Promise<WorkflowHandleWithMetadata> {
         this.ensureClientAvailable();
@@ -112,12 +112,10 @@ export class TemporalClientService implements OnModuleInit {
                     `Starting workflow '${workflowType}' [${workflowId}] on queue '${taskQueue}'`,
                 );
 
-                // Build workflow start options using the SDK's type
-                // Duration accepts string | number, so our string timeouts work directly
                 const workflowOptions: TemporalWorkflowStartOptions = {
                     workflowId,
                     taskQueue,
-                    args,
+                    args: [...args],
                     ...(options?.workflowExecutionTimeout && {
                         workflowExecutionTimeout: options.workflowExecutionTimeout,
                     }),
@@ -133,8 +131,11 @@ export class TemporalClientService implements OnModuleInit {
                     ...(options?.memo && {
                         memo: options.memo,
                     }),
-                    ...(options?.workflowIdReusePolicy && {
+                    ...(options?.workflowIdReusePolicy !== undefined && {
                         workflowIdReusePolicy: options.workflowIdReusePolicy,
+                    }),
+                    ...(options?.retryPolicy && {
+                        retry: options.retryPolicy,
                     }),
                 };
 
@@ -238,7 +239,7 @@ export class TemporalClientService implements OnModuleInit {
     async signalWorkflow(
         workflowId: string,
         signalName: string,
-        args?: unknown[],
+        args?: readonly unknown[],
         runId?: string,
     ): Promise<void> {
         try {
@@ -263,7 +264,7 @@ export class TemporalClientService implements OnModuleInit {
     async signalWorkflowHandle(
         handle: WorkflowHandle,
         signalName: string,
-        args?: unknown[],
+        args?: readonly unknown[],
     ): Promise<void> {
         try {
             await handle.signal(signalName, ...(args || []));
@@ -275,12 +276,77 @@ export class TemporalClientService implements OnModuleInit {
     }
 
     /**
+     * Atomically start a workflow and send a signal to it.
+     *
+     * If the workflow is already running, only the signal is delivered.
+     * This is Temporal's `signalWithStart` operation — useful for ensuring
+     * a workflow is running before sending a signal without a race condition.
+     *
+     * @param workflowType - Temporal workflow type name
+     * @param signalName - Signal name (string) to send
+     * @param signalArgs - Arguments for the signal
+     * @param workflowArgs - Arguments to start the workflow with (used only when starting)
+     * @param options - Workflow start options (taskQueue, workflowId, etc.)
+     */
+    async signalWithStart(
+        workflowType: string,
+        signalName: string,
+        signalArgs: readonly unknown[],
+        workflowArgs: readonly unknown[],
+        options?: WorkflowStartOptions,
+    ): Promise<WorkflowHandleWithMetadata> {
+        this.ensureClientAvailable();
+
+        const workflowId = options?.workflowId || this.generateWorkflowId(workflowType);
+        const taskQueue = options?.taskQueue || this.options.taskQueue || 'default';
+
+        try {
+            this.logger.verbose(
+                `Signal-with-starting workflow '${workflowType}' [${workflowId}] signal='${signalName}'`,
+            );
+
+            const handle = await this.client!.workflow.signalWithStart(workflowType, {
+                workflowId,
+                taskQueue,
+                args: [...workflowArgs],
+                signal: signalName,
+                signalArgs: [...signalArgs],
+                ...(options?.workflowExecutionTimeout && {
+                    workflowExecutionTimeout: options.workflowExecutionTimeout,
+                }),
+                ...(options?.workflowRunTimeout && {
+                    workflowRunTimeout: options.workflowRunTimeout,
+                }),
+                ...(options?.workflowTaskTimeout && {
+                    workflowTaskTimeout: options.workflowTaskTimeout,
+                }),
+                ...(options?.memo && { memo: options.memo }),
+                ...(options?.workflowIdReusePolicy && {
+                    workflowIdReusePolicy: options.workflowIdReusePolicy,
+                }),
+            });
+
+            this.logger.info(
+                `Signal-with-started workflow '${workflowType}' [${workflowId}] signal='${signalName}'`,
+            );
+            return { ...handle, handle };
+        } catch (error) {
+            const message = this.extractErrorMessage(error);
+            this.logger.error(
+                `Failed to signalWithStart workflow '${workflowType}' [${workflowId}]`,
+                error,
+            );
+            throw new Error(`Failed to signalWithStart workflow '${workflowType}': ${message}`);
+        }
+    }
+
+    /**
      * Query a workflow for its current state
      */
     async queryWorkflow<T = unknown>(
         workflowId: string,
         queryName: string,
-        args?: unknown[],
+        args?: readonly unknown[],
         runId?: string,
     ): Promise<T> {
         try {
@@ -303,7 +369,7 @@ export class TemporalClientService implements OnModuleInit {
     async queryWorkflowHandle<T = unknown>(
         handle: WorkflowHandle,
         queryName: string,
-        args?: unknown[],
+        args?: readonly unknown[],
     ): Promise<T> {
         try {
             const result = await handle.query(queryName, ...(args || []));

@@ -3,14 +3,17 @@ export {
     WorkflowHandle,
     Client,
     ConnectionOptions as TemporalConnectionOptions,
+    WorkflowIdReusePolicy,
 } from '@temporalio/client';
 export { Worker } from '@temporalio/worker';
+export type { Workflow, WorkflowResultType } from '@temporalio/workflow';
 
 import { Type } from '@nestjs/common';
-import { ScheduleClient, ScheduleHandle } from '@temporalio/client';
+import { ScheduleClient, ScheduleHandle, WorkflowIdReusePolicy } from '@temporalio/client';
 import { NativeConnection, Worker } from '@temporalio/worker';
-import { Duration, TypedSearchAttributes } from '@temporalio/common';
+import { Duration, RetryPolicy, TypedSearchAttributes } from '@temporalio/common';
 import { TLSConfig } from '@temporalio/common/lib/internal-non-workflow';
+import type { Workflow } from '@temporalio/workflow';
 
 /**
  * Configuration options for Temporal client connection.
@@ -26,6 +29,24 @@ import { TLSConfig } from '@temporalio/common/lib/internal-non-workflow';
  * };
  * ```
  */
+/**
+ * Configuration for a typed workflow proxy created by `WorkflowProxyFactory`.
+ *
+ * @example
+ * ```typescript
+ * const config: WorkflowProxyConfig = {
+ *   workflowType: 'orderWorkflow',
+ *   taskQueue: 'orders',
+ * };
+ * ```
+ */
+export interface WorkflowProxyConfig {
+    /** Temporal workflow type name (must match the registered workflow function name). */
+    workflowType: string;
+    /** Optional task queue override. Falls back to the module-level default when omitted. */
+    taskQueue?: string;
+}
+
 export interface ClientConnectionOptions {
     address: string;
     tls?: boolean | TLSConfig;
@@ -1045,17 +1066,26 @@ export interface ScheduleAction {
 }
 
 /**
- * Workflow start options with proper typing
+ * Workflow start options aligned with Temporal's official SDK types.
+ *
+ * `taskQueue` is optional here because the module-level default is applied by
+ * `TemporalClientService` when omitted. All other fields map 1:1 to Temporal's
+ * `WorkflowStartOptions` from `@temporalio/client`.
  */
 export interface WorkflowStartOptions {
     workflowId?: string;
     taskQueue?: string;
+    /** Typed search attributes — maps to `typedSearchAttributes` in Temporal's SDK. */
     searchAttributes?: TypedSearchAttributes;
-    memo?: Record<string, string | number | boolean | object>;
-    workflowIdReusePolicy?: 'ALLOW_DUPLICATE' | 'ALLOW_DUPLICATE_FAILED_ONLY' | 'REJECT_DUPLICATE';
+    /** Freeform workflow annotations. Temporal accepts `Record<string, unknown>`. */
+    memo?: Record<string, unknown>;
+    /** Use `WorkflowIdReusePolicy` enum from `@temporalio/client`. */
+    workflowIdReusePolicy?: WorkflowIdReusePolicy;
     workflowExecutionTimeout?: Duration;
     workflowRunTimeout?: Duration;
     workflowTaskTimeout?: Duration;
+    /** Retry policy for the workflow execution. */
+    retryPolicy?: RetryPolicy;
 }
 
 /**
@@ -1163,11 +1193,14 @@ export interface WorkflowSignalConfig {
 }
 
 /**
- * Workflow handle with additional metadata
+ * Workflow handle with additional metadata, generic on the workflow function type `T`.
+ *
+ * When `T` is known (e.g. inside `IWorkflowProxy<T>`), `result()` returns
+ * `Promise<WorkflowResultType<T>>` and signal/query methods are fully typed.
+ * Defaults to the base `Workflow` type for untyped call sites (e.g. `TemporalClientService`).
  */
-export type WorkflowHandleWithMetadata = import('@temporalio/client').WorkflowHandle & {
-    handle: import('@temporalio/client').WorkflowHandle;
-};
+export type WorkflowHandleWithMetadata<T extends Workflow = Workflow> =
+    WorkflowHandle<T> & { handle: WorkflowHandle<T> };
 
 /**
  * Client service status information

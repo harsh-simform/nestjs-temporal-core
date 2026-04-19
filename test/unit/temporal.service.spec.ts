@@ -128,13 +128,6 @@ describe('TemporalService', () => {
         });
 
         it('should continue initialization even if services are not immediately ready', async () => {
-            // Mock setTimeout to immediately call the callback
-            const originalSetTimeout = global.setTimeout;
-            global.setTimeout = ((cb: any) => {
-                cb();
-                return 0 as any;
-            }) as any;
-
             const module: TestingModule = await Test.createTestingModule({
                 providers: [
                     TemporalService,
@@ -174,9 +167,20 @@ describe('TemporalService', () => {
             }).compile();
 
             const timeoutService = module.get<TemporalService>(TemporalService);
-            const result = await timeoutService.onModuleInit();
 
-            global.setTimeout = originalSetTimeout;
+            // Simulate the timeout path without spinning the real 30s loop.
+            // The original approach (replacing global.setTimeout with a synchronous
+            // callback) caused the while-loop in waitForServicesInitialization to spin
+            // millions of times with zero delay, exhausting the JS heap.
+            jest.spyOn(timeoutService as any, 'waitForServicesInitialization').mockResolvedValue({
+                client: false,
+                worker: false,
+                schedule: false,
+                discovery: false,
+                metadata: false,
+            });
+
+            const result = await timeoutService.onModuleInit();
 
             // The service still initializes successfully even if not all services are ready
             expect(result.success).toBe(true);

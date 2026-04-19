@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c \"import json,sys; p=json.load\\(sys.stdin\\); print\\(json.dumps\\({**p.get\\('peerDependencies',{}\\), **p.get\\('dependencies',{}\\)}, indent=2\\)\\)\")",
+      "Bash(npm test *)",
+      "Bash(npm install *)",
+      "Bash(npx jest *)",
+      "Bash(git stash *)"
+    ]
+  }
+}

@@ -236,6 +236,42 @@ export class TemporalService implements OnModuleInit, OnModuleDestroy {
     }
 
     /**
+     * Atomically start a workflow and send a signal to it.
+     * If the workflow is already running, only the signal is delivered.
+     */
+    async signalWithStart(
+        workflowType: string,
+        signalName: string,
+        signalArgs: unknown[],
+        workflowArgs: unknown[],
+        options?: WorkflowStartOptions,
+    ): Promise<WorkflowSignalResult> {
+        try {
+            this.ensureInitialized();
+            const enhancedOptions = this.enhanceWorkflowOptions(options || {});
+            const result = await this.clientService.signalWithStart(
+                workflowType,
+                signalName,
+                signalArgs,
+                workflowArgs,
+                enhancedOptions,
+            );
+
+            return {
+                success: true,
+                workflowId: result.workflowId,
+                signalName,
+            };
+        } catch (error) {
+            this.logger.error(
+                `Failed to signalWithStart workflow '${workflowType}' with signal '${signalName}'`,
+                error,
+            );
+            throw error instanceof Error ? error : new Error(this.extractErrorMessage(error));
+        }
+    }
+
+    /**
      * Query a workflow
      */
     async queryWorkflow<T = unknown>(
