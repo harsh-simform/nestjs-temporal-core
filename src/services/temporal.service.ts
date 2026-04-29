@@ -202,13 +202,6 @@ export class TemporalService implements OnModuleInit, OnModuleDestroy {
             };
         } catch (error) {
             this.logger.error(`Failed to start workflow '${workflowType}'`, error);
-            if (this.options.muteErrors) {
-                return {
-                    success: false,
-                    error: error instanceof Error ? error : new Error(this.extractErrorMessage(error)),
-                    executionTime: Date.now() - startTime,
-                };
-            }
             throw error instanceof Error ? error : new Error(this.extractErrorMessage(error));
         }
     }
@@ -222,9 +215,6 @@ export class TemporalService implements OnModuleInit, OnModuleDestroy {
         args?: unknown[],
     ): Promise<WorkflowSignalResult> {
         if (!workflowId || workflowId.trim() === '') {
-            if (this.options.muteErrors) {
-                return { success: false, workflowId, signalName, error: new Error('Workflow ID is required') };
-            }
             throw new Error('Workflow ID is required');
         }
 
@@ -242,14 +232,6 @@ export class TemporalService implements OnModuleInit, OnModuleDestroy {
                 `Failed to signal workflow '${workflowId}' with '${signalName}'`,
                 error,
             );
-            if (this.options.muteErrors) {
-                return {
-                    success: false,
-                    workflowId,
-                    signalName,
-                    error: error instanceof Error ? error : new Error(this.extractErrorMessage(error)),
-                };
-            }
             throw error instanceof Error ? error : new Error(this.extractErrorMessage(error));
         }
     }
@@ -304,14 +286,6 @@ export class TemporalService implements OnModuleInit, OnModuleDestroy {
                 `Failed to signalWithStart workflow '${workflowType}' with signal '${signalName}'`,
                 error,
             );
-            if (this.options.muteErrors) {
-                return {
-                    success: false,
-                    workflowId: '',
-                    signalName,
-                    error: error instanceof Error ? error : new Error(this.extractErrorMessage(error)),
-                };
-            }
             throw error instanceof Error ? error : new Error(this.extractErrorMessage(error));
         }
     }
@@ -325,9 +299,6 @@ export class TemporalService implements OnModuleInit, OnModuleDestroy {
         args?: unknown[],
     ): Promise<WorkflowQueryResult<T>> {
         if (!workflowId || workflowId.trim() === '') {
-            if (this.options.muteErrors) {
-                return { success: false, workflowId, queryName, error: new Error('Workflow ID is required') };
-            }
             throw new Error('Workflow ID is required');
         }
 
@@ -350,14 +321,6 @@ export class TemporalService implements OnModuleInit, OnModuleDestroy {
                 `Failed to query workflow '${workflowId}' with '${queryName}'`,
                 error,
             );
-            if (this.options.muteErrors) {
-                return {
-                    success: false,
-                    workflowId,
-                    queryName,
-                    error: error instanceof Error ? error : new Error(this.extractErrorMessage(error)),
-                };
-            }
             throw error instanceof Error ? error : new Error(this.extractErrorMessage(error));
         }
     }
@@ -864,7 +827,7 @@ export class TemporalService implements OnModuleInit, OnModuleDestroy {
      * Ensure service is initialized
      */
     private ensureInitialized(): void {
-        if (!this.isInitialized && !this.options.muteErrors) {
+        if (!this.isInitialized) {
             throw new Error('Temporal Service is not initialized');
         }
     }
