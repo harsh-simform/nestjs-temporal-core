@@ -373,6 +373,13 @@ export interface GlobalLoggerConfig extends LoggerConfig {
 export interface LoggerConfig {
     enableLogger?: boolean;
     logLevel?: LogLevel;
+    /**
+     * When true, suppresses error-level log output and prevents service
+     * methods from throwing on operational failures (they return structured
+     * error results instead).
+     * @default false
+     */
+    muteErrors?: boolean;
 }
 
 // ==========================================

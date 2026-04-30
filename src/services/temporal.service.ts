@@ -51,6 +51,7 @@ export class TemporalService implements OnModuleInit, OnModuleDestroy {
         this.logger = createLogger(TemporalService.name, {
             enableLogger: options.enableLogger,
             logLevel: options.logLevel,
+            muteErrors: options.muteErrors,
         });
     }
 

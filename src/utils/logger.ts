@@ -66,7 +66,7 @@ export class TemporalLoggerManager {
      * Generate cache key for logger instances.
      */
     private getCacheKey(context: string, localConfig: LoggerConfig): string {
-        return `${context}:${localConfig?.enableLogger ?? ''}:${localConfig?.logLevel ?? ''}`;
+        return `${context}:${localConfig?.enableLogger ?? ''}:${localConfig?.logLevel ?? ''}:${localConfig?.muteErrors ?? ''}`;
     }
 
     /**
@@ -108,6 +108,7 @@ export class TemporalLogger {
         this.config = {
             enableLogger: config.enableLogger ?? true,
             logLevel,
+            muteErrors: config.muteErrors ?? false,
         };
         this.currentLevelIndex = TemporalLogger.LEVEL_INDICES.get(this.config.logLevel) ?? 2;
     }
@@ -124,8 +125,15 @@ export class TemporalLogger {
 
     /**
      * Optimized error logging with improved trace handling.
+     * When `muteErrors` is enabled, error messages are downgraded to debug level.
      */
     error(message: unknown, trace?: string | Error, context?: string): void {
+        if (this.config.muteErrors) {
+            if (this.shouldLog('debug')) {
+                this.nestLogger.debug(`[muted error] ${message}`, context ?? this.context);
+            }
+            return;
+        }
         if (this.shouldLog('error')) {
             const stackTrace = trace instanceof Error ? trace.stack : trace;
             this.nestLogger.error(message, stackTrace, context ?? this.context);
@@ -247,6 +255,13 @@ export class TemporalLogger {
      */
     isLevelEnabled(level: LogLevel): boolean {
         return this.shouldLog(level);
+    }
+
+    /**
+     * Check if error muting is enabled.
+     */
+    isMuted(): boolean {
+        return this.config.muteErrors;
     }
 }
 

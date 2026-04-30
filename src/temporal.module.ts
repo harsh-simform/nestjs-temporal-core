@@ -162,6 +162,7 @@ export class TemporalModule {
                     manager.configure({
                         enableLogger: temporalOptions.enableLogger,
                         logLevel: temporalOptions.logLevel,
+                        muteErrors: temporalOptions.muteErrors,
                         appName: 'NestJS-Temporal-Core',
                     });
                     return manager;
@@ -230,6 +231,7 @@ export class TemporalModule {
                     manager.configure({
                         enableLogger: temporalOptions.enableLogger,
                         logLevel: temporalOptions.logLevel,
+                        muteErrors: temporalOptions.muteErrors,
                         appName: 'NestJS-Temporal-Core',
                     });
                     return manager;
