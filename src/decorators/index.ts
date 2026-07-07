@@ -12,4 +12,4 @@
 export { Activity, ActivityMethod } from './activity.decorator';
 
 // Workflow decorators
-export { SignalMethod, QueryMethod, ChildWorkflow } from './workflow.decorator';
+export { SignalMethod, QueryMethod, UpdateMethod, ChildWorkflow } from './workflow.decorator';

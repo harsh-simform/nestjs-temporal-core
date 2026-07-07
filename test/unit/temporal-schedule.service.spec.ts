@@ -24,11 +24,18 @@ describe('TemporalScheduleService', () => {
     beforeEach(async () => {
         mockScheduleHandle = {
             scheduleId: 'test-schedule-123',
+            pause: jest.fn().mockResolvedValue(undefined),
+            unpause: jest.fn().mockResolvedValue(undefined),
+            trigger: jest.fn().mockResolvedValue(undefined),
+            delete: jest.fn().mockResolvedValue(undefined),
+            update: jest.fn().mockResolvedValue(undefined),
+            describe: jest.fn().mockResolvedValue({ scheduleId: 'test-schedule-123' }),
         };
 
         mockScheduleClient = {
             create: jest.fn().mockResolvedValue(mockScheduleHandle),
             getHandle: jest.fn().mockReturnValue(mockScheduleHandle),
+            list: jest.fn().mockReturnValue({ [Symbol.asyncIterator]: () => ({}) }),
         };
 
         const module: TestingModule = await Test.createTestingModule({
@@ -496,6 +503,207 @@ describe('TemporalScheduleService', () => {
 
             expect(result.success).toBe(false);
             expect(result.error).toBeInstanceOf(Error);
+        });
+    });
+
+    describe('pauseSchedule', () => {
+        beforeEach(async () => {
+            await service.onModuleInit();
+        });
+
+        it('should pause a schedule', async () => {
+            const result = await service.pauseSchedule('test-schedule', 'maintenance');
+
+            expect(mockScheduleHandle.pause).toHaveBeenCalledWith('maintenance');
+            expect(result).toEqual({ success: true, scheduleId: 'test-schedule' });
+        });
+
+        it('should handle pause errors', async () => {
+            (mockScheduleHandle.pause as jest.Mock).mockRejectedValue(new Error('boom'));
+
+            const result = await service.pauseSchedule('test-schedule');
+
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toBe('boom');
+        });
+    });
+
+    describe('unpauseSchedule', () => {
+        beforeEach(async () => {
+            await service.onModuleInit();
+        });
+
+        it('should unpause a schedule', async () => {
+            const result = await service.unpauseSchedule('test-schedule');
+
+            expect(mockScheduleHandle.unpause).toHaveBeenCalledWith(undefined);
+            expect(result).toEqual({ success: true, scheduleId: 'test-schedule' });
+        });
+
+        it('should handle unpause errors', async () => {
+            (mockScheduleHandle.unpause as jest.Mock).mockRejectedValue(new Error('boom'));
+
+            const result = await service.unpauseSchedule('test-schedule');
+
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toBe('boom');
+        });
+    });
+
+    describe('triggerSchedule', () => {
+        beforeEach(async () => {
+            await service.onModuleInit();
+        });
+
+        it('should trigger a schedule with an overlap policy', async () => {
+            const result = await service.triggerSchedule('test-schedule', 'ALLOW_ALL');
+
+            expect(mockScheduleHandle.trigger).toHaveBeenCalledWith('ALLOW_ALL');
+            expect(result).toEqual({ success: true, scheduleId: 'test-schedule' });
+        });
+
+        it('should trigger a schedule without an overlap policy', async () => {
+            await service.triggerSchedule('test-schedule');
+
+            expect(mockScheduleHandle.trigger).toHaveBeenCalledWith(undefined);
+        });
+
+        it('should handle trigger errors', async () => {
+            (mockScheduleHandle.trigger as jest.Mock).mockRejectedValue(new Error('boom'));
+
+            const result = await service.triggerSchedule('test-schedule');
+
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toBe('boom');
+        });
+    });
+
+    describe('deleteSchedule', () => {
+        beforeEach(async () => {
+            await service.onModuleInit();
+        });
+
+        it('should delete a schedule and remove it from the cache', async () => {
+            await service.getSchedule('test-schedule');
+            const result = await service.deleteSchedule('test-schedule');
+
+            expect(mockScheduleHandle.delete).toHaveBeenCalled();
+            expect(result).toEqual({ success: true, scheduleId: 'test-schedule' });
+            expect((service as any).scheduleHandles.has('test-schedule')).toBe(false);
+        });
+
+        it('should handle delete errors', async () => {
+            (mockScheduleHandle.delete as jest.Mock).mockRejectedValue(new Error('boom'));
+
+            const result = await service.deleteSchedule('test-schedule');
+
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toBe('boom');
+        });
+    });
+
+    describe('updateSchedule', () => {
+        beforeEach(async () => {
+            await service.onModuleInit();
+        });
+
+        it('should update a schedule via the provided updateFn', async () => {
+            const updateFn = jest.fn((previous: any) => ({ ...previous }));
+
+            const result = await service.updateSchedule('test-schedule', updateFn);
+
+            expect(mockScheduleHandle.update).toHaveBeenCalledWith(updateFn);
+            expect(result).toEqual({ success: true, scheduleId: 'test-schedule' });
+        });
+
+        it('should handle update errors', async () => {
+            (mockScheduleHandle.update as jest.Mock).mockRejectedValue(new Error('boom'));
+
+            const result = await service.updateSchedule('test-schedule', (p: any) => p);
+
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toBe('boom');
+        });
+    });
+
+    describe('describeSchedule', () => {
+        beforeEach(async () => {
+            await service.onModuleInit();
+        });
+
+        it('should describe a schedule', async () => {
+            const description = { scheduleId: 'test-schedule', state: { paused: false } };
+            (mockScheduleHandle.describe as jest.Mock).mockResolvedValue(description);
+
+            const result = await service.describeSchedule('test-schedule');
+
+            expect(result).toEqual({
+                success: true,
+                scheduleId: 'test-schedule',
+                description,
+            });
+        });
+
+        it('should handle describe errors', async () => {
+            (mockScheduleHandle.describe as jest.Mock).mockRejectedValue(new Error('boom'));
+
+            const result = await service.describeSchedule('test-schedule');
+
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toBe('boom');
+        });
+    });
+
+    describe('listSchedules', () => {
+        beforeEach(async () => {
+            await service.onModuleInit();
+        });
+
+        it('should list schedules via the schedule client', () => {
+            const result = service.listSchedules({ pageSize: 10 } as any);
+
+            expect(mockScheduleClient.list).toHaveBeenCalledWith({ pageSize: 10 });
+            expect(result.success).toBe(true);
+            expect(result.schedules).toBeDefined();
+        });
+
+        it('should return a failure result when the schedule client is unavailable', async () => {
+            const moduleWithoutClient: TestingModule = await Test.createTestingModule({
+                providers: [
+                    TemporalScheduleService,
+                    { provide: TEMPORAL_MODULE_OPTIONS, useValue: mockOptions },
+                    { provide: TEMPORAL_CLIENT, useValue: null },
+                    {
+                        provide: DiscoveryService,
+                        useValue: {
+                            getProviders: jest.fn().mockReturnValue([]),
+                            getControllers: jest.fn().mockReturnValue([]),
+                        },
+                    },
+                    {
+                        provide: TemporalMetadataAccessor,
+                        useValue: { isActivity: jest.fn().mockReturnValue(false) },
+                    },
+                ],
+            }).compile();
+
+            const svc = moduleWithoutClient.get<TemporalScheduleService>(TemporalScheduleService);
+
+            const result = svc.listSchedules();
+
+            expect(result.success).toBe(false);
+            expect(result.error).toBeDefined();
+        });
+
+        it('should handle synchronous errors from the schedule client', async () => {
+            (mockScheduleClient.list as jest.Mock).mockImplementation(() => {
+                throw new Error('boom');
+            });
+
+            const result = service.listSchedules();
+
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toBe('boom');
         });
     });
 

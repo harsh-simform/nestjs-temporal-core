@@ -2,8 +2,14 @@ import { Injectable, OnModuleInit, Inject } from '@nestjs/common';
 import {
     Client,
     WorkflowHandle,
+    WorkflowUpdateHandle,
     WorkflowStartOptions as TemporalWorkflowStartOptions,
     WorkflowExecutionAlreadyStartedError,
+    FullActivityId,
+    ActivityOptions as StandaloneActivityOptions,
+    ActivityHandle,
+    ActivityExecutionInfo,
+    CountActivityExecutions,
 } from '@temporalio/client';
 import { TEMPORAL_CLIENT, TEMPORAL_MODULE_OPTIONS } from '../constants';
 import {
@@ -408,6 +414,369 @@ export class TemporalClientService implements OnModuleInit {
         } catch (error) {
             this.logger.error(`Failed to query '${queryName}'`, error);
             throw error;
+        }
+    }
+
+    /**
+     * Send an update to a workflow and wait for it to complete.
+     *
+     * Updates combine the strengths of Signals (can mutate workflow state) and Queries
+     * (can return a result) into a single request/response operation.
+     *
+     * @param workflowId - Target workflow ID
+     * @param updateName - Update name (matches `@UpdateMethod` or `defineUpdate` name)
+     * @param args - Arguments for the update handler
+     * @param runId - Optional specific run ID
+     *
+     * @example
+     * ```typescript
+     * const newBalance = await clientService.updateWorkflow<number>(
+     *   'account-123',
+     *   'deposit',
+     *   [100],
+     * );
+     * ```
+     */
+    async updateWorkflow<T = unknown>(
+        workflowId: string,
+        updateName: string,
+        args?: readonly unknown[],
+        runId?: string,
+    ): Promise<T> {
+        try {
+            const handle = await this.getWorkflowHandle(workflowId, runId);
+            const executeUpdate = handle.executeUpdate as (
+                name: string,
+                options: { args: unknown[] },
+            ) => Promise<unknown>;
+            const result = await executeUpdate(updateName, { args: [...(args || [])] });
+
+            this.logger.debug(`Executed update '${updateName}' on workflow '${workflowId}'`);
+            return result as T;
+        } catch (error) {
+            this.logger.error(
+                `Failed to execute update '${updateName}' on workflow '${workflowId}'`,
+                error,
+            );
+            throw new Error(
+                `Failed to execute update '${updateName}' on workflow ${workflowId}: ${this.extractErrorMessage(error)}`,
+            );
+        }
+    }
+
+    /**
+     * Send an update to a workflow using an existing handle and wait for it to complete.
+     */
+    async updateWorkflowHandle<T = unknown>(
+        handle: WorkflowHandle,
+        updateName: string,
+        args?: readonly unknown[],
+    ): Promise<T> {
+        try {
+            const executeUpdate = handle.executeUpdate as (
+                name: string,
+                options: { args: unknown[] },
+            ) => Promise<unknown>;
+            const result = await executeUpdate(updateName, { args: [...(args || [])] });
+            this.logger.verbose(`Executed update '${updateName}' on workflow`);
+            return result as T;
+        } catch (error) {
+            this.logger.error(`Failed to execute update '${updateName}'`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Start an update and return a handle once the update has been accepted by the workflow,
+     * without waiting for it to complete. Use `WorkflowUpdateHandle.result()` to await the outcome.
+     *
+     * @param workflowId - Target workflow ID
+     * @param updateName - Update name (matches `@UpdateMethod` or `defineUpdate` name)
+     * @param args - Arguments for the update handler
+     * @param runId - Optional specific run ID
+     *
+     * @example
+     * ```typescript
+     * const updateHandle = await clientService.startUpdateWorkflow('account-123', 'deposit', [100]);
+     * const newBalance = await updateHandle.result();
+     * ```
+     */
+    async startUpdateWorkflow<T = unknown>(
+        workflowId: string,
+        updateName: string,
+        args?: readonly unknown[],
+        runId?: string,
+    ): Promise<WorkflowUpdateHandle<T>> {
+        try {
+            const handle = await this.getWorkflowHandle(workflowId, runId);
+            const startUpdate = handle.startUpdate as (
+                name: string,
+                options: { args: unknown[]; waitForStage: 'ACCEPTED' },
+            ) => Promise<WorkflowUpdateHandle<unknown>>;
+            const updateHandle = await startUpdate(updateName, {
+                args: [...(args || [])],
+                waitForStage: 'ACCEPTED',
+            });
+
+            this.logger.debug(`Started update '${updateName}' on workflow '${workflowId}'`);
+            return updateHandle as WorkflowUpdateHandle<T>;
+        } catch (error) {
+            this.logger.error(
+                `Failed to start update '${updateName}' on workflow '${workflowId}'`,
+                error,
+            );
+            throw new Error(
+                `Failed to start update '${updateName}' on workflow ${workflowId}: ${this.extractErrorMessage(error)}`,
+            );
+        }
+    }
+
+    /**
+     * Start an update using an existing handle and return a handle to the update
+     * once it has been accepted, without waiting for it to complete.
+     */
+    async startUpdateWorkflowHandle<T = unknown>(
+        handle: WorkflowHandle,
+        updateName: string,
+        args?: readonly unknown[],
+    ): Promise<WorkflowUpdateHandle<T>> {
+        try {
+            const startUpdate = handle.startUpdate as (
+                name: string,
+                options: { args: unknown[]; waitForStage: 'ACCEPTED' },
+            ) => Promise<WorkflowUpdateHandle<unknown>>;
+            const updateHandle = await startUpdate(updateName, {
+                args: [...(args || [])],
+                waitForStage: 'ACCEPTED',
+            });
+            this.logger.verbose(`Started update '${updateName}' on workflow`);
+            return updateHandle as WorkflowUpdateHandle<T>;
+        } catch (error) {
+            this.logger.error(`Failed to start update '${updateName}'`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Complete an externally-managed Activity, identified by task token or full ID.
+     * Use when an Activity signals completion asynchronously (e.g. from another
+     * process or a human-in-the-loop step) instead of returning from its handler.
+     *
+     * @example
+     * ```typescript
+     * await clientService.completeActivity(taskToken, { approved: true });
+     * ```
+     */
+    async completeActivity(
+        taskTokenOrFullActivityId: Uint8Array | FullActivityId,
+        result: unknown,
+    ): Promise<void> {
+        this.ensureClientAvailable();
+
+        try {
+            await this.client!.activity.complete(taskTokenOrFullActivityId as Uint8Array, result);
+            this.logger.debug('Completed activity');
+        } catch (error) {
+            this.logger.error('Failed to complete activity', error);
+            throw new Error(`Failed to complete activity: ${this.extractErrorMessage(error)}`);
+        }
+    }
+
+    /**
+     * Fail an externally-managed Activity, identified by task token or full ID.
+     *
+     * @example
+     * ```typescript
+     * await clientService.failActivity(taskToken, new Error('payment declined'));
+     * ```
+     */
+    async failActivity(
+        taskTokenOrFullActivityId: Uint8Array | FullActivityId,
+        err: unknown,
+    ): Promise<void> {
+        this.ensureClientAvailable();
+
+        try {
+            await this.client!.activity.fail(taskTokenOrFullActivityId as Uint8Array, err);
+            this.logger.debug('Failed activity (reported to server)');
+        } catch (error) {
+            this.logger.error('Failed to report activity failure', error);
+            throw new Error(
+                `Failed to report activity failure: ${this.extractErrorMessage(error)}`,
+            );
+        }
+    }
+
+    /**
+     * Send a heartbeat for an externally-managed Activity, identified by task token or full ID.
+     *
+     * @example
+     * ```typescript
+     * await clientService.heartbeatActivity(taskToken, { progress: 50 });
+     * ```
+     */
+    async heartbeatActivity(
+        taskTokenOrFullActivityId: Uint8Array | FullActivityId,
+        details?: unknown,
+    ): Promise<void> {
+        this.ensureClientAvailable();
+
+        try {
+            await this.client!.activity.heartbeat(taskTokenOrFullActivityId as Uint8Array, details);
+            this.logger.verbose('Sent activity heartbeat');
+        } catch (error) {
+            this.logger.error('Failed to send activity heartbeat', error);
+            throw new Error(
+                `Failed to send activity heartbeat: ${this.extractErrorMessage(error)}`,
+            );
+        }
+    }
+
+    /**
+     * Report cancellation of an externally-managed Activity, identified by task token or full ID.
+     *
+     * @example
+     * ```typescript
+     * await clientService.reportActivityCancellation(taskToken);
+     * ```
+     */
+    async reportActivityCancellation(
+        taskTokenOrFullActivityId: Uint8Array | FullActivityId,
+        details?: unknown,
+    ): Promise<void> {
+        this.ensureClientAvailable();
+
+        try {
+            await this.client!.activity.reportCancellation(
+                taskTokenOrFullActivityId as Uint8Array,
+                details,
+            );
+            this.logger.debug('Reported activity cancellation');
+        } catch (error) {
+            this.logger.error('Failed to report activity cancellation', error);
+            throw new Error(
+                `Failed to report activity cancellation: ${this.extractErrorMessage(error)}`,
+            );
+        }
+    }
+
+    /**
+     * Start a Standalone Activity execution — a durable, retryable Activity run directly
+     * by the client with no workflow involved.
+     *
+     * @remarks Standalone Activities are a Public Preview Temporal server feature; the
+     * underlying API may change in future SDK releases.
+     *
+     * @example
+     * ```typescript
+     * const handle = await clientService.startStandaloneActivity('sendEmail', {
+     *   id: 'email-123',
+     *   taskQueue: 'emails',
+     *   args: ['user@example.com'],
+     *   startToCloseTimeout: '1m',
+     * });
+     * const result = await handle.result();
+     * ```
+     */
+    async startStandaloneActivity<R = unknown>(
+        activityType: string,
+        options: StandaloneActivityOptions,
+    ): Promise<ActivityHandle<R>> {
+        this.ensureClientAvailable();
+
+        try {
+            const handle = await this.client!.activity.start<R>(activityType, options);
+            this.logger.info(`Started standalone activity '${activityType}' [${options.id}]`);
+            return handle;
+        } catch (error) {
+            this.logger.error(`Failed to start standalone activity '${activityType}'`, error);
+            throw new Error(
+                `Failed to start standalone activity '${activityType}': ${this.extractErrorMessage(error)}`,
+            );
+        }
+    }
+
+    /**
+     * Execute a Standalone Activity until completion and return its result.
+     *
+     * @remarks Standalone Activities are a Public Preview Temporal server feature; the
+     * underlying API may change in future SDK releases.
+     *
+     * @example
+     * ```typescript
+     * const result = await clientService.executeStandaloneActivity('sendEmail', {
+     *   id: 'email-123',
+     *   taskQueue: 'emails',
+     *   args: ['user@example.com'],
+     *   startToCloseTimeout: '1m',
+     * });
+     * ```
+     */
+    async executeStandaloneActivity<R = unknown>(
+        activityType: string,
+        options: StandaloneActivityOptions,
+    ): Promise<R> {
+        this.ensureClientAvailable();
+
+        try {
+            const result = await this.client!.activity.execute<R>(activityType, options);
+            this.logger.info(`Executed standalone activity '${activityType}' [${options.id}]`);
+            return result;
+        } catch (error) {
+            this.logger.error(`Failed to execute standalone activity '${activityType}'`, error);
+            throw new Error(
+                `Failed to execute standalone activity '${activityType}': ${this.extractErrorMessage(error)}`,
+            );
+        }
+    }
+
+    /**
+     * Get a handle to a Standalone Activity execution by ID.
+     *
+     * @remarks Standalone Activities are a Public Preview Temporal server feature; the
+     * underlying API may change in future SDK releases.
+     */
+    getStandaloneActivityHandle<R = unknown>(
+        activityId: string,
+        runId?: string,
+    ): ActivityHandle<R> {
+        if (!this.client) {
+            throw new Error('Temporal client not initialized');
+        }
+        return this.client.activity.getHandle<R>(activityId, runId);
+    }
+
+    /**
+     * List Standalone Activity executions matching a visibility query.
+     * See https://docs.temporal.io/visibility for query syntax.
+     *
+     * @remarks Standalone Activities are a Public Preview Temporal server feature; the
+     * underlying API may change in future SDK releases.
+     */
+    listStandaloneActivities(query: string): AsyncIterable<ActivityExecutionInfo> {
+        if (!this.client) {
+            throw new Error('Temporal client not initialized');
+        }
+        return this.client.activity.list(query);
+    }
+
+    /**
+     * Count Standalone Activity executions matching a visibility query.
+     * See https://docs.temporal.io/visibility for query syntax.
+     *
+     * @remarks Standalone Activities are a Public Preview Temporal server feature; the
+     * underlying API may change in future SDK releases.
+     */
+    async countStandaloneActivities(query: string): Promise<CountActivityExecutions> {
+        this.ensureClientAvailable();
+
+        try {
+            return await this.client!.activity.count(query);
+        } catch (error) {
+            this.logger.error('Failed to count standalone activities', error);
+            throw new Error(
+                `Failed to count standalone activities: ${this.extractErrorMessage(error)}`,
+            );
         }
     }
 

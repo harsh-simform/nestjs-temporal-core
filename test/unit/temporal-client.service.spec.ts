@@ -28,7 +28,9 @@ describe('TemporalClientService', () => {
             terminate: jest.fn().mockResolvedValue(undefined),
             cancel: jest.fn().mockResolvedValue(undefined),
             result: jest.fn().mockResolvedValue({ success: true }),
-        };
+            executeUpdate: jest.fn().mockResolvedValue('update-result'),
+            startUpdate: jest.fn().mockResolvedValue({ result: jest.fn() }),
+        } as any;
 
         // Create mock client
         mockClient = {
@@ -36,6 +38,17 @@ describe('TemporalClientService', () => {
                 start: jest.fn().mockResolvedValue(mockWorkflowHandle),
                 getHandle: jest.fn().mockResolvedValue(mockWorkflowHandle),
                 signalWithStart: jest.fn().mockResolvedValue(mockWorkflowHandle),
+            } as any,
+            activity: {
+                complete: jest.fn().mockResolvedValue(undefined),
+                fail: jest.fn().mockResolvedValue(undefined),
+                heartbeat: jest.fn().mockResolvedValue(undefined),
+                reportCancellation: jest.fn().mockResolvedValue(undefined),
+                start: jest.fn().mockResolvedValue({ activityId: 'act-1', result: jest.fn() }),
+                execute: jest.fn().mockResolvedValue('activity-result'),
+                getHandle: jest.fn().mockReturnValue({ activityId: 'act-1', result: jest.fn() }),
+                list: jest.fn().mockReturnValue({ [Symbol.asyncIterator]: () => ({}) }),
+                count: jest.fn().mockResolvedValue({ count: 0, groups: [] }),
             } as any,
         };
 
@@ -1123,6 +1136,368 @@ describe('TemporalClientService', () => {
             await expect(
                 service.queryWorkflowHandle(mockWorkflowHandle as WorkflowHandle, 'query'),
             ).rejects.toThrow(error);
+        });
+    });
+
+    describe('updateWorkflow', () => {
+        beforeEach(async () => {
+            await service.onModuleInit();
+        });
+
+        it('should execute update successfully', async () => {
+            const workflowId = 'test-workflow-id';
+            const updateName = 'deposit';
+            const args = [100];
+
+            (mockWorkflowHandle as any).executeUpdate.mockResolvedValue(200);
+
+            const result = await service.updateWorkflow(workflowId, updateName, args);
+
+            expect((mockWorkflowHandle as any).executeUpdate).toHaveBeenCalledWith(updateName, {
+                args: [100],
+            });
+            expect(result).toBe(200);
+        });
+
+        it('should execute update without args', async () => {
+            await service.updateWorkflow('test-id', 'update');
+
+            expect((mockWorkflowHandle as any).executeUpdate).toHaveBeenCalledWith('update', {
+                args: [],
+            });
+        });
+
+        it('should execute update with runId', async () => {
+            await service.updateWorkflow('test-id', 'update', undefined, 'run-id');
+
+            expect(mockClient.workflow!.getHandle).toHaveBeenCalledWith('test-id', 'run-id');
+        });
+
+        it('should handle update errors', async () => {
+            const error = new Error('Update failed');
+            (mockWorkflowHandle as any).executeUpdate.mockRejectedValue(error);
+
+            await expect(service.updateWorkflow('test-id', 'update')).rejects.toThrow(
+                "Failed to execute update 'update' on workflow test-id",
+            );
+        });
+
+        it('should handle string errors during update', async () => {
+            (mockWorkflowHandle as any).executeUpdate.mockRejectedValue('String error');
+
+            await expect(service.updateWorkflow('test-id', 'update')).rejects.toThrow(
+                "Failed to execute update 'update' on workflow test-id: String error",
+            );
+        });
+    });
+
+    describe('updateWorkflowHandle', () => {
+        beforeEach(async () => {
+            await service.onModuleInit();
+        });
+
+        it('should execute update on handle successfully', async () => {
+            (mockWorkflowHandle as any).executeUpdate.mockResolvedValue('ok');
+
+            const result = await service.updateWorkflowHandle(
+                mockWorkflowHandle as WorkflowHandle,
+                'update',
+                ['arg'],
+            );
+
+            expect((mockWorkflowHandle as any).executeUpdate).toHaveBeenCalledWith('update', {
+                args: ['arg'],
+            });
+            expect(result).toBe('ok');
+        });
+
+        it('should handle update handle errors', async () => {
+            const error = new Error('Update failed');
+            (mockWorkflowHandle as any).executeUpdate.mockRejectedValue(error);
+
+            await expect(
+                service.updateWorkflowHandle(mockWorkflowHandle as WorkflowHandle, 'update'),
+            ).rejects.toThrow(error);
+        });
+    });
+
+    describe('startUpdateWorkflow', () => {
+        beforeEach(async () => {
+            await service.onModuleInit();
+        });
+
+        it('should start update successfully and return a handle', async () => {
+            const updateHandle = { result: jest.fn().mockResolvedValue(42) };
+            (mockWorkflowHandle as any).startUpdate.mockResolvedValue(updateHandle);
+
+            const result = await service.startUpdateWorkflow('test-id', 'deposit', [100]);
+
+            expect((mockWorkflowHandle as any).startUpdate).toHaveBeenCalledWith('deposit', {
+                args: [100],
+                waitForStage: 'ACCEPTED',
+            });
+            expect(result).toBe(updateHandle);
+        });
+
+        it('should start update with runId', async () => {
+            await service.startUpdateWorkflow('test-id', 'update', undefined, 'run-id');
+
+            expect(mockClient.workflow!.getHandle).toHaveBeenCalledWith('test-id', 'run-id');
+        });
+
+        it('should handle start update errors', async () => {
+            const error = new Error('Start update failed');
+            (mockWorkflowHandle as any).startUpdate.mockRejectedValue(error);
+
+            await expect(service.startUpdateWorkflow('test-id', 'update')).rejects.toThrow(
+                "Failed to start update 'update' on workflow test-id",
+            );
+        });
+    });
+
+    describe('startUpdateWorkflowHandle', () => {
+        beforeEach(async () => {
+            await service.onModuleInit();
+        });
+
+        it('should start update on handle successfully', async () => {
+            const updateHandle = { result: jest.fn().mockResolvedValue(42) };
+            (mockWorkflowHandle as any).startUpdate.mockResolvedValue(updateHandle);
+
+            const result = await service.startUpdateWorkflowHandle(
+                mockWorkflowHandle as WorkflowHandle,
+                'update',
+                ['arg'],
+            );
+
+            expect((mockWorkflowHandle as any).startUpdate).toHaveBeenCalledWith('update', {
+                args: ['arg'],
+                waitForStage: 'ACCEPTED',
+            });
+            expect(result).toBe(updateHandle);
+        });
+
+        it('should handle start update handle errors', async () => {
+            const error = new Error('Start update failed');
+            (mockWorkflowHandle as any).startUpdate.mockRejectedValue(error);
+
+            await expect(
+                service.startUpdateWorkflowHandle(mockWorkflowHandle as WorkflowHandle, 'update'),
+            ).rejects.toThrow(error);
+        });
+    });
+
+    describe('completeActivity', () => {
+        beforeEach(async () => {
+            await service.onModuleInit();
+        });
+
+        it('should complete activity by task token', async () => {
+            const taskToken = new Uint8Array([1, 2, 3]);
+
+            await service.completeActivity(taskToken, { ok: true });
+
+            expect(mockClient.activity!.complete).toHaveBeenCalledWith(taskToken, { ok: true });
+        });
+
+        it('should throw a wrapped error when complete fails', async () => {
+            (mockClient.activity!.complete as jest.Mock).mockRejectedValue(new Error('boom'));
+
+            await expect(
+                service.completeActivity(new Uint8Array([1]), 'result'),
+            ).rejects.toThrow('Failed to complete activity: boom');
+        });
+
+        it('should throw when client is not available', async () => {
+            const svcNoClient = new TemporalClientService(null, mockOptions);
+            await expect(
+                svcNoClient.completeActivity(new Uint8Array([1]), 'result'),
+            ).rejects.toThrow();
+        });
+    });
+
+    describe('failActivity', () => {
+        beforeEach(async () => {
+            await service.onModuleInit();
+        });
+
+        it('should fail activity by task token', async () => {
+            const taskToken = new Uint8Array([1]);
+            const err = new Error('declined');
+
+            await service.failActivity(taskToken, err);
+
+            expect(mockClient.activity!.fail).toHaveBeenCalledWith(taskToken, err);
+        });
+
+        it('should throw a wrapped error when fail fails', async () => {
+            (mockClient.activity!.fail as jest.Mock).mockRejectedValue(new Error('boom'));
+
+            await expect(
+                service.failActivity(new Uint8Array([1]), new Error('declined')),
+            ).rejects.toThrow('Failed to report activity failure: boom');
+        });
+    });
+
+    describe('heartbeatActivity', () => {
+        beforeEach(async () => {
+            await service.onModuleInit();
+        });
+
+        it('should send heartbeat by task token', async () => {
+            const taskToken = new Uint8Array([1]);
+
+            await service.heartbeatActivity(taskToken, { progress: 50 });
+
+            expect(mockClient.activity!.heartbeat).toHaveBeenCalledWith(taskToken, {
+                progress: 50,
+            });
+        });
+
+        it('should throw a wrapped error when heartbeat fails', async () => {
+            (mockClient.activity!.heartbeat as jest.Mock).mockRejectedValue(new Error('boom'));
+
+            await expect(service.heartbeatActivity(new Uint8Array([1]))).rejects.toThrow(
+                'Failed to send activity heartbeat: boom',
+            );
+        });
+    });
+
+    describe('reportActivityCancellation', () => {
+        beforeEach(async () => {
+            await service.onModuleInit();
+        });
+
+        it('should report cancellation by task token', async () => {
+            const taskToken = new Uint8Array([1]);
+
+            await service.reportActivityCancellation(taskToken, 'cancelled by user');
+
+            expect(mockClient.activity!.reportCancellation).toHaveBeenCalledWith(
+                taskToken,
+                'cancelled by user',
+            );
+        });
+
+        it('should throw a wrapped error when reportCancellation fails', async () => {
+            (mockClient.activity!.reportCancellation as jest.Mock).mockRejectedValue(
+                new Error('boom'),
+            );
+
+            await expect(
+                service.reportActivityCancellation(new Uint8Array([1])),
+            ).rejects.toThrow('Failed to report activity cancellation: boom');
+        });
+    });
+
+    describe('startStandaloneActivity', () => {
+        beforeEach(async () => {
+            await service.onModuleInit();
+        });
+
+        it('should start a standalone activity and return a handle', async () => {
+            const options = { id: 'act-1', taskQueue: 'q', args: ['a'] };
+
+            const handle = await service.startStandaloneActivity('sendEmail', options);
+
+            expect(mockClient.activity!.start).toHaveBeenCalledWith('sendEmail', options);
+            expect(handle).toMatchObject({ activityId: 'act-1' });
+        });
+
+        it('should throw a wrapped error when start fails', async () => {
+            (mockClient.activity!.start as jest.Mock).mockRejectedValue(new Error('boom'));
+
+            await expect(
+                service.startStandaloneActivity('sendEmail', { id: 'a', taskQueue: 'q' }),
+            ).rejects.toThrow("Failed to start standalone activity 'sendEmail': boom");
+        });
+
+        it('should throw when client is not available', async () => {
+            const svcNoClient = new TemporalClientService(null, mockOptions);
+            await expect(
+                svcNoClient.startStandaloneActivity('sendEmail', { id: 'a', taskQueue: 'q' }),
+            ).rejects.toThrow();
+        });
+    });
+
+    describe('executeStandaloneActivity', () => {
+        beforeEach(async () => {
+            await service.onModuleInit();
+        });
+
+        it('should execute a standalone activity and return the result', async () => {
+            const options = { id: 'act-1', taskQueue: 'q' };
+
+            const result = await service.executeStandaloneActivity('sendEmail', options);
+
+            expect(mockClient.activity!.execute).toHaveBeenCalledWith('sendEmail', options);
+            expect(result).toBe('activity-result');
+        });
+
+        it('should throw a wrapped error when execute fails', async () => {
+            (mockClient.activity!.execute as jest.Mock).mockRejectedValue(new Error('boom'));
+
+            await expect(
+                service.executeStandaloneActivity('sendEmail', { id: 'a', taskQueue: 'q' }),
+            ).rejects.toThrow("Failed to execute standalone activity 'sendEmail': boom");
+        });
+    });
+
+    describe('getStandaloneActivityHandle', () => {
+        beforeEach(async () => {
+            await service.onModuleInit();
+        });
+
+        it('should return a handle from the activity client', () => {
+            const handle = service.getStandaloneActivityHandle('act-1', 'run-1');
+
+            expect(mockClient.activity!.getHandle).toHaveBeenCalledWith('act-1', 'run-1');
+            expect(handle).toMatchObject({ activityId: 'act-1' });
+        });
+
+        it('should throw when client is not available', () => {
+            const svcNoClient = new TemporalClientService(null, mockOptions);
+            expect(() => svcNoClient.getStandaloneActivityHandle('act-1')).toThrow();
+        });
+    });
+
+    describe('listStandaloneActivities', () => {
+        beforeEach(async () => {
+            await service.onModuleInit();
+        });
+
+        it('should delegate to the activity client list method', () => {
+            service.listStandaloneActivities('ActivityType="sendEmail"');
+
+            expect(mockClient.activity!.list).toHaveBeenCalledWith('ActivityType="sendEmail"');
+        });
+
+        it('should throw when client is not available', () => {
+            const svcNoClient = new TemporalClientService(null, mockOptions);
+            expect(() => svcNoClient.listStandaloneActivities('query')).toThrow();
+        });
+    });
+
+    describe('countStandaloneActivities', () => {
+        beforeEach(async () => {
+            await service.onModuleInit();
+        });
+
+        it('should delegate to the activity client count method', async () => {
+            (mockClient.activity!.count as jest.Mock).mockResolvedValue({ count: 5, groups: [] });
+
+            const result = await service.countStandaloneActivities('ActivityType="sendEmail"');
+
+            expect(mockClient.activity!.count).toHaveBeenCalledWith('ActivityType="sendEmail"');
+            expect(result).toEqual({ count: 5, groups: [] });
+        });
+
+        it('should throw a wrapped error when count fails', async () => {
+            (mockClient.activity!.count as jest.Mock).mockRejectedValue(new Error('boom'));
+
+            await expect(
+                service.countStandaloneActivities('query'),
+            ).rejects.toThrow('Failed to count standalone activities: boom');
         });
     });
 

@@ -4,6 +4,7 @@ import {
     TEMPORAL_ACTIVITY_METHOD,
     TEMPORAL_SIGNAL_METHOD,
     TEMPORAL_QUERY_METHOD,
+    TEMPORAL_UPDATE_METHOD,
     TEMPORAL_CHILD_WORKFLOW,
 } from '../constants';
 import { createLogger, TemporalLogger } from '../utils/logger';
@@ -16,6 +17,7 @@ import {
     CacheStatsResult,
     SignalMethodExtractionResult,
     QueryMethodExtractionResult,
+    UpdateMethodExtractionResult,
     ChildWorkflowExtractionResult,
 } from '../interfaces';
 
@@ -435,6 +437,27 @@ export class TemporalMetadataAccessor {
                 success: false,
                 methods: {},
                 errors: [{ method: 'query', error: errorMessage }],
+            };
+        }
+    }
+
+    /**
+     * Get update methods from a prototype
+     */
+    getUpdateMethods(prototype: unknown): UpdateMethodExtractionResult {
+        try {
+            const methods = Reflect.getMetadata(TEMPORAL_UPDATE_METHOD, prototype as object) || {};
+            return {
+                success: true,
+                methods: methods as Record<string, string>,
+                errors: [],
+            };
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            return {
+                success: false,
+                methods: {},
+                errors: [{ method: 'update', error: errorMessage }],
             };
         }
     }

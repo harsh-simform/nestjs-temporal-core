@@ -1,10 +1,17 @@
 export { RetryPolicy, Duration, SearchAttributes } from '@temporalio/common';
 export {
     WorkflowHandle,
+    WorkflowUpdateHandle,
     Client,
     ConnectionOptions as TemporalConnectionOptions,
     WorkflowIdReusePolicy,
+    FullActivityId,
+    ActivityOptions as StandaloneActivityOptions,
+    ActivityHandle,
+    ActivityExecutionInfo,
+    CountActivityExecutions,
 } from '@temporalio/client';
+export type { UpdateDefinition } from '@temporalio/common';
 export { Worker } from '@temporalio/worker';
 export type { Workflow, WorkflowResultType } from '@temporalio/workflow';
 
@@ -19,8 +26,18 @@ import {
     ScheduleOptionsAction,
     ScheduleOptionsStartWorkflowAction,
     ScheduleDescription as SdkScheduleDescription,
+    ScheduleSummary,
+    ScheduleUpdateOptions,
+    ListScheduleOptions,
+    ClientInterceptors,
 } from '@temporalio/client';
-import { NativeConnection, Worker, WorkerOptions, WorkflowBundleOption } from '@temporalio/worker';
+import {
+    NativeConnection,
+    Worker,
+    WorkerOptions,
+    WorkflowBundleOption,
+    GrpcCompressionConfig,
+} from '@temporalio/worker';
 import { Duration, RetryPolicy, TypedSearchAttributes } from '@temporalio/common';
 import { TLSConfig } from '@temporalio/common/lib/internal-non-workflow';
 import type { Workflow } from '@temporalio/workflow';
@@ -63,6 +80,18 @@ export interface ClientConnectionOptions {
     metadata?: Record<string, string>;
     apiKey?: string;
     namespace?: string;
+    /**
+     * Client-level interceptors (workflow, activity, schedule, nexus). Threaded into
+     * `new Client({ interceptors })`. Useful for OTel tracing/metadata propagation.
+     */
+    interceptors?: ClientInterceptors;
+    /**
+     * gRPC compression for the **worker** connection (`NativeConnection`). Temporal SDK
+     * 1.19 enables gzip compression by default; set `{ codec: 'none' }` to opt out if
+     * your server can't decompress it. Has no effect on the plain gRPC client connection,
+     * which does not compress by default.
+     */
+    grpcCompression?: GrpcCompressionConfig;
 }
 
 /**
@@ -219,6 +248,18 @@ export interface TemporalOptions extends LoggerConfig {
         tls?: boolean | TLSConfig;
         apiKey?: string;
         metadata?: Record<string, string>;
+        /**
+         * Client-level interceptors (workflow, activity, schedule, nexus). Threaded into
+         * `new Client({ interceptors })`. Useful for OTel tracing/metadata propagation.
+         */
+        interceptors?: ClientInterceptors;
+        /**
+         * gRPC compression for the **worker** connection (`NativeConnection`). Temporal SDK
+         * 1.19 enables gzip compression by default; set `{ codec: 'none' }` to opt out if
+         * your server can't decompress it. Has no effect on the plain gRPC client connection,
+         * which does not compress by default.
+         */
+        grpcCompression?: GrpcCompressionConfig;
     };
     taskQueue?: string;
     worker?: {
@@ -610,6 +651,33 @@ export interface SignalOptions {
 }
 
 /**
+ * Information about update methods discovered in workflow classes.
+ * Contains method details and handler function.
+ */
+export interface UpdateMethodInfo {
+    methodName: string;
+    updateName: string;
+    options?: Record<string, string | number | boolean | object>;
+    handler: (...args: unknown[]) => unknown | Promise<unknown>;
+}
+
+/**
+ * Options for configuring update methods via @UpdateMethod decorator.
+ *
+ * @example
+ * ```typescript
+ * @UpdateMethod('approveOrder')
+ * async handleApproval(approval: OrderApproval): Promise<OrderStatus> {
+ *   this.approvals.push(approval);
+ *   return this.currentStatus;
+ * }
+ * ```
+ */
+export interface UpdateOptions {
+    name?: string;
+}
+
+/**
  * Options for starting Temporal workflows.
  * Extends base workflow start options with custom properties.
  *
@@ -762,6 +830,14 @@ export interface QueryMethodMetadata {
 }
 
 /**
+ * Metadata for update methods discovered through @UpdateMethod decorator.
+ */
+export interface UpdateMethodMetadata {
+    updateName: string;
+    methodName: string;
+}
+
+/**
  * Metadata for child workflows injected through @ChildWorkflow decorator.
  */
 export interface ChildWorkflowMetadata {
@@ -787,6 +863,12 @@ export type QueryMethodHandler = (...args: unknown[]) => unknown;
  * Can be synchronous or asynchronous but returns void.
  */
 export type SignalMethodHandler = (...args: unknown[]) => void | Promise<void>;
+
+/**
+ * Function signature for update method handlers.
+ * Can be synchronous or asynchronous and returns a result.
+ */
+export type UpdateMethodHandler = (...args: unknown[]) => unknown | Promise<unknown>;
 
 /**
  * Configuration options for activity module initialization.
@@ -839,6 +921,19 @@ export interface ExtendedSignalMethodInfo {
 export interface ExtendedQueryMethodInfo {
     className: string;
     queryName: string;
+    methodName: string;
+    handler: (...args: unknown[]) => unknown | Promise<unknown>;
+    instance: Record<string, unknown>;
+    options?: Record<string, string | number | boolean | object>;
+}
+
+/**
+ * Extended information about update methods with class context.
+ * Used internally for update method management.
+ */
+export interface ExtendedUpdateMethodInfo {
+    className: string;
+    updateName: string;
     methodName: string;
     handler: (...args: unknown[]) => unknown | Promise<unknown>;
     instance: Record<string, unknown>;
@@ -977,23 +1072,13 @@ export interface ServiceStats {
  * Overlap policy for schedules
  */
 export type OverlapPolicy =
-    | 'skip'
-    | 'buffer_one'
-    | 'buffer_all'
-    | 'cancel_other'
-    | 'terminate_other'
-    | 'allow_all';
+    'skip' | 'buffer_one' | 'buffer_all' | 'cancel_other' | 'terminate_other' | 'allow_all';
 
 /**
  * Temporal overlap policy (uppercase format)
  */
 export type TemporalOverlapPolicy =
-    | 'SKIP'
-    | 'BUFFER_ONE'
-    | 'BUFFER_ALL'
-    | 'CANCEL_OTHER'
-    | 'TERMINATE_OTHER'
-    | 'ALLOW_ALL';
+    'SKIP' | 'BUFFER_ONE' | 'BUFFER_ALL' | 'CANCEL_OTHER' | 'TERMINATE_OTHER' | 'ALLOW_ALL';
 
 /**
  * Generic metadata type for reflection
@@ -1110,6 +1195,22 @@ export interface GenericClient {
  * `@temporalio/client`. Returned by `ScheduleHandle.describe()`.
  */
 export type ScheduleDescription = SdkScheduleDescription;
+
+/**
+ * Schedule summary — re-exports Temporal SDK's `ScheduleSummary` from
+ * `@temporalio/client`. Yielded by `TemporalScheduleService.listSchedules()`.
+ */
+export type { ScheduleSummary, ScheduleUpdateOptions, ListScheduleOptions };
+
+/**
+ * Result of listing schedules — thin wrapper so failures surface the same way
+ * as other schedule operations instead of throwing from an async generator.
+ */
+export interface ScheduleListResult {
+    success: boolean;
+    schedules?: AsyncIterable<ScheduleSummary>;
+    error?: Error;
+}
 
 // ==========================================
 // Discovery Service Interfaces
@@ -1302,6 +1403,18 @@ export interface QueryMethodExtractionResult {
 }
 
 /**
+ * Update method extraction result
+ */
+export interface UpdateMethodExtractionResult {
+    success: boolean;
+    methods: Record<string, string>;
+    errors: Array<{
+        method: string;
+        error: string;
+    }>;
+}
+
+/**
  * Child workflow extraction result
  */
 export interface ChildWorkflowExtractionResult {
@@ -1356,12 +1469,7 @@ export interface ScheduleCreationOptions {
     searchAttributes?: Record<string, unknown>;
     paused?: boolean;
     overlapPolicy?:
-        | 'skip'
-        | 'buffer_one'
-        | 'buffer_all'
-        | 'cancel_other'
-        | 'terminate_other'
-        | 'allow_all';
+        'skip' | 'buffer_one' | 'buffer_all' | 'cancel_other' | 'terminate_other' | 'allow_all';
     catchupWindow?: string | number;
     pauseOnFailure?: boolean;
     /** Informative message — forwarded to Temporal's `state.note`. */
@@ -1390,6 +1498,61 @@ export interface ScheduleCreationResult {
 export interface ScheduleRetrievalResult {
     success: boolean;
     handle?: ScheduleHandle;
+    error?: Error;
+}
+
+/**
+ * Result of pausing a schedule
+ */
+export interface SchedulePauseResult {
+    success: boolean;
+    scheduleId: string;
+    error?: Error;
+}
+
+/**
+ * Result of unpausing a schedule
+ */
+export interface ScheduleUnpauseResult {
+    success: boolean;
+    scheduleId: string;
+    error?: Error;
+}
+
+/**
+ * Result of triggering an immediate schedule action
+ */
+export interface ScheduleTriggerResult {
+    success: boolean;
+    scheduleId: string;
+    error?: Error;
+}
+
+/**
+ * Result of deleting a schedule
+ */
+export interface ScheduleDeletionResult {
+    success: boolean;
+    scheduleId: string;
+    error?: Error;
+}
+
+/**
+ * Result of updating a schedule's definition
+ */
+export interface ScheduleUpdateResult {
+    success: boolean;
+    scheduleId: string;
+    error?: Error;
+}
+
+/**
+ * Result of describing a schedule
+ */
+export interface ScheduleDescribeResult {
+    success: boolean;
+    scheduleId: string;
+    description?: ScheduleDescription;
     error?: Error;
 }
 

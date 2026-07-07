@@ -1,7 +1,13 @@
-import { SignalMethod, QueryMethod, ChildWorkflow } from '../../src/decorators/workflow.decorator';
+import {
+    SignalMethod,
+    QueryMethod,
+    UpdateMethod,
+    ChildWorkflow,
+} from '../../src/decorators/workflow.decorator';
 import {
     TEMPORAL_SIGNAL_METHOD,
     TEMPORAL_QUERY_METHOD,
+    TEMPORAL_UPDATE_METHOD,
     TEMPORAL_CHILD_WORKFLOW,
 } from '../../src/constants';
 import 'reflect-metadata';
@@ -225,6 +231,101 @@ describe('Workflow Decorator', () => {
         });
     });
 
+    describe('@UpdateMethod', () => {
+        it('should mark method with update metadata', () => {
+            class TestWorkflow {
+                @UpdateMethod('testUpdate')
+                async handleUpdate(): Promise<string> {
+                    return 'ok';
+                }
+            }
+
+            const proto = TestWorkflow.prototype;
+            const updates = Reflect.getMetadata(TEMPORAL_UPDATE_METHOD, proto);
+            expect(updates).toBeDefined();
+            expect(updates['testUpdate']).toBe('handleUpdate');
+        });
+
+        it('should use method name as update name when not provided', () => {
+            class TestWorkflow {
+                @UpdateMethod()
+                async handleUpdate(): Promise<string> {
+                    return 'ok';
+                }
+            }
+
+            const proto = TestWorkflow.prototype;
+            const updates = Reflect.getMetadata(TEMPORAL_UPDATE_METHOD, proto);
+            expect(updates).toBeDefined();
+            expect(updates['handleUpdate']).toBe('handleUpdate');
+        });
+
+        it('should throw error for duplicate update names', () => {
+            expect(() => {
+                class TestWorkflow {
+                    @UpdateMethod('duplicate')
+                    async update1(): Promise<void> {}
+
+                    @UpdateMethod('duplicate')
+                    async update2(): Promise<void> {}
+                }
+            }).toThrow('Duplicate update name "duplicate" found');
+        });
+
+        it('should throw error for empty update name', () => {
+            expect(() => {
+                class TestWorkflow {
+                    @UpdateMethod('')
+                    async handleUpdate(): Promise<void> {}
+                }
+            }).toThrow('Update name cannot be empty');
+        });
+
+        it('should handle error when Reflect.defineMetadata fails', () => {
+            const originalDefineMetadata = Reflect.defineMetadata;
+            Reflect.defineMetadata = jest.fn().mockImplementation(() => {
+                throw new Error('Metadata storage failed');
+            });
+
+            expect(() => {
+                class TestWorkflow {
+                    @UpdateMethod('testUpdate')
+                    async handleUpdate(): Promise<void> {}
+                }
+            }).toThrow('Metadata storage failed');
+
+            Reflect.defineMetadata = originalDefineMetadata;
+        });
+
+        it('should handle validation error from validateUpdateName', () => {
+            const originalValidateUpdateName =
+                require('../../src/utils/validation').validateUpdateName;
+            require('../../src/utils/validation').validateUpdateName = jest
+                .fn()
+                .mockImplementation(() => {
+                    throw new Error('Invalid update name');
+                });
+
+            expect(() => {
+                class TestWorkflow {
+                    @UpdateMethod('invalid-update')
+                    async handleUpdate(): Promise<void> {}
+                }
+            }).toThrow('Invalid update name');
+
+            require('../../src/utils/validation').validateUpdateName = originalValidateUpdateName;
+        });
+
+        it('should throw error for update name with whitespace', () => {
+            expect(() => {
+                class TestWorkflow {
+                    @UpdateMethod('my update')
+                    async handleUpdate(): Promise<void> {}
+                }
+            }).toThrow('Invalid update name: "my update". Update names cannot contain whitespace.');
+        });
+    });
+
     describe('@ChildWorkflow', () => {
         it('should mark property with child workflow metadata', () => {
             class PaymentWorkflow {}
@@ -414,6 +515,13 @@ describe('Workflow Decorator', () => {
             expect(() => {
                 QueryMethod()({} as object, 'testMethod', mockDescriptor);
             }).toThrow('@QueryMethod can only be applied to methods');
+        });
+
+        it('should throw error when @UpdateMethod descriptor is invalid', () => {
+            const mockDescriptor: PropertyDescriptor = { value: 'not a function' as unknown };
+            expect(() => {
+                UpdateMethod()({} as object, 'testMethod', mockDescriptor);
+            }).toThrow('@UpdateMethod can only be applied to methods');
         });
     });
 });

@@ -378,6 +378,33 @@ describe('TemporalConnectionFactory', () => {
                 }),
             );
         });
+
+        it('should thread client-level interceptors into the Client constructor', async () => {
+            const interceptors = { workflow: [{}] };
+            const optionsWithInterceptors: TemporalOptions = {
+                connection: {
+                    address: 'localhost:7233',
+                    namespace: 'test-namespace',
+                    tls: false,
+                    interceptors: interceptors as any,
+                },
+                allowConnectionFailure: false,
+            };
+
+            const result = await factory.createClient(optionsWithInterceptors);
+            expect(result).toBe(mockClient);
+
+            expect(Client).toHaveBeenCalledWith(
+                expect.objectContaining({ interceptors }),
+            );
+        });
+
+        it('should not set interceptors on the Client constructor when not provided', async () => {
+            await factory.createClient(mockTemporalOptions);
+
+            const callArgs = (Client as jest.MockedClass<typeof Client>).mock.calls[0][0];
+            expect(callArgs).not.toHaveProperty('interceptors');
+        });
     });
 
     describe('createWorkerConnection', () => {
@@ -416,6 +443,33 @@ describe('TemporalConnectionFactory', () => {
             const connection2 = await factory.createWorkerConnection(mockTemporalOptions);
             expect(connection2).toBe(mockNativeConnection);
             expect(NativeConnection.connect).toHaveBeenCalledTimes(2);
+        });
+
+        it('should thread grpcCompression into NativeConnection.connect', async () => {
+            const optionsWithCompression: TemporalOptions = {
+                connection: {
+                    address: 'localhost:7233',
+                    namespace: 'test-namespace',
+                    tls: false,
+                    grpcCompression: { codec: 'none' },
+                },
+                allowConnectionFailure: false,
+            };
+
+            await factory.createWorkerConnection(optionsWithCompression);
+
+            expect(NativeConnection.connect).toHaveBeenCalledWith(
+                expect.objectContaining({ grpcCompression: { codec: 'none' } }),
+            );
+        });
+
+        it('should not set grpcCompression on NativeConnection.connect when not provided', async () => {
+            await factory.createWorkerConnection(mockTemporalOptions);
+
+            const callArgs = (
+                NativeConnection.connect as jest.MockedFunction<typeof NativeConnection.connect>
+            ).mock.calls[0][0];
+            expect(callArgs).not.toHaveProperty('grpcCompression');
         });
 
         it('should handle worker connection creation with API key authentication', async () => {

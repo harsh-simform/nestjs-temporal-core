@@ -32,10 +32,18 @@ A comprehensive NestJS integration framework for Temporal.io that provides enter
   - [Activities](#activities)
   - [Workflows](#workflows)
   - [Signals and Queries](#signals-and-queries)
+  - [Workflow Updates](#workflow-updates)
   - [Typed Workflow Proxy](#typed-workflow-proxy)
   - [Signal-with-Start](#signal-with-start)
 - [API Reference](#api-reference)
 - [Examples](#examples)
+- [Advanced Configuration](#advanced-configuration)
+  - [Client & Worker Interceptors](#client--worker-interceptors)
+  - [gRPC Compression](#grpc-compression)
+  - [Worker Versioning](#worker-versioning)
+  - [Async Activity Completion](#async-activity-completion)
+  - [Standalone Activities](#standalone-activities)
+  - [Schedule Lifecycle Management](#schedule-lifecycle-management)
 - [Advanced Usage](#advanced-usage)
 - [Best Practices](#best-practices)
 - [Health Monitoring](#health-monitoring)
@@ -799,6 +807,54 @@ export async function myWorkflow(): Promise<void> {
 }
 ```
 
+### Workflow Updates
+
+Updates combine the strengths of Signals (can mutate workflow state) and Queries (can return a result) into a single request/response operation. Handlers are declared with `@UpdateMethod`, exactly like `@SignalMethod`/`@QueryMethod` — metadata-only, consumed by the client side.
+
+```typescript
+import { defineUpdate, setHandler } from '@temporalio/workflow';
+
+export const depositUpdate = defineUpdate<number, [number]>('deposit');
+
+export async function accountWorkflow(initialBalance: number): Promise<void> {
+  let balance = initialBalance;
+
+  setHandler(depositUpdate, (amount: number) => {
+    balance += amount;
+    return balance;
+  });
+
+  await condition(() => false); // keep running
+}
+```
+
+Call it from a service via `TemporalClientService`:
+
+```typescript
+// Wait for the update to complete and get its result
+const newBalance = await this.clientService.updateWorkflow<number>(
+  'account-123',
+  'deposit',
+  [100],
+);
+
+// Or start it and only wait for it to be accepted, then await the result later
+const updateHandle = await this.clientService.startUpdateWorkflow<number>(
+  'account-123',
+  'deposit',
+  [100],
+);
+const result = await updateHandle.result();
+```
+
+The typed workflow proxy exposes the same operations with full type inference:
+
+```typescript
+const newBalance = await this.accountProxy.update('account-123', depositUpdate, 100);
+```
+
+[🔝 Back to top](#table-of-contents)
+
 ### Using Workflows in Services
 
 Inject `TemporalService` in your NestJS services to interact with workflows:
@@ -1130,6 +1186,136 @@ For more examples, visit our [documentation](https://harsh-simform.github.io/nes
 4. **Child Workflows** - Organizing complex workflows
 5. **Continue-As-New** - For long-running workflows
 6. **Custom Error Handling** - Implementing custom error types
+
+[🔝 Back to top](#table-of-contents)
+
+## Advanced Configuration
+
+This section documents capabilities added in the Temporal SDK 1.16–1.19 line. Some require no code changes on your part — they pass straight through existing configuration options — others are new client methods.
+
+### Client & Worker Interceptors
+
+Worker-side interceptors already work today via `workerOptions.interceptors` — it's spread wholesale into `Worker.create()`, so any interceptor accepted by `@temporalio/worker` just works:
+
+```typescript
+TemporalModule.register({
+  connection: { address: 'localhost:7233' },
+  worker: {
+    workflowsPath: './dist/workflows',
+    workerOptions: {
+      interceptors: {
+        activityInbound: [(ctx) => new MyActivityInterceptor(ctx)],
+      },
+    },
+  },
+});
+```
+
+Client-side interceptors (for the workflow/activity/schedule clients) are threaded via `connection.interceptors`:
+
+```typescript
+TemporalModule.register({
+  connection: {
+    address: 'localhost:7233',
+    interceptors: {
+      workflow: [myWorkflowClientInterceptor],
+    },
+  },
+});
+```
+
+### gRPC Compression
+
+Temporal SDK 1.19 enables gRPC gzip compression by default **for the worker's native connection**. If your server can't decompress it, opt out with `{ codec: 'none' }`:
+
+```typescript
+TemporalModule.register({
+  connection: {
+    address: 'localhost:7233',
+    grpcCompression: { codec: 'none' },
+  },
+});
+```
+
+This only affects the worker's `NativeConnection` — the plain gRPC client connection (used for starting/signaling/querying workflows) does not compress by default and has no matching toggle.
+
+### Worker Versioning
+
+Worker Deployments / Worker Versioning (GA in SDK 1.16+) also passes straight through `workerOptions`:
+
+```typescript
+worker: {
+  workflowsPath: './dist/workflows',
+  workerOptions: {
+    workerDeploymentOptions: {
+      version: { buildId: 'v1.2.0', deploymentName: 'my-service' },
+      useWorkerVersioning: true,
+    },
+  },
+},
+```
+
+### Async Activity Completion
+
+For Activities that complete outside their handler (e.g. a human-in-the-loop approval, or a callback from another process), use the task-token-based completion methods on `TemporalClientService`:
+
+```typescript
+await this.clientService.heartbeatActivity(taskToken, { progress: 50 });
+await this.clientService.completeActivity(taskToken, { approved: true });
+// or, on failure:
+await this.clientService.failActivity(taskToken, new Error('rejected by approver'));
+```
+
+### Standalone Activities
+
+> **Public Preview** — this is a Temporal server feature still in Public Preview; the underlying API may change in future SDK releases.
+
+Standalone Activities run a durable, retryable Activity directly from the client — no workflow required:
+
+```typescript
+const result = await this.clientService.executeStandaloneActivity('sendEmail', {
+  id: 'email-123',
+  taskQueue: 'emails',
+  args: ['user@example.com'],
+  startToCloseTimeout: '1m',
+});
+
+// Or start it and await the result later
+const handle = await this.clientService.startStandaloneActivity('sendEmail', {
+  id: 'email-124',
+  taskQueue: 'emails',
+  startToCloseTimeout: '1m',
+});
+const outcome = await handle.result();
+
+// Query executions
+const info = await this.clientService.countStandaloneActivities('ActivityType="sendEmail"');
+```
+
+### Schedule Lifecycle Management
+
+`TemporalScheduleService` covers the full schedule lifecycle, not just create/get:
+
+```typescript
+await this.scheduleService.pauseSchedule('daily-report', 'investigating an incident');
+await this.scheduleService.unpauseSchedule('daily-report');
+await this.scheduleService.triggerSchedule('daily-report', 'ALLOW_ALL');
+await this.scheduleService.deleteSchedule('daily-report');
+
+await this.scheduleService.updateSchedule('daily-report', (previous) => ({
+  ...previous,
+  spec: { ...previous.spec, cronExpressions: ['0 9 * * *'] },
+}));
+
+const { description } = await this.scheduleService.describeSchedule('daily-report');
+
+const { schedules } = this.scheduleService.listSchedules();
+for await (const schedule of schedules ?? []) {
+  console.log(schedule.scheduleId, schedule.info.numActions);
+}
+```
+
+**Explicitly out of scope** (evaluated and deliberately not implemented): Nexus (standalone operations/service clients — a large, cross-namespace service-mesh feature outside a single-app NestJS wrapper's mission), the contrib packages (`@temporalio/openai-agents`, `@temporalio/lambda-worker`, `@temporalio/workflow-streams`, `@temporalio/langsmith`), and `SerializationContext` custom payload conversion (would require a much larger payload-converter extension point this wrapper doesn't expose today). Workflow-code-only concerns (named random streams, continue-as-new backoff interval, `unsafe.random`, workflow-failure-exception-type selection) are consumed directly via `@temporalio/workflow` in your workflow functions and aren't mediated by this package.
 
 [🔝 Back to top](#table-of-contents)
 
@@ -1613,9 +1799,50 @@ await temporal.signalWithStart(
 
 [🔝 Back to top](#table-of-contents)
 
+### Migrating to the `@temporalio/*` 1.19 upgrade (Workflow Updates, Standalone Activities, Schedule lifecycle)
+
+This release bumps the peer dependency range to `@temporalio/*` `^1.15.0 || ^1.19.0` and adds four feature areas: Workflow Update support, Async Activity Completion, Standalone Activities, and full schedule lifecycle management. See [Advanced Configuration](#advanced-configuration) for usage of all new APIs.
+
+#### Breaking change: Node.js version
+
+Temporal SDK 1.19 requires **Node.js >= 20.3.0**. `engines.node` has been updated from `>=16.0.0` accordingly. If you're on Node 16 or 18, either upgrade Node or pin `@temporalio/*` to `^1.15.0` in your own `package.json` (this package's peer range still allows it) and stay on this package's previous minor version.
+
+#### No changes required
+
+- Worker Versioning / Worker Deployments (`workerOptions.workerDeploymentOptions`) and worker-side interceptors (`workerOptions.interceptors`) already passed through wholesale to `Worker.create()` — they work automatically now that the SDK types include them.
+- gRPC gzip compression is enabled by default on the worker's native connection as of SDK 1.19. If your server can't decompress it, set `connection.grpcCompression = { codec: 'none' }`.
+
+#### New APIs
+
+```typescript
+import { UpdateMethod } from 'nestjs-temporal-core';
+
+// Workflow Update handler (mirrors @SignalMethod/@QueryMethod)
+@UpdateMethod('deposit')
+async handleDeposit(amount: number): Promise<number> { /* ... */ }
+
+// Client-side Update calls
+await clientService.updateWorkflow<number>('account-123', 'deposit', [100]);
+await clientService.startUpdateWorkflow<number>('account-123', 'deposit', [100]);
+
+// Async Activity Completion
+await clientService.completeActivity(taskToken, result);
+await clientService.failActivity(taskToken, error);
+
+// Standalone Activities (Public Preview)
+await clientService.executeStandaloneActivity('sendEmail', { id: 'e-1', taskQueue: 'q' });
+
+// Schedule lifecycle
+await scheduleService.pauseSchedule('daily-report');
+await scheduleService.triggerSchedule('daily-report');
+await scheduleService.deleteSchedule('daily-report');
+```
+
+[🔝 Back to top](#table-of-contents)
+
 ## Requirements
 
-- **Node.js**: >= 16.0.0
+- **Node.js**: >= 20.3.0 (required by `@temporalio/*` 1.19; if you're on Node 16/18, stay on `nestjs-temporal-core@<version>` pinned to `@temporalio/*` `^1.15.0`)
 - **NestJS**: >= 9.0.0
 - **Temporal Server**: >= 1.20.0
 

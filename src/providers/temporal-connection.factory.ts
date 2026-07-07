@@ -179,6 +179,9 @@ export class TemporalConnectionFactory implements OnModuleDestroy {
             const client = new Client({
                 connection,
                 namespace: options.connection!.namespace || 'default',
+                ...(options.connection!.interceptors && {
+                    interceptors: options.connection!.interceptors,
+                }),
             });
 
             // Cache the successful connection
@@ -225,6 +228,7 @@ export class TemporalConnectionFactory implements OnModuleDestroy {
                 address: string;
                 tls?: boolean | null;
                 metadata?: Record<string, string>;
+                grpcCompression?: NonNullable<TemporalOptions['connection']>['grpcCompression'];
             } = {
                 address,
                 tls: options.connection!.tls as boolean | null,
@@ -235,6 +239,10 @@ export class TemporalConnectionFactory implements OnModuleDestroy {
                     ...(options.connection!.metadata || {}),
                     authorization: `Bearer ${options.connection!.apiKey}`,
                 };
+            }
+
+            if (options.connection!.grpcCompression) {
+                connectOptions.grpcCompression = options.connection!.grpcCompression;
             }
 
             const connection = await NativeConnection.connect(connectOptions);

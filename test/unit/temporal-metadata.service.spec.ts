@@ -4,6 +4,7 @@ import {
     TEMPORAL_ACTIVITY_METHOD,
     TEMPORAL_SIGNAL_METHOD,
     TEMPORAL_QUERY_METHOD,
+    TEMPORAL_UPDATE_METHOD,
     TEMPORAL_CHILD_WORKFLOW,
 } from '../../src/constants';
 import 'reflect-metadata';
@@ -596,6 +597,34 @@ describe('TemporalMetadataAccessor', () => {
 
         it('should handle errors', () => {
             const result = service.getQueryMethods(null);
+
+            expect(result.success).toBe(false);
+            expect(result.errors.length).toBeGreaterThan(0);
+        });
+    });
+
+    describe('getUpdateMethods', () => {
+        it('should return update methods', () => {
+            class WorkflowClass {}
+            const updates = { deposit: 'deposit', withdraw: 'withdraw' };
+            Reflect.defineMetadata(TEMPORAL_UPDATE_METHOD, updates, WorkflowClass.prototype);
+
+            const result = service.getUpdateMethods(WorkflowClass.prototype);
+
+            expect(result.success).toBe(true);
+            expect(result.methods).toEqual(updates);
+            expect(result.errors).toEqual([]);
+        });
+
+        it('should return empty object for prototype without updates', () => {
+            const result = service.getUpdateMethods(MockActivityClass.prototype);
+
+            expect(result.success).toBe(true);
+            expect(result.methods).toEqual({});
+        });
+
+        it('should handle errors', () => {
+            const result = service.getUpdateMethods(null);
 
             expect(result.success).toBe(false);
             expect(result.errors.length).toBeGreaterThan(0);

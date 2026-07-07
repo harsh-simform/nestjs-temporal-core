@@ -1,6 +1,6 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, Inject } from '@nestjs/common';
 import { DiscoveryService } from '@nestjs/core';
-import { Client, ScheduleClient, ScheduleHandle } from '@temporalio/client';
+import { Client, ScheduleClient, ScheduleHandle, ScheduleOverlapPolicy } from '@temporalio/client';
 import { Duration, SearchAttributes } from '@temporalio/common';
 import { TEMPORAL_MODULE_OPTIONS, TEMPORAL_CLIENT } from '../constants';
 import {
@@ -8,6 +8,13 @@ import {
     ScheduleCreationOptions,
     ScheduleCreationResult,
     ScheduleRetrievalResult,
+    SchedulePauseResult,
+    ScheduleUnpauseResult,
+    ScheduleTriggerResult,
+    ScheduleDeletionResult,
+    ScheduleUpdateResult,
+    ScheduleDescribeResult,
+    ScheduleListResult,
     ScheduleServiceStatus,
     ScheduleServiceHealth,
     ScheduleServiceStats,
@@ -20,6 +27,10 @@ import {
     ScheduleWorkflowAction,
     ScheduleOptions,
     ScheduleSpec,
+    ScheduleDescription,
+    ScheduleUpdateOptions,
+    ListScheduleOptions,
+    TemporalOverlapPolicy,
 } from '../interfaces';
 import { TemporalMetadataAccessor } from './temporal-metadata.service';
 import { createLogger, TemporalLogger } from '../utils/logger';
@@ -533,6 +544,224 @@ export class TemporalScheduleService implements OnModuleInit, OnModuleDestroy {
             };
         } catch (error) {
             this.logger.error(`Failed to get schedule '${scheduleId}'`, error);
+            return {
+                success: false,
+                error: error instanceof Error ? error : new Error(this.extractErrorMessage(error)),
+            };
+        }
+    }
+
+    /**
+     * Resolve a schedule handle by ID, using the local cache first and falling
+     * back to `ScheduleClient.getHandle()`.
+     */
+    private resolveScheduleHandle(scheduleId: string): ScheduleHandle {
+        let scheduleHandle = this.scheduleHandles.get(scheduleId);
+        if (!scheduleHandle) {
+            scheduleHandle = this.scheduleClient!.getHandle(scheduleId);
+            this.scheduleHandles.set(scheduleId, scheduleHandle);
+        }
+        return scheduleHandle;
+    }
+
+    /**
+     * Pause a schedule so it no longer takes actions.
+     *
+     * @example
+     * ```typescript
+     * await scheduleService.pauseSchedule('daily-report', 'investigating an incident');
+     * ```
+     */
+    async pauseSchedule(scheduleId: string, note?: string): Promise<SchedulePauseResult> {
+        this.ensureInitialized();
+
+        try {
+            const handle = this.resolveScheduleHandle(scheduleId);
+            await handle.pause(note);
+
+            this.logger.info(`Paused schedule '${scheduleId}'`);
+            return { success: true, scheduleId };
+        } catch (error) {
+            this.logger.error(`Failed to pause schedule '${scheduleId}'`, error);
+            return {
+                success: false,
+                scheduleId,
+                error: error instanceof Error ? error : new Error(this.extractErrorMessage(error)),
+            };
+        }
+    }
+
+    /**
+     * Unpause a schedule, resuming its actions.
+     *
+     * @example
+     * ```typescript
+     * await scheduleService.unpauseSchedule('daily-report');
+     * ```
+     */
+    async unpauseSchedule(scheduleId: string, note?: string): Promise<ScheduleUnpauseResult> {
+        this.ensureInitialized();
+
+        try {
+            const handle = this.resolveScheduleHandle(scheduleId);
+            await handle.unpause(note);
+
+            this.logger.info(`Unpaused schedule '${scheduleId}'`);
+            return { success: true, scheduleId };
+        } catch (error) {
+            this.logger.error(`Failed to unpause schedule '${scheduleId}'`, error);
+            return {
+                success: false,
+                scheduleId,
+                error: error instanceof Error ? error : new Error(this.extractErrorMessage(error)),
+            };
+        }
+    }
+
+    /**
+     * Trigger an immediate action for a schedule, outside its normal specification.
+     *
+     * @example
+     * ```typescript
+     * await scheduleService.triggerSchedule('daily-report', 'ALLOW_ALL');
+     * ```
+     */
+    async triggerSchedule(
+        scheduleId: string,
+        overlapPolicy?: TemporalOverlapPolicy,
+    ): Promise<ScheduleTriggerResult> {
+        this.ensureInitialized();
+
+        try {
+            const handle = this.resolveScheduleHandle(scheduleId);
+            await handle.trigger(overlapPolicy as ScheduleOverlapPolicy | undefined);
+
+            this.logger.info(`Triggered schedule '${scheduleId}'`);
+            return { success: true, scheduleId };
+        } catch (error) {
+            this.logger.error(`Failed to trigger schedule '${scheduleId}'`, error);
+            return {
+                success: false,
+                scheduleId,
+                error: error instanceof Error ? error : new Error(this.extractErrorMessage(error)),
+            };
+        }
+    }
+
+    /**
+     * Delete a schedule.
+     *
+     * @example
+     * ```typescript
+     * await scheduleService.deleteSchedule('daily-report');
+     * ```
+     */
+    async deleteSchedule(scheduleId: string): Promise<ScheduleDeletionResult> {
+        this.ensureInitialized();
+
+        try {
+            const handle = this.resolveScheduleHandle(scheduleId);
+            await handle.delete();
+            this.scheduleHandles.delete(scheduleId);
+
+            this.logger.info(`Deleted schedule '${scheduleId}'`);
+            return { success: true, scheduleId };
+        } catch (error) {
+            this.logger.error(`Failed to delete schedule '${scheduleId}'`, error);
+            return {
+                success: false,
+                scheduleId,
+                error: error instanceof Error ? error : new Error(this.extractErrorMessage(error)),
+            };
+        }
+    }
+
+    /**
+     * Update a schedule's definition. `updateFn` receives the current description
+     * and must return the new desired schedule options — mirrors the SDK's
+     * describe-then-transform `ScheduleHandle.update()` pattern.
+     *
+     * @example
+     * ```typescript
+     * await scheduleService.updateSchedule('daily-report', (previous) => ({
+     *   ...previous,
+     *   spec: { ...previous.spec, cronExpressions: ['0 9 * * *'] },
+     * }));
+     * ```
+     */
+    async updateSchedule(
+        scheduleId: string,
+        updateFn: (previous: ScheduleDescription) => ScheduleUpdateOptions,
+    ): Promise<ScheduleUpdateResult> {
+        this.ensureInitialized();
+
+        try {
+            const handle = this.resolveScheduleHandle(scheduleId);
+            await handle.update(updateFn);
+
+            this.logger.info(`Updated schedule '${scheduleId}'`);
+            return { success: true, scheduleId };
+        } catch (error) {
+            this.logger.error(`Failed to update schedule '${scheduleId}'`, error);
+            return {
+                success: false,
+                scheduleId,
+                error: error instanceof Error ? error : new Error(this.extractErrorMessage(error)),
+            };
+        }
+    }
+
+    /**
+     * Describe a schedule, returning its current configuration and state.
+     *
+     * @example
+     * ```typescript
+     * const { description } = await scheduleService.describeSchedule('daily-report');
+     * console.log(description?.state.paused);
+     * ```
+     */
+    async describeSchedule(scheduleId: string): Promise<ScheduleDescribeResult> {
+        this.ensureInitialized();
+
+        try {
+            const handle = this.resolveScheduleHandle(scheduleId);
+            const description = await handle.describe();
+
+            return { success: true, scheduleId, description };
+        } catch (error) {
+            this.logger.error(`Failed to describe schedule '${scheduleId}'`, error);
+            return {
+                success: false,
+                scheduleId,
+                error: error instanceof Error ? error : new Error(this.extractErrorMessage(error)),
+            };
+        }
+    }
+
+    /**
+     * List schedules in the namespace, wrapped in a result envelope so callers
+     * can distinguish "schedule client unavailable" from "no schedules found".
+     *
+     * @example
+     * ```typescript
+     * const { schedules } = scheduleService.listSchedules();
+     * for await (const schedule of schedules ?? []) {
+     *   console.log(schedule.scheduleId);
+     * }
+     * ```
+     */
+    listSchedules(options?: ListScheduleOptions): ScheduleListResult {
+        if (!this.scheduleClient) {
+            return {
+                success: false,
+                error: new Error('Schedule client is not available'),
+            };
+        }
+
+        try {
+            return { success: true, schedules: this.scheduleClient.list(options) };
+        } catch (error) {
+            this.logger.error('Failed to list schedules', error);
             return {
                 success: false,
                 error: error instanceof Error ? error : new Error(this.extractErrorMessage(error)),

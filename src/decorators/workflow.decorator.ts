@@ -1,12 +1,13 @@
 import {
     TEMPORAL_SIGNAL_METHOD,
     TEMPORAL_QUERY_METHOD,
+    TEMPORAL_UPDATE_METHOD,
     TEMPORAL_CHILD_WORKFLOW,
 } from '../constants';
 import 'reflect-metadata';
 import { Type } from '@nestjs/common';
 import { createLogger } from '../utils/logger';
-import { validateSignalName, validateQueryName } from '../utils/validation';
+import { validateSignalName, validateQueryName, validateUpdateName } from '../utils/validation';
 
 const logger = createLogger('WorkflowDecorators');
 
@@ -254,6 +255,137 @@ export const QueryMethod = (queryName?: string): MethodDecorator => {
 
         // Keep the original method without runtime modification
         // Runtime query registration should be handled by the worker service
+        // when setting up the workflow execution context
+
+        return descriptor;
+    };
+};
+
+/**
+ * Marks a method as an update handler for the workflow.
+ * Updates are synchronous-style requests that can both mutate workflow state and
+ * return a result to the caller, combining the strengths of Signals (can mutate state)
+ * and Queries (can return a result) into a single request/response operation.
+ *
+ * This decorator works in v8 isolated environments by registering update handlers at runtime
+ * without relying on dependency injection or external services.
+ *
+ * @param updateName Optional custom update name (defaults to method name)
+ *
+ * @example Basic Update Handler
+ * ```typescript
+ * // In function-based workflow
+ * const incrementAndGetValueUpdate = wf.defineUpdate<number, [number]>('incrementAndGetValue');
+ *
+ * export async function counterWorkflow(initialValue: number): Promise<void> {
+ *   let value = initialValue;
+ *
+ *   wf.setHandler(incrementAndGetValueUpdate, (increment: number) => {
+ *     value += increment;
+ *     return value;
+ *   });
+ * }
+ * ```
+ *
+ * @example Update with Complex Data
+ * ```typescript
+ * @UpdateMethod('approveOrder')
+ * async handleApproval(approval: OrderApproval): Promise<OrderStatus> {
+ *   this.approvals.push(approval);
+ *   return this.currentStatus;
+ * }
+ * ```
+ *
+ * @see {@link SignalMethod} for fire-and-forget mutations
+ * @see {@link QueryMethod} for read-only state access
+ */
+export const UpdateMethod = (updateName?: string): MethodDecorator => {
+    return (target, propertyKey, descriptor: PropertyDescriptor) => {
+        const className = target.constructor.name;
+        const methodName = propertyKey.toString();
+        const finalUpdateName = updateName || methodName;
+
+        logger.debug(`@UpdateMethod decorator applied to method: ${className}.${methodName}`);
+        logger.debug(
+            `Update name: ${finalUpdateName} (provided: ${updateName || 'auto-generated'})`,
+        );
+
+        if (!descriptor || typeof descriptor.value !== 'function') {
+            const error = `@UpdateMethod can only be applied to methods, not ${typeof descriptor?.value}`;
+            logger.error(
+                `@UpdateMethod validation failed for ${className}.${methodName}: ${error}`,
+            );
+            throw new Error(error);
+        }
+
+        // Validate update name using centralized validation
+        if (updateName !== undefined && updateName.length === 0) {
+            const error = 'Update name cannot be empty';
+            logger.error(
+                `@UpdateMethod validation failed for ${className}.${methodName}: ${error}`,
+            );
+            throw new Error(error);
+        }
+
+        try {
+            validateUpdateName(finalUpdateName);
+        } catch (error) {
+            logger.error(
+                `@UpdateMethod validation failed for ${className}.${methodName}: ${(error as Error).message}`,
+            );
+            throw error;
+        }
+
+        // Get existing updates from class prototype
+        const updates =
+            Reflect.getMetadata(TEMPORAL_UPDATE_METHOD, target.constructor.prototype) || {};
+        logger.debug(`Existing updates in ${className}: [${Object.keys(updates).join(', ')}]`);
+
+        // Check for duplicate update names
+        if (updates[finalUpdateName] && updates[finalUpdateName] !== propertyKey) {
+            const error =
+                `Duplicate update name "${finalUpdateName}" found in class ${className}. ` +
+                `Update names must be unique within a workflow class.`;
+            logger.error(`@UpdateMethod validation failed: ${error}`);
+            throw new Error(error);
+        }
+
+        logger.debug(
+            `Registering update "${finalUpdateName}" for method ${className}.${methodName}`,
+        );
+
+        try {
+            // Standardized metadata storage - only use Reflect.defineMetadata
+            updates[finalUpdateName] = propertyKey;
+            Reflect.defineMetadata(TEMPORAL_UPDATE_METHOD, updates, target.constructor.prototype);
+            logger.debug(`Stored update metadata on class prototype: ${className}`);
+
+            // Store individual update metadata on the method
+            const updateMetadata = {
+                updateName: finalUpdateName,
+                methodName,
+                className,
+            };
+            Reflect.defineMetadata(
+                TEMPORAL_UPDATE_METHOD + '_METHOD',
+                updateMetadata,
+                descriptor.value,
+            );
+            logger.debug(`Stored individual update metadata on method: ${className}.${methodName}`);
+
+            logger.debug(
+                `@UpdateMethod decorator successfully applied to ${className}.${methodName}`,
+            );
+        } catch (error) {
+            logger.error(
+                `Failed to store @UpdateMethod metadata for ${className}.${methodName}:`,
+                error,
+            );
+            throw error;
+        }
+
+        // Keep the original method without runtime modification
+        // Runtime update registration should be handled by the worker service
         // when setting up the workflow execution context
 
         return descriptor;

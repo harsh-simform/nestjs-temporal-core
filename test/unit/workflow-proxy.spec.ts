@@ -24,6 +24,7 @@ describe('WorkflowProxy', () => {
             getWorkflowHandle: jest.fn().mockResolvedValue(mockHandle),
             signalWorkflow: jest.fn().mockResolvedValue(undefined),
             queryWorkflow: jest.fn().mockResolvedValue({ status: 'running' }),
+            updateWorkflow: jest.fn().mockResolvedValue({ status: 'updated' }),
             signalWithStart: jest.fn().mockResolvedValue({ ...mockHandle, handle: mockHandle }),
         };
     });
@@ -253,6 +254,73 @@ describe('WorkflowProxy', () => {
         });
     });
 
+    describe('update', () => {
+        it('should forward update definition name and args and return typed result', async () => {
+            const proxy = new WorkflowProxy<OrderWorkflow>(
+                clientService as TemporalClientService,
+                config,
+            );
+            (clientService.updateWorkflow as jest.Mock).mockResolvedValue(200);
+
+            const depositUpdate = { name: 'deposit' } as unknown as {
+                name: string;
+            } & import('@temporalio/common').UpdateDefinition<number, [number]>;
+
+            const result = await proxy.update('order-42', depositUpdate, 100);
+
+            expect(clientService.updateWorkflow).toHaveBeenCalledWith('order-42', 'deposit', [
+                100,
+            ]);
+            expect(result).toBe(200);
+        });
+
+        it('should forward an empty args array when update takes no args', async () => {
+            const proxy = new WorkflowProxy<OrderWorkflow>(
+                clientService as TemporalClientService,
+                config,
+            );
+            const pingUpdate = { name: 'ping' } as unknown as {
+                name: string;
+            } & import('@temporalio/common').UpdateDefinition<void, []>;
+
+            await proxy.update('order-42', pingUpdate);
+
+            expect(clientService.updateWorkflow).toHaveBeenCalledWith('order-42', 'ping', []);
+        });
+    });
+
+    describe('updateByName', () => {
+        it('should forward workflowId, updateName, and args', async () => {
+            const proxy = new WorkflowProxy<OrderWorkflow>(
+                clientService as TemporalClientService,
+                config,
+            );
+            (clientService.updateWorkflow as jest.Mock).mockResolvedValue(300);
+
+            const result = await proxy.updateByName<number>('order-42', 'deposit', [100]);
+
+            expect(clientService.updateWorkflow).toHaveBeenCalledWith('order-42', 'deposit', [
+                100,
+            ]);
+            expect(result).toBe(300);
+        });
+
+        it('should pass undefined args when not provided', async () => {
+            const proxy = new WorkflowProxy<OrderWorkflow>(
+                clientService as TemporalClientService,
+                config,
+            );
+
+            await proxy.updateByName('order-42', 'ping');
+
+            expect(clientService.updateWorkflow).toHaveBeenCalledWith(
+                'order-42',
+                'ping',
+                undefined,
+            );
+        });
+    });
+
     describe('signalWithStart', () => {
         it('should forward signal definition, signal args, workflow args, and merged options', async () => {
             const proxy = new WorkflowProxy<OrderWorkflow>(
@@ -343,6 +411,8 @@ describe('WorkflowProxy', () => {
             expect(typeof proxy.signalByName).toBe('function');
             expect(typeof proxy.query).toBe('function');
             expect(typeof proxy.queryByName).toBe('function');
+            expect(typeof proxy.update).toBe('function');
+            expect(typeof proxy.updateByName).toBe('function');
             expect(typeof proxy.signalWithStart).toBe('function');
         });
     });

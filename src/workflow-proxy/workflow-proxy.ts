@@ -1,4 +1,5 @@
 import type { Workflow, SignalDefinition, QueryDefinition } from '@temporalio/workflow';
+import type { UpdateDefinition } from '@temporalio/common';
 import { WorkflowHandle } from '@temporalio/client';
 import { TemporalClientService } from '../services/temporal-client.service';
 import {
@@ -130,6 +131,42 @@ export interface IWorkflowProxy<T extends Workflow> {
     ): Promise<TResult>;
 
     /**
+     * Send a typed update using an `UpdateDefinition` created with `defineUpdate`, and wait
+     * for it to complete. Updates can mutate workflow state and return a result.
+     * TypeScript infers `TResult`/`TArgs` from the definition — call site is fully type-checked.
+     *
+     * @example
+     * ```typescript
+     * // in workflow file: export const depositUpdate = defineUpdate<number, [number]>('deposit');
+     * const newBalance = await this.accountProxy.update('account-42', depositUpdate, 100);
+     * ```
+     */
+    update<TResult, TArgs extends unknown[] = []>(
+        workflowId: string,
+        updateDef: UpdateDefinition<TResult, TArgs>,
+        ...args: TArgs
+    ): Promise<TResult>;
+
+    /**
+     * Send an update by string name. Use when an `UpdateDefinition` is unavailable.
+     * Caller must supply `TResult` explicitly (e.g. `updateByName<number>(...)`).
+     *
+     * @example
+     * ```typescript
+     * const newBalance = await this.accountProxy.updateByName<number>(
+     *   'account-42',
+     *   'deposit',
+     *   [100],
+     * );
+     * ```
+     */
+    updateByName<TResult>(
+        workflowId: string,
+        updateName: string,
+        args?: readonly unknown[],
+    ): Promise<TResult>;
+
+    /**
      * Atomically start the workflow and send a signal.
      * If the workflow is already running, only the signal is delivered (no duplicate start).
      * Both `signalArgs` and `workflowArgs` are fully typed via the respective definitions.
@@ -212,6 +249,22 @@ export class WorkflowProxy<T extends Workflow> implements IWorkflowProxy<T> {
         args?: readonly unknown[],
     ): Promise<TResult> {
         return this.clientService.queryWorkflow<TResult>(workflowId, queryName, args);
+    }
+
+    async update<TResult, TArgs extends unknown[] = []>(
+        workflowId: string,
+        updateDef: UpdateDefinition<TResult, TArgs>,
+        ...args: TArgs
+    ): Promise<TResult> {
+        return this.clientService.updateWorkflow<TResult>(workflowId, updateDef.name, args);
+    }
+
+    async updateByName<TResult>(
+        workflowId: string,
+        updateName: string,
+        args?: readonly unknown[],
+    ): Promise<TResult> {
+        return this.clientService.updateWorkflow<TResult>(workflowId, updateName, args);
     }
 
     async signalWithStart<TSignalArgs extends unknown[]>(

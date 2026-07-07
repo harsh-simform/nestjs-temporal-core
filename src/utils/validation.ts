@@ -40,6 +40,28 @@ export function validateSignalName(signalName: string): void {
 }
 
 /**
+ * Validates that an update name is provided and not empty.
+ *
+ * @param updateName - The update name to validate
+ * @throws Error if the update name is missing or empty
+ */
+export function validateUpdateName(updateName: string): void {
+    if (!updateName || updateName.trim().length === 0) {
+        logger.debug(`Update name validation failed: "${updateName}"`);
+        throw new Error('Update name is required and cannot be empty');
+    }
+
+    if (updateName.includes(' ') || updateName.includes('\n') || updateName.includes('\t')) {
+        logger.debug(`Update name validation failed: "${updateName}" (contains whitespace)`);
+        throw new Error(
+            `Invalid update name: "${updateName}". Update names cannot contain whitespace.`,
+        );
+    }
+
+    logger.debug(`Update name validation passed: "${updateName}"`);
+}
+
+/**
  * Validates that a query name is provided and not empty.
  *
  * @param queryName - The query name to validate
