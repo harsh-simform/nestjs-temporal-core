@@ -45,8 +45,11 @@ lerna-debug.log*
 /docs/API.md
 
 # Claude Code
-.claude/
+.claude/settings.local.json
 
 # Test reporter output (regenerated on every `jest` run)
 junit.xml
 
+# AI
+graphify-out/
+.codebase-memory/
