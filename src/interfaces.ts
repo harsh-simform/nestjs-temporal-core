@@ -20,7 +20,6 @@ import {
     ScheduleClient,
     ScheduleHandle,
     WorkflowHandle,
-    WorkflowIdReusePolicy,
     ScheduleOptions as SdkScheduleOptions,
     ScheduleSpec as SdkScheduleSpec,
     ScheduleOptionsAction,
@@ -30,6 +29,8 @@ import {
     ScheduleUpdateOptions,
     ListScheduleOptions,
     ClientInterceptors,
+    ScheduleOverlapPolicy,
+    WorkflowOptions as SdkWorkflowOptions,
 } from '@temporalio/client';
 import {
     NativeConnection,
@@ -42,20 +43,6 @@ import { Duration, RetryPolicy, TypedSearchAttributes } from '@temporalio/common
 import { TLSConfig } from '@temporalio/common/lib/internal-non-workflow';
 import type { Workflow } from '@temporalio/workflow';
 
-/**
- * Configuration options for Temporal client connection.
- * Used for establishing connection to Temporal server.
- *
- * @example
- * ```typescript
- * const clientOptions: ClientConnectionOptions = {
- *   address: 'localhost:7233',
- *   namespace: 'default',
- *   tls: false,
- *   metadata: { 'client-version': '1.0.0' }
- * };
- * ```
- */
 /**
  * Configuration for a typed workflow proxy created by `WorkflowProxyFactory`.
  *
@@ -74,6 +61,20 @@ export interface WorkflowProxyConfig {
     taskQueue?: string;
 }
 
+/**
+ * Configuration options for Temporal client connection.
+ * Used for establishing connection to Temporal server.
+ *
+ * @example
+ * ```typescript
+ * const clientOptions: ClientConnectionOptions = {
+ *   address: 'localhost:7233',
+ *   namespace: 'default',
+ *   tls: false,
+ *   metadata: { 'client-version': '1.0.0' }
+ * };
+ * ```
+ */
 export interface ClientConnectionOptions {
     address: string;
     tls?: boolean | TLSConfig;
@@ -136,11 +137,15 @@ export type ConnectionOptions = import('@temporalio/client').ConnectionOptions;
  *   backoffCoefficient: 2.0
  * };
  * ```
+ * @deprecated Use {@link RetryPolicy} from `@temporalio/common` instead.
+ *             All fields on `RetryPolicy` cover the same options.
  */
 export interface RetryPolicyConfig {
     maximumAttempts: number;
-    initialInterval: string;
-    maximumInterval: string;
+    /** @format number of milliseconds or ms-formatted string */
+    initialInterval: Duration;
+    /** @format number of milliseconds or ms-formatted string */
+    maximumInterval: Duration;
     backoffCoefficient: number;
 }
 
@@ -242,42 +247,11 @@ export interface WorkerDefinition {
  * ```
  */
 export interface TemporalOptions extends LoggerConfig {
-    connection?: {
-        address: string;
-        namespace?: string;
-        tls?: boolean | TLSConfig;
-        apiKey?: string;
-        metadata?: Record<string, string>;
-        /**
-         * Client-level interceptors (workflow, activity, schedule, nexus). Threaded into
-         * `new Client({ interceptors })`. Useful for OTel tracing/metadata propagation.
-         */
-        interceptors?: ClientInterceptors;
-        /**
-         * gRPC compression for the **worker** connection (`NativeConnection`). Temporal SDK
-         * 1.19 enables gzip compression by default; set `{ codec: 'none' }` to opt out if
-         * your server can't decompress it. Has no effect on the plain gRPC client connection,
-         * which does not compress by default.
-         */
-        grpcCompression?: GrpcCompressionConfig;
-    };
+    /** Connection config — see {@link ClientConnectionOptions}. */
+    connection?: ClientConnectionOptions;
     taskQueue?: string;
-    worker?: {
-        workflowsPath?: string;
-        /**
-         * Workflow bundle. Prefer Temporal SDK's `WorkflowBundleOption`
-         * (`{ code }` or `{ codePath }`). Loose shape accepted for backward
-         * compatibility.
-         */
-        workflowBundle?: WorkflowBundleOption | Record<string, unknown>;
-        activityClasses?: Array<Type<object>>;
-        autoStart?: boolean;
-        /** Enable auto-restart on worker failure (default: inherits from global autoRestart) */
-        autoRestart?: boolean;
-        /** Maximum restart attempts before giving up (default: 3) */
-        maxRestarts?: number;
-        workerOptions?: WorkerCreateOptions;
-    };
+    /** Single-worker config. Equivalent to `Omit<WorkerDefinition, 'taskQueue'>`. */
+    worker?: Omit<WorkerDefinition, 'taskQueue'>;
     workers?: WorkerDefinition[];
     /** Enable auto-restart on worker failure for all workers (default: true) */
     autoRestart?: boolean;
@@ -696,10 +670,8 @@ export interface UpdateOptions {
 export interface StartWorkflowOptions {
     taskQueue: string;
     workflowId?: string;
-    signal?: {
-        name: string;
-        args?: unknown[];
-    };
+    /** Optional signal to send atomically with workflow start. */
+    signal?: WorkflowSignalConfig;
     [key: string]: unknown;
 }
 
@@ -1017,25 +989,27 @@ export type ScheduleAction = ScheduleOptionsAction & {
 };
 
 /**
- * Workflow start options aligned with Temporal's official SDK types.
+ * Workflow start options — extends Temporal SDK's `WorkflowOptions` from
+ * `@temporalio/client` with `workflowId` and `taskQueue` made optional
+ * (the module applies defaults when omitted).
  *
- * `taskQueue` is optional here because the module-level default is applied by
- * `TemporalClientService` when omitted. All other fields map 1:1 to Temporal's
- * `WorkflowStartOptions` from `@temporalio/client`.
+ * All fields from the SDK's `WorkflowOptions` are available directly
+ * (e.g. `retry`, `typedSearchAttributes`, `followRuns`, `startDelay`, etc.).
+ * The two legacy shims below are kept for backward compatibility.
  */
-export interface WorkflowStartOptions {
-    workflowId?: string;
-    taskQueue?: string;
-    /** Typed search attributes — maps to `typedSearchAttributes` in Temporal's SDK. */
+export interface WorkflowStartOptions extends Omit<
+    Partial<SdkWorkflowOptions>,
+    'searchAttributes'
+> {
+    /**
+     * @deprecated Use `typedSearchAttributes` (Temporal SDK field name).
+     * Forwarded to `typedSearchAttributes` at runtime.
+     */
     searchAttributes?: TypedSearchAttributes;
-    /** Freeform workflow annotations. Temporal accepts `Record<string, unknown>`. */
-    memo?: Record<string, unknown>;
-    /** Use `WorkflowIdReusePolicy` enum from `@temporalio/client`. */
-    workflowIdReusePolicy?: WorkflowIdReusePolicy;
-    workflowExecutionTimeout?: Duration;
-    workflowRunTimeout?: Duration;
-    workflowTaskTimeout?: Duration;
-    /** Retry policy for the workflow execution. */
+    /**
+     * @deprecated Use `retry` (Temporal SDK field name).
+     * Forwarded to `retry` at runtime.
+     */
     retryPolicy?: RetryPolicy;
 }
 
@@ -1055,6 +1029,7 @@ export interface ServiceHealth {
 
 /**
  * Statistics information
+ * @deprecated Use {@link ServiceStatistics} instead for a more complete shape.
  */
 export interface ServiceStats {
     activities: {
@@ -1072,13 +1047,20 @@ export interface ServiceStats {
  * Overlap policy for schedules
  */
 export type OverlapPolicy =
-    'skip' | 'buffer_one' | 'buffer_all' | 'cancel_other' | 'terminate_other' | 'allow_all';
+    | 'skip'
+    | 'buffer_one'
+    | 'buffer_all'
+    | 'cancel_other'
+    | 'terminate_other'
+    | 'allow_all';
 
 /**
- * Temporal overlap policy (uppercase format)
+ * Temporal overlap policy (uppercase format) — alias for the SDK's
+ * {@link ScheduleOverlapPolicy} from `@temporalio/client`.
+ *
+ * @deprecated Use {@link ScheduleOverlapPolicy} from `@temporalio/client` directly.
  */
-export type TemporalOverlapPolicy =
-    'SKIP' | 'BUFFER_ONE' | 'BUFFER_ALL' | 'CANCEL_OTHER' | 'TERMINATE_OTHER' | 'ALLOW_ALL';
+export type TemporalOverlapPolicy = ScheduleOverlapPolicy;
 
 /**
  * Generic metadata type for reflection
@@ -1171,11 +1153,9 @@ export interface ClientServiceStatus {
 }
 
 /**
- * Client health status
+ * Client health status. Structurally equivalent to `Pick<ServiceHealth, 'status'>`.
  */
-export interface ClientHealthStatus {
-    status: 'healthy' | 'unhealthy' | 'degraded';
-}
+export type ClientHealthStatus = Pick<ServiceHealth, 'status'>;
 
 /**
  * Generic client type for dependency injection
@@ -1262,13 +1242,18 @@ export interface ComponentDiscoveryResult {
 }
 
 /**
- * Activity method validation result
+ * Shared base for all validation results.
  */
-export interface ActivityMethodValidationResult {
+export interface BaseValidationResult {
     isValid: boolean;
     issues: string[];
     warnings?: string[];
 }
+
+/**
+ * Activity method validation result
+ */
+export interface ActivityMethodValidationResult extends BaseValidationResult {}
 
 /**
  * Discovery service options
@@ -1335,10 +1320,7 @@ export interface ActivityMetadataExtractionResult {
 /**
  * Activity class validation result
  */
-export interface ActivityClassValidationResult {
-    isValid: boolean;
-    issues: string[];
-    warnings?: string[];
+export interface ActivityClassValidationResult extends BaseValidationResult {
     className?: string;
     methodCount?: number;
 }
@@ -1379,9 +1361,10 @@ export interface CacheStatsResult {
 }
 
 /**
- * Signal method extraction result
+ * Shared result shape for signal, query, and update method extraction.
+ * All three operations return the same structure.
  */
-export interface SignalMethodExtractionResult {
+export interface MethodExtractionResult {
     success: boolean;
     methods: Record<string, string>;
     errors: Array<{
@@ -1390,29 +1373,12 @@ export interface SignalMethodExtractionResult {
     }>;
 }
 
-/**
- * Query method extraction result
- */
-export interface QueryMethodExtractionResult {
-    success: boolean;
-    methods: Record<string, string>;
-    errors: Array<{
-        method: string;
-        error: string;
-    }>;
-}
-
-/**
- * Update method extraction result
- */
-export interface UpdateMethodExtractionResult {
-    success: boolean;
-    methods: Record<string, string>;
-    errors: Array<{
-        method: string;
-        error: string;
-    }>;
-}
+/** Signal method extraction result. @see MethodExtractionResult */
+export type SignalMethodExtractionResult = MethodExtractionResult;
+/** Query method extraction result. @see MethodExtractionResult */
+export type QueryMethodExtractionResult = MethodExtractionResult;
+/** Update method extraction result. @see MethodExtractionResult */
+export type UpdateMethodExtractionResult = MethodExtractionResult;
 
 /**
  * Child workflow extraction result
@@ -1468,8 +1434,7 @@ export interface ScheduleCreationOptions {
      */
     searchAttributes?: Record<string, unknown>;
     paused?: boolean;
-    overlapPolicy?:
-        'skip' | 'buffer_one' | 'buffer_all' | 'cancel_other' | 'terminate_other' | 'allow_all';
+    overlapPolicy?: OverlapPolicy;
     catchupWindow?: string | number;
     pauseOnFailure?: boolean;
     /** Informative message — forwarded to Temporal's `state.note`. */
@@ -1502,49 +1467,25 @@ export interface ScheduleRetrievalResult {
 }
 
 /**
- * Result of pausing a schedule
+ * Shared result for schedule mutation operations.
+ * All five operations (pause, unpause, trigger, delete, update) share this exact shape.
  */
-export interface SchedulePauseResult {
+export interface ScheduleOperationResult {
     success: boolean;
     scheduleId: string;
     error?: Error;
 }
 
-/**
- * Result of unpausing a schedule
- */
-export interface ScheduleUnpauseResult {
-    success: boolean;
-    scheduleId: string;
-    error?: Error;
-}
-
-/**
- * Result of triggering an immediate schedule action
- */
-export interface ScheduleTriggerResult {
-    success: boolean;
-    scheduleId: string;
-    error?: Error;
-}
-
-/**
- * Result of deleting a schedule
- */
-export interface ScheduleDeletionResult {
-    success: boolean;
-    scheduleId: string;
-    error?: Error;
-}
-
-/**
- * Result of updating a schedule's definition
- */
-export interface ScheduleUpdateResult {
-    success: boolean;
-    scheduleId: string;
-    error?: Error;
-}
+/** Result of pausing a schedule. @see ScheduleOperationResult */
+export type SchedulePauseResult = ScheduleOperationResult;
+/** Result of unpausing a schedule. @see ScheduleOperationResult */
+export type ScheduleUnpauseResult = ScheduleOperationResult;
+/** Result of triggering an immediate schedule action. @see ScheduleOperationResult */
+export type ScheduleTriggerResult = ScheduleOperationResult;
+/** Result of deleting a schedule. @see ScheduleOperationResult */
+export type ScheduleDeletionResult = ScheduleOperationResult;
+/** Result of updating a schedule's definition. @see ScheduleOperationResult */
+export type ScheduleUpdateResult = ScheduleOperationResult;
 
 /**
  * Result of describing a schedule
@@ -1623,10 +1564,7 @@ export interface ScheduleRegistrationResult {
 /**
  * Schedule metadata validation result
  */
-export interface ScheduleMetadataValidationResult {
-    isValid: boolean;
-    issues: string[];
-    warnings?: string[];
+export interface ScheduleMetadataValidationResult extends BaseValidationResult {
     scheduleId?: string;
 }
 
@@ -1673,7 +1611,8 @@ export interface ScheduleIntervalParseResult {
 }
 
 /**
- * Temporal connection interface for schedule client
+ * Temporal connection interface for schedule client.
+ * @deprecated Use {@link ClientConnectionOptions} instead.
  */
 export interface TemporalConnection {
     address: string;
@@ -1705,7 +1644,8 @@ export type ScheduleWorkflowAction = ScheduleOptionsStartWorkflowAction<Workflow
 export type ScheduleOptions = SdkScheduleOptions;
 
 /**
- * Worker connection options interface
+ * Worker connection options interface.
+ * @deprecated Use {@link ClientConnectionOptions} instead.
  */
 export interface WorkerConnectionOptions {
     address: string;

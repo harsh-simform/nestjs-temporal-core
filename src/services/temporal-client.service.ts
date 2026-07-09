@@ -131,17 +131,38 @@ export class TemporalClientService implements OnModuleInit {
                     ...(options?.workflowTaskTimeout && {
                         workflowTaskTimeout: options.workflowTaskTimeout,
                     }),
-                    ...(options?.searchAttributes && {
-                        typedSearchAttributes: options.searchAttributes,
+                    // SDK-native field — preferred over deprecated `searchAttributes` shim
+                    ...(options?.typedSearchAttributes && {
+                        typedSearchAttributes: options.typedSearchAttributes,
                     }),
+                    // Deprecated shim: `searchAttributes` is forwarded to `typedSearchAttributes`
+                    ...(options?.searchAttributes &&
+                        !options.typedSearchAttributes && {
+                            typedSearchAttributes: options.searchAttributes,
+                        }),
                     ...(options?.memo && {
                         memo: options.memo,
                     }),
                     ...(options?.workflowIdReusePolicy !== undefined && {
                         workflowIdReusePolicy: options.workflowIdReusePolicy,
                     }),
-                    ...(options?.retryPolicy && {
-                        retry: options.retryPolicy,
+                    // SDK-native field — preferred over deprecated `retryPolicy` shim
+                    ...(options?.retry && {
+                        retry: options.retry,
+                    }),
+                    // Deprecated shim: `retryPolicy` is forwarded to `retry`
+                    ...(options?.retryPolicy &&
+                        !options.retry && {
+                            retry: options.retryPolicy,
+                        }),
+                    // Pass through remaining SDK-native fields
+                    ...(options?.followRuns !== undefined && { followRuns: options.followRuns }),
+                    ...(options?.startDelay && { startDelay: options.startDelay }),
+                    ...(options?.workflowIdConflictPolicy !== undefined && {
+                        workflowIdConflictPolicy: options.workflowIdConflictPolicy,
+                    }),
+                    ...(options?.versioningOverride && {
+                        versioningOverride: options.versioningOverride,
                     }),
                 };
 
