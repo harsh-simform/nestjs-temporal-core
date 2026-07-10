@@ -1,12 +1,19 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, Inject } from '@nestjs/common';
 import { DiscoveryService } from '@nestjs/core';
-import { Client, ScheduleClient, ScheduleHandle, ScheduleOverlapPolicy } from '@temporalio/client';
+import {
+    Client,
+    ScheduleClient,
+    ScheduleHandle,
+    ScheduleNotFoundError,
+    ScheduleOverlapPolicy,
+} from '@temporalio/client';
 import { Duration, SearchAttributes } from '@temporalio/common';
 import { TEMPORAL_MODULE_OPTIONS, TEMPORAL_CLIENT } from '../constants';
 import {
     TemporalOptions,
     ScheduleCreationOptions,
     ScheduleCreationResult,
+    ScheduleUpsertResult,
     ScheduleRetrievalResult,
     SchedulePauseResult,
     ScheduleUnpauseResult,
@@ -461,47 +468,55 @@ export class TemporalScheduleService implements OnModuleInit, OnModuleDestroy {
     }
 
     /**
+     * Translate user-facing `ScheduleCreationOptions` into the SDK's native
+     * `ScheduleOptions` shape, applying the same policy/state normalization
+     * used by both `createSchedule` and `upsertSchedule`.
+     */
+    private buildScheduleOptions(options: ScheduleCreationOptions): ScheduleOptions {
+        const policies: NonNullable<ScheduleOptions['policies']> = {};
+        if (options.overlapPolicy) {
+            policies.overlap =
+                options.overlapPolicy.toUpperCase() as ScheduleOptions['policies'] extends {
+                    overlap?: infer O;
+                }
+                    ? O
+                    : never;
+        }
+        if (options.catchupWindow) {
+            policies.catchupWindow = options.catchupWindow as Duration;
+        }
+        if (options.pauseOnFailure !== undefined) {
+            policies.pauseOnFailure = options.pauseOnFailure;
+        }
+
+        // `state.note` carries the (previously-ignored) `description` field.
+        // `limitedActions` is intentionally NOT forwarded to `state.remainingActions`
+        // to preserve prior no-op behavior (was a top-level field SDK ignored).
+        const state: NonNullable<ScheduleOptions['state']> = {};
+        if (options.paused !== undefined) state.paused = options.paused;
+        if (options.description) state.note = options.description;
+
+        return this.normalizeScheduleOptions({
+            scheduleId: options.scheduleId,
+            spec: options.spec as ScheduleOptions['spec'],
+            action: options.action,
+            ...(options.memo && { memo: options.memo }),
+            ...(options.searchAttributes && {
+                searchAttributes: options.searchAttributes as SearchAttributes,
+            }),
+            ...(Object.keys(policies).length > 0 && { policies }),
+            ...(Object.keys(state).length > 0 && { state }),
+        });
+    }
+
+    /**
      * Create a new schedule
      */
     async createSchedule(options: ScheduleCreationOptions): Promise<ScheduleCreationResult> {
         this.ensureInitialized();
 
         try {
-            const policies: NonNullable<ScheduleOptions['policies']> = {};
-            if (options.overlapPolicy) {
-                policies.overlap =
-                    options.overlapPolicy.toUpperCase() as ScheduleOptions['policies'] extends {
-                        overlap?: infer O;
-                    }
-                        ? O
-                        : never;
-            }
-            if (options.catchupWindow) {
-                policies.catchupWindow = options.catchupWindow as Duration;
-            }
-            if (options.pauseOnFailure !== undefined) {
-                policies.pauseOnFailure = options.pauseOnFailure;
-            }
-
-            // `state.note` carries the (previously-ignored) `description` field.
-            // `limitedActions` is intentionally NOT forwarded to `state.remainingActions`
-            // to preserve prior no-op behavior (was a top-level field SDK ignored).
-            const state: NonNullable<ScheduleOptions['state']> = {};
-            if (options.paused !== undefined) state.paused = options.paused;
-            if (options.description) state.note = options.description;
-
-            const scheduleOptions: ScheduleOptions = this.normalizeScheduleOptions({
-                scheduleId: options.scheduleId,
-                spec: options.spec as ScheduleOptions['spec'],
-                action: options.action,
-                ...(options.memo && { memo: options.memo }),
-                ...(options.searchAttributes && {
-                    searchAttributes: options.searchAttributes as SearchAttributes,
-                }),
-                ...(Object.keys(policies).length > 0 && { policies }),
-                ...(Object.keys(state).length > 0 && { state }),
-            });
-
+            const scheduleOptions = this.buildScheduleOptions(options);
             const scheduleHandle = await this.scheduleClient!.create(scheduleOptions);
             this.scheduleHandles.set(options.scheduleId, scheduleHandle);
 
@@ -514,6 +529,69 @@ export class TemporalScheduleService implements OnModuleInit, OnModuleDestroy {
             };
         } catch (error) {
             this.logger.error(`Failed to create schedule '${options.scheduleId}'`, error);
+            return {
+                success: false,
+                scheduleId: options.scheduleId,
+                error: error instanceof Error ? error : new Error(this.extractErrorMessage(error)),
+            };
+        }
+    }
+
+    /**
+     * Create a schedule, or update it in place if a schedule with the same
+     * `scheduleId` already exists — avoids the SDK's `ScheduleAlreadyRunning`
+     * error on repeated bootstraps (e.g. registering schedules on every app start).
+     *
+     * @example
+     * ```typescript
+     * await scheduleService.upsertSchedule({
+     *   scheduleId: 'daily-report',
+     *   spec: { cronExpressions: ['0 9 * * *'] },
+     *   action: { type: 'startWorkflow', workflowType: 'sendDailyReport', taskQueue: 'reports' },
+     * });
+     * ```
+     */
+    async upsertSchedule(options: ScheduleCreationOptions): Promise<ScheduleUpsertResult> {
+        this.ensureInitialized();
+
+        try {
+            const handle = this.resolveScheduleHandle(options.scheduleId);
+
+            let exists = true;
+            try {
+                await handle.describe();
+            } catch (error) {
+                if (error instanceof ScheduleNotFoundError) {
+                    exists = false;
+                } else {
+                    throw error;
+                }
+            }
+
+            if (!exists) {
+                const result = await this.createSchedule(options);
+                return { ...result, action: 'created' };
+            }
+
+            // `ScheduleUpdateOptions` omits `scheduleId`/`memo` (memo is immutable after creation).
+            const {
+                scheduleId: _scheduleId,
+                memo: _memo,
+                ...updateOptions
+            } = this.buildScheduleOptions(options);
+            await handle.update(() => updateOptions as ScheduleUpdateOptions);
+            this.scheduleHandles.set(options.scheduleId, handle);
+
+            this.logger.info(`Upserted (updated) schedule '${options.scheduleId}'`);
+
+            return {
+                success: true,
+                scheduleId: options.scheduleId,
+                handle,
+                action: 'updated',
+            };
+        } catch (error) {
+            this.logger.error(`Failed to upsert schedule '${options.scheduleId}'`, error);
             return {
                 success: false,
                 scheduleId: options.scheduleId,

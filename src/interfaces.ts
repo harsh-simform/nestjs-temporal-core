@@ -1458,6 +1458,15 @@ export interface ScheduleCreationResult {
 }
 
 /**
+ * Result of upserting (create-or-update) a schedule.
+ * `action` reports which path was taken so callers can distinguish
+ * a fresh creation from an update of a pre-existing schedule.
+ */
+export interface ScheduleUpsertResult extends ScheduleCreationResult {
+    action?: 'created' | 'updated';
+}
+
+/**
  * Schedule retrieval result
  */
 export interface ScheduleRetrievalResult {

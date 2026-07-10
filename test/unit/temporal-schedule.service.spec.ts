@@ -4,7 +4,7 @@ import { TemporalScheduleService } from '../../src/services/temporal-schedule.se
 import { TemporalMetadataAccessor } from '../../src/services/temporal-metadata.service';
 import { TEMPORAL_MODULE_OPTIONS, TEMPORAL_CLIENT } from '../../src/constants';
 import { TemporalOptions } from '../../src/interfaces';
-import { ScheduleClient, ScheduleHandle } from '@temporalio/client';
+import { ScheduleClient, ScheduleHandle, ScheduleNotFoundError } from '@temporalio/client';
 
 describe('TemporalScheduleService', () => {
     let service: TemporalScheduleService;
@@ -623,6 +623,81 @@ describe('TemporalScheduleService', () => {
 
             expect(result.success).toBe(false);
             expect(result.error?.message).toBe('boom');
+        });
+    });
+
+    describe('upsertSchedule', () => {
+        const options = {
+            scheduleId: 'test-schedule',
+            spec: { cronExpressions: ['0 0 * * *'] },
+            action: {
+                type: 'startWorkflow' as const,
+                workflowType: 'TestWorkflow',
+                taskQueue: 'test-queue',
+                args: [],
+            },
+        };
+
+        beforeEach(async () => {
+            await service.onModuleInit();
+        });
+
+        it('should create the schedule when it does not exist', async () => {
+            (mockScheduleHandle.describe as jest.Mock).mockRejectedValue(
+                new ScheduleNotFoundError('not found', 'test-schedule'),
+            );
+
+            const result = await service.upsertSchedule(options);
+
+            expect(result.success).toBe(true);
+            expect(result.action).toBe('created');
+            expect(mockScheduleClient.create).toHaveBeenCalledWith(
+                expect.objectContaining({ scheduleId: 'test-schedule' }),
+            );
+            expect(mockScheduleHandle.update).not.toHaveBeenCalled();
+        });
+
+        it('should update the schedule in place when it already exists', async () => {
+            (mockScheduleHandle.describe as jest.Mock).mockResolvedValue({
+                scheduleId: 'test-schedule',
+            });
+
+            const result = await service.upsertSchedule(options);
+
+            expect(result.success).toBe(true);
+            expect(result.action).toBe('updated');
+            expect(mockScheduleHandle.update).toHaveBeenCalledWith(expect.any(Function));
+            expect(mockScheduleClient.create).not.toHaveBeenCalled();
+
+            const updateFn = (mockScheduleHandle.update as jest.Mock).mock.calls[0][0];
+            const updatePayload = updateFn({});
+            expect(updatePayload).not.toHaveProperty('scheduleId');
+            expect(updatePayload).toEqual(
+                expect.objectContaining({ spec: options.spec, action: options.action }),
+            );
+        });
+
+        it('should propagate non-not-found errors from describe', async () => {
+            (mockScheduleHandle.describe as jest.Mock).mockRejectedValue(new Error('boom'));
+
+            const result = await service.upsertSchedule(options);
+
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toBe('boom');
+            expect(mockScheduleClient.create).not.toHaveBeenCalled();
+            expect(mockScheduleHandle.update).not.toHaveBeenCalled();
+        });
+
+        it('should handle update errors', async () => {
+            (mockScheduleHandle.describe as jest.Mock).mockResolvedValue({
+                scheduleId: 'test-schedule',
+            });
+            (mockScheduleHandle.update as jest.Mock).mockRejectedValue(new Error('update failed'));
+
+            const result = await service.upsertSchedule(options);
+
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toBe('update failed');
         });
     });
 
