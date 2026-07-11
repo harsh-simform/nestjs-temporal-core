@@ -1047,12 +1047,7 @@ export interface ServiceStats {
  * Overlap policy for schedules
  */
 export type OverlapPolicy =
-    | 'skip'
-    | 'buffer_one'
-    | 'buffer_all'
-    | 'cancel_other'
-    | 'terminate_other'
-    | 'allow_all';
+    'skip' | 'buffer_one' | 'buffer_all' | 'cancel_other' | 'terminate_other' | 'allow_all';
 
 /**
  * Temporal overlap policy (uppercase format) — alias for the SDK's

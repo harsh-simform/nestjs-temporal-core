@@ -699,6 +699,15 @@ describe('TemporalScheduleService', () => {
             expect(result.success).toBe(false);
             expect(result.error?.message).toBe('update failed');
         });
+
+        it('should handle non-Error objects thrown during upsert', async () => {
+            (mockScheduleHandle.describe as jest.Mock).mockRejectedValue('string error');
+
+            const result = await service.upsertSchedule(options);
+
+            expect(result.success).toBe(false);
+            expect(result.error).toBeInstanceOf(Error);
+        });
     });
 
     describe('describeSchedule', () => {
