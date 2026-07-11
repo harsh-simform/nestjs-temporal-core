@@ -39,6 +39,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Update npm for trusted publishing
+        run: npm install -g npm@latest
+
       - name: Version bump
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
@@ -84,24 +87,8 @@ jobs:
 
           echo "Changelog generated"
 
-      - name: Verify NPM token
-        run: |
-          if [ -z "${{ secrets.NPM_TOKEN }}" ]; then
-            echo "::error::NPM_TOKEN secret is not set"
-            echo "Please add your npm token to GitHub repository secrets:"
-            echo "1. Go to: https://github.com/${{ github.repository }}/settings/secrets/actions"
-            echo "2. Click 'New repository secret'"
-            echo "3. Name: NPM_TOKEN"
-            echo "4. Value: Your npm token (create one at https://www.npmjs.com/settings/YOUR_USERNAME/tokens)"
-            echo "5. Make sure the token has 'Automation' or 'Publish' permissions"
-            exit 1
-          fi
-          echo "NPM_TOKEN is configured"
-
       - name: Publish to npm
         run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1

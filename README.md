@@ -4,9 +4,9 @@
 
 A comprehensive NestJS integration framework for Temporal.io that provides enterprise-ready workflow orchestration with automatic discovery, declarative decorators, and robust monitoring capabilities.
 
-![Statements](https://img.shields.io/badge/statements-99.56%25-brightgreen.svg?style=flat)
-![Branches](https://img.shields.io/badge/branches-93.87%25-brightgreen.svg?style=flat)
-![Functions](https://img.shields.io/badge/functions-97.9%25-brightgreen.svg?style=flat)
+![Statements](https://img.shields.io/badge/statements-99.57%25-brightgreen.svg?style=flat)
+![Branches](https://img.shields.io/badge/branches-93.45%25-brightgreen.svg?style=flat)
+![Functions](https://img.shields.io/badge/functions-97.91%25-brightgreen.svg?style=flat)
 ![Lines](https://img.shields.io/badge/lines-99.68%25-brightgreen.svg?style=flat)
 [![codecov](https://codecov.io/gh/harsh-simform/nestjs-temporal-core/branch/main/graph/badge.svg?token=BYSE45L6DI)](https://codecov.io/gh/harsh-simform/nestjs-temporal-core)
 
@@ -1148,6 +1148,7 @@ Key methods:
 - `cancelWorkflow()` - Cancel a workflow execution
 - `getHealth()` - Get service health status
 - `createSchedule()` - Create a schedule
+- `upsertSchedule()` - Create a schedule, or update it in place if one with the same ID already exists
 - `listSchedules()` - List all schedules
 - `deleteSchedule()` - Delete a schedule
 
@@ -1313,6 +1314,23 @@ const { schedules } = this.scheduleService.listSchedules();
 for await (const schedule of schedules ?? []) {
   console.log(schedule.scheduleId, schedule.info.numActions);
 }
+```
+
+If you register schedules on every application bootstrap, `createSchedule()` throws `ScheduleAlreadyRunning` on the second and subsequent runs. Use `upsertSchedule()` instead — it creates the schedule if it doesn't exist yet, or updates it in place (spec, action, policies, state) if it does:
+
+```typescript
+const result = await this.scheduleService.upsertSchedule({
+  scheduleId: 'daily-report',
+  spec: { cronExpressions: ['0 9 * * *'] },
+  action: {
+    type: 'startWorkflow',
+    workflowType: 'sendDailyReport',
+    taskQueue: 'reports',
+    args: [],
+  },
+});
+
+console.log(result.action); // 'created' | 'updated'
 ```
 
 **Explicitly out of scope** (evaluated and deliberately not implemented): Nexus (standalone operations/service clients — a large, cross-namespace service-mesh feature outside a single-app NestJS wrapper's mission), the contrib packages (`@temporalio/openai-agents`, `@temporalio/lambda-worker`, `@temporalio/workflow-streams`, `@temporalio/langsmith`), and `SerializationContext` custom payload conversion (would require a much larger payload-converter extension point this wrapper doesn't expose today). Workflow-code-only concerns (named random streams, continue-as-new backoff interval, `unsafe.random`, workflow-failure-exception-type selection) are consumed directly via `@temporalio/workflow` in your workflow functions and aren't mediated by this package.
