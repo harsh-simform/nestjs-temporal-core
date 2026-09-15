@@ -1,6 +1,5 @@
 ---
 id: intro
-slug: /
 title: Introduction
 ---
 

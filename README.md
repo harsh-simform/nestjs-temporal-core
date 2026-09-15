@@ -61,24 +61,24 @@ export class AppModule {}
 
 Inject `TemporalService` anywhere to start/signal/query workflows. Don't forget `app.enableShutdownHooks()` in `main.ts` for graceful cleanup.
 
-👉 Activities, workflows, and full service examples: [Getting Started guide](https://harsh-simform.github.io/nestjs-temporal-core/getting-started).
+👉 Activities, workflows, and full service examples: [Getting Started guide](https://harsh-simform.github.io/nestjs-temporal-core/docs/getting-started).
 
 ## Documentation
 
-This README covers only the basics. The [**documentation site**](https://harsh-simform.github.io/nestjs-temporal-core/) has everything else — guides, config reference, and a generated API reference (source in [`website/docs`](website/docs)):
+This README covers only the basics. The [**documentation site**](https://harsh-simform.github.io/nestjs-temporal-core/) has everything else — a landing page, guides, config reference, and a generated API reference (source in [`website/docs`](website/docs)):
 
 | Guide | Covers |
 |---|---|
-| [Getting Started](https://harsh-simform.github.io/nestjs-temporal-core/getting-started) | Installation, quick start, module variants |
-| [Configuration](https://harsh-simform.github.io/nestjs-temporal-core/configuration) | Basic/multi-worker/async/TLS setup, full options reference |
-| [Core Concepts](https://harsh-simform.github.io/nestjs-temporal-core/core-concepts) | Activities, workflows, signals/queries, updates, typed workflow proxy |
-| [Advanced Configuration](https://harsh-simform.github.io/nestjs-temporal-core/advanced-configuration) | Interceptors, gRPC compression, worker versioning, standalone activities, schedule lifecycle |
-| [Advanced Usage](https://harsh-simform.github.io/nestjs-temporal-core/advanced-usage) | Activity retry policies, workflow testing |
-| [Best Practices](https://harsh-simform.github.io/nestjs-temporal-core/best-practices) | Do's and don'ts for workflows, activities, config, error handling, testing |
-| [Health Monitoring](https://harsh-simform.github.io/nestjs-temporal-core/health-monitoring) | Built-in health module, custom health checks |
-| [Troubleshooting](https://harsh-simform.github.io/nestjs-temporal-core/troubleshooting) | Common issues, debug mode, getting help |
-| [Migration Guide](https://harsh-simform.github.io/nestjs-temporal-core/migration-guide) | Upgrading across versions and SDK bumps |
-| [API Reference](https://harsh-simform.github.io/nestjs-temporal-core/api) | Generated from source (TSDoc) |
+| [Getting Started](https://harsh-simform.github.io/nestjs-temporal-core/docs/getting-started) | Installation, quick start, module variants |
+| [Configuration](https://harsh-simform.github.io/nestjs-temporal-core/docs/configuration) | Basic/multi-worker/async/TLS setup, full options reference |
+| [Core Concepts](https://harsh-simform.github.io/nestjs-temporal-core/docs/core-concepts) | Activities, workflows, signals/queries, updates, typed workflow proxy |
+| [Advanced Configuration](https://harsh-simform.github.io/nestjs-temporal-core/docs/advanced-configuration) | Interceptors, gRPC compression, worker versioning, standalone activities, schedule lifecycle |
+| [Advanced Usage](https://harsh-simform.github.io/nestjs-temporal-core/docs/advanced-usage) | Activity retry policies, workflow testing |
+| [Best Practices](https://harsh-simform.github.io/nestjs-temporal-core/docs/best-practices) | Do's and don'ts for workflows, activities, config, error handling, testing |
+| [Health Monitoring](https://harsh-simform.github.io/nestjs-temporal-core/docs/health-monitoring) | Built-in health module, custom health checks |
+| [Troubleshooting](https://harsh-simform.github.io/nestjs-temporal-core/docs/troubleshooting) | Common issues, debug mode, getting help |
+| [Migration Guide](https://harsh-simform.github.io/nestjs-temporal-core/docs/migration-guide) | Upgrading across versions and SDK bumps |
+| [API Reference](https://harsh-simform.github.io/nestjs-temporal-core/docs/api) | Generated from source (TSDoc) |
 
 ## Requirements
 

@@ -31,7 +31,7 @@ const config = {
       /** @type {import('@docusaurus/preset-classic').Options} */
       ({
         docs: {
-          routeBasePath: '/',
+          routeBasePath: '/docs',
           sidebarPath: require.resolve('./sidebars.js'),
           editUrl:
             'https://github.com/hmake98/nestjs-temporal-core/edit/main/website/docs/',
@@ -66,6 +66,11 @@ const config = {
         title: 'NestJS Temporal Core',
         items: [
           {
+            to: '/',
+            position: 'left',
+            label: 'Home',
+          },
+          {
             type: 'docSidebar',
             sidebarId: 'guideSidebar',
             position: 'left',
@@ -89,8 +94,8 @@ const config = {
           {
             title: 'Docs',
             items: [
-              { label: 'Getting Started', to: '/getting-started' },
-              { label: 'Core Concepts', to: '/core-concepts' },
+              { label: 'Getting Started', to: '/docs/getting-started' },
+              { label: 'Core Concepts', to: '/docs/core-concepts' },
             ],
           },
           {
