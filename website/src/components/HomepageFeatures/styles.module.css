@@ -1,14 +1,17 @@
 .features {
   display: flex;
   align-items: center;
-  padding: 2.5rem 0 3rem;
+  padding: 3rem 0;
   width: 100%;
+}
+
+.features :global(.row) {
+  row-gap: 1.5rem;
 }
 
 .featureCard {
   height: 100%;
   padding: 1.5rem;
-  margin-bottom: 1.5rem;
   border-radius: 12px;
   border: 1px solid var(--ifm-color-emphasis-200);
   background: var(--ifm-background-surface-color);
