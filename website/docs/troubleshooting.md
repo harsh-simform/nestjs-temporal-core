@@ -135,7 +135,7 @@ If you're still experiencing issues:
 2. **Verify configuration** - Double-check all connection and worker settings
 3. **Test connectivity** - Ensure Temporal server is accessible
 4. **Review health status** - Use `getHealth()` to identify failing components
-5. **Check GitHub Issues** - [Search existing issues](https://github.com/harsh-simform/nestjs-temporal-core/issues)
+5. **Check GitHub Issues** - [Search existing issues](https://github.com/hmake98/nestjs-temporal-core/issues)
 6. **Create an issue** - Provide logs, configuration, and minimal reproduction
 
 Next: [Migration Guide](./migration-guide.md).

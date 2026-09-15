@@ -6,10 +6,10 @@ const config = {
   title: 'NestJS Temporal Core',
   tagline: 'NestJS integration for Temporal.io workflow orchestration',
 
-  url: 'https://harsh-simform.github.io',
+  url: 'https://hmake98.github.io',
   baseUrl: '/nestjs-temporal-core/',
 
-  organizationName: 'harsh-simform',
+  organizationName: 'hmake98',
   projectName: 'nestjs-temporal-core',
   trailingSlash: false,
 
@@ -34,7 +34,7 @@ const config = {
           routeBasePath: '/',
           sidebarPath: require.resolve('./sidebars.js'),
           editUrl:
-            'https://github.com/harsh-simform/nestjs-temporal-core/edit/main/website/docs/',
+            'https://github.com/hmake98/nestjs-temporal-core/edit/main/website/docs/',
         },
         blog: false,
         theme: {
@@ -72,7 +72,7 @@ const config = {
             label: 'Guide',
           },
           {
-            href: 'https://github.com/harsh-simform/nestjs-temporal-core',
+            href: 'https://github.com/hmake98/nestjs-temporal-core',
             label: 'GitHub',
             position: 'right',
           },
@@ -98,11 +98,11 @@ const config = {
             items: [
               {
                 label: 'GitHub Discussions',
-                href: 'https://github.com/harsh-simform/nestjs-temporal-core/discussions',
+                href: 'https://github.com/hmake98/nestjs-temporal-core/discussions',
               },
               {
                 label: 'Issues',
-                href: 'https://github.com/harsh-simform/nestjs-temporal-core/issues',
+                href: 'https://github.com/hmake98/nestjs-temporal-core/issues',
               },
             ],
           },
@@ -115,12 +115,12 @@ const config = {
               },
               {
                 label: 'Example Project',
-                href: 'https://github.com/harsh-simform/nestjs-temporal-core-example',
+                href: 'https://github.com/hmake98/nestjs-temporal-core-example',
               },
             ],
           },
         ],
-        copyright: `Copyright © ${new Date().getFullYear()} Simform. Built with Docusaurus.`,
+        copyright: `Copyright © ${new Date().getFullYear()} hmake98. Built with Docusaurus.`,
       },
       prism: {
         theme: prismThemes.github,
