@@ -39,10 +39,11 @@ lerna-debug.log*
 .env.local
 .env.*.local
 
-# Documentation
-/docs/generated
-/docs/temp
-/docs/API.md
+# Documentation site (Docusaurus)
+/website/node_modules
+/website/build
+/website/.docusaurus
+/website/docs/api
 
 # Claude Code
 .claude/settings.local.json

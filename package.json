@@ -19,7 +19,6 @@
     "LICENSE",
     "README.md",
     "CHANGELOG.md",
-    "docs/README.md",
     "jsdoc.json"
   ],
   "scripts": {
@@ -46,9 +45,11 @@
     "test:integration": "jest --testPathPatterns=test/integration --coverage --passWithNoTests --forceExit",
     "test:ci": "jest --coverage --passWithNoTests --forceExit",
     "make-badges": "istanbul-badges-readme",
-    "docs:generate": "typedoc src --out docs --excludePrivate --excludeProtected",
-    "docs:serve": "npx http-server docs -p 3001 -o",
-    "docs:clean": "rimraf docs"
+    "docs:install": "npm --prefix website install",
+    "docs:dev": "npm --prefix website run start",
+    "docs:build": "npm --prefix website run build",
+    "docs:serve": "npm --prefix website run serve",
+    "docs:clean": "npm --prefix website run clear"
   },
   "keywords": [
     "nestjs",
@@ -132,7 +133,6 @@
     "prettier": "^3.9.4",
     "rimraf": "^6.1.3",
     "ts-jest": "^29.4.11",
-    "typedoc": "^0.28.20",
     "typescript": "^5.9.3"
   },
   "engines": {

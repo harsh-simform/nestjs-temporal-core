@@ -75,6 +75,13 @@ Rules:
 - This rule holds for the entire session, not just the first message — and it applies to any subagent spawned for code exploration in this repo. When delegating exploration via the Agent tool, tell the subagent explicitly to run `graphify query`/`explain`/`path` before grepping or reading raw files.
 - `.claude/settings.json` runs `graphify update .` automatically via a PostToolUse hook after every Edit/Write to a `.ts` file made through Claude Code tools (incremental, ~1-2s) — the graph should already be current. Only run it manually after edits made outside Claude Code (a plain editor, a merge, a generated file).
 
+## Documentation site (`website/`)
+
+- Standalone Docusaurus project (own `package.json`/`node_modules`, not an npm workspace of the root package). README stays a short landing page; hand-written guides live in `website/docs/*.md`, deployed via `.github/workflows/deploy-docs.yml` to GitHub Pages.
+- API reference is generated at build time by `docusaurus-plugin-typedoc` (runs TypeDoc + `typedoc-plugin-markdown` against `src/index.ts` using the root `tsconfig.docs.json`) into `website/docs/api/` — gitignored, never hand-edit generated API pages.
+- Root scripts proxy into the site: `npm run docs:install`, `docs:dev` (local preview), `docs:build`, `docs:serve`, `docs:clean`.
+- Adding a new guide: create `website/docs/<name>.md` with an `id`/`title` frontmatter, then add its id to `website/sidebars.js`'s `guideSidebar` array in reading order.
+
 ## claude-mem
 
 This project's memory (`~/.claude-mem`) is global, not project-scoped, and injects relevant context passively at session start and per prompt. For non-trivial tasks (multi-file changes, bug investigations, "did we solve this before" questions, or anything where past decisions matter), explicitly search it before drafting a solution rather than relying only on passive injection — use the `mcp__plugin_claude-mem_mcp-search__search` (or `smart_search`) tool. Skip this for trivial, single-file, no-context-needed edits — it's not worth the round trip.
