@@ -37,3 +37,11 @@ Reuse these tokens via `@Inject(TOKEN)`; don't introduce a new string token for 
 
 - Tests live under `test/unit` (see `jest.config.js`); `test/integration` is referenced by `npm run test:integration` in `package.json` but doesn't currently exist as a directory — check before assuming an integration suite is present.
 - Mock at the DI-token boundary (`TEMPORAL_CLIENT`, `TEMPORAL_CONNECTION`) rather than mocking `@temporalio/client` internals directly, matching how the existing services are constructed via Nest's testing module.
+
+## This is a published npm library, not an app
+
+`nestjs-temporal-core` is consumed as a peer-dependency package by other NestJS apps — that constrains how you change its NestJS-facing surface:
+
+- `@nestjs/common`/`@nestjs/core` are `peerDependencies` (`^9 || ^10 || ^11`), not `dependencies` — never import a Nest version-specific API that isn't available across that whole range.
+- Public module/service/decorator signatures are the package's API contract. A breaking change to `TemporalModule.register`/`registerAsync` options, exported tokens, or decorator signatures needs a major version bump (see `publish:major`/`publish:minor`/`publish:patch` scripts), not a silent patch release.
+- New public exports must be added to the relevant `index.ts` (`src/index.ts` or a subfolder's) to actually ship — an export missing from `index.ts` is invisible to consumers even if `files` in `package.json` includes the compiled output.
