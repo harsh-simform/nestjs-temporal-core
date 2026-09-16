@@ -5,7 +5,9 @@ description: Temporal.io SDK concepts and this repo's conventions for workflows,
 
 # Temporal.io in this repo
 
-This library wraps `@temporalio/client`, `@temporalio/worker`, `@temporalio/workflow`, `@temporalio/common` (peer deps, version range in `package.json`; verify current SDK behavior with the `temporal-sdk-researcher` subagent before relying on a signature from memory).
+This library wraps `@temporalio/client`, `@temporalio/worker`, `@temporalio/workflow`, `@temporalio/common` (peer deps, version range in `package.json`; verify current SDK behavior before relying on a signature from memory).
+
+**SDK research order**: for a quick API/behavior lookup, query the `temporal-docs` MCP server (`search_temporal_knowledge_sources`, declared in this repo's `.mcp.json`) directly. For anything touching multiple APIs, deprecations, or version-floor compatibility, invoke the `temporal-sdk-researcher` subagent instead — it uses the same MCP server plus WebSearch/WebFetch for changelog specifics and reports back with citations. The `temporal:temporal-developer` plugin skill is a broader fallback for cross-SDK-language questions (Python/Go/Java/.NET/Ruby), not needed for this repo's TypeScript-only surface.
 
 ## Concept decision matrix
 

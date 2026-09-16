@@ -18,6 +18,10 @@ permissions:
   pages: write
   id-token: write
 
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -76,7 +80,7 @@ jobs:
 
           if [ -z "$PREVIOUS_TAG" ]; then
             echo "First release"
-            CHANGELOG="First release of nestjs-mcp"
+            CHANGELOG="First release of nestjs-temporal-core"
           else
             echo "Generating changelog from $PREVIOUS_TAG to HEAD"
             CHANGELOG=$(git log $PREVIOUS_TAG..HEAD --pretty=format:"- %s (%h)" --no-merges)
@@ -103,13 +107,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Generate documentation
-        run: npm run docs:generate
+      - name: Install documentation site dependencies
+        run: npm run docs:install
+
+      - name: Build documentation site
+        run: npm run docs:build
 
       - name: Upload documentation artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./docs
+          path: ./website/build
 
   deploy-docs:
     needs: release
@@ -131,6 +138,6 @@ jobs:
       - name: Notify release completion
         run: |
           echo "✅ Release v${{ needs.release.outputs.version }} completed successfully!"
-          echo "📦 Package published to npm: https://www.npmjs.com/package/@nestjs-mcp/server"
+          echo "📦 Package published to npm: https://www.npmjs.com/package/nestjs-temporal-core"
           echo "📚 Documentation deployed to GitHub Pages"
           echo "🏷️ GitHub release created: https://github.com/${{ github.repository }}/releases/tag/v${{ needs.release.outputs.version }}"
