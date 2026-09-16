@@ -1,6 +1,13 @@
 name: Deploy Documentation
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "website/**"
+      - "src/**"
+      - "tsconfig.docs.json"
+      - ".github/workflows/deploy-docs.yml"
   workflow_dispatch:
 
 permissions:
@@ -28,13 +35,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Generate documentation
-        run: npm run docs:generate
+      - name: Install documentation site dependencies
+        run: npm run docs:install
+
+      - name: Build documentation site
+        run: npm run docs:build
 
       - name: Upload documentation artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./docs
+          path: ./website/build
 
   deploy-docs:
     needs: build-docs

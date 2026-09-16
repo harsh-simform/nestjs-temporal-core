@@ -39,10 +39,14 @@ lerna-debug.log*
 .env.local
 .env.*.local
 
-# Documentation
-/docs/generated
-/docs/temp
-/docs/API.md
+# Documentation site (Docusaurus)
+/website/node_modules
+/website/build
+/website/.docusaurus
+/website/docs/api
+
+# Old root docs/ (retired TypeDoc HTML output location, superseded by website/)
+/docs
 
 # Claude Code
 .claude/settings.local.json

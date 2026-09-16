@@ -1,0 +1,30 @@
+.features {
+  display: flex;
+  align-items: center;
+  padding: 3rem 0;
+  width: 100%;
+}
+
+.features :global(.row) {
+  row-gap: 1.5rem;
+}
+
+.featureCard {
+  height: 100%;
+  padding: 1.5rem;
+  border-radius: 12px;
+  border: 1px solid var(--ifm-color-emphasis-200);
+  background: var(--ifm-background-surface-color);
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.featureCard:hover {
+  border-color: var(--ifm-color-primary);
+  transform: translateY(-2px);
+}
+
+.featureEmoji {
+  font-size: 2rem;
+  line-height: 1;
+  margin-bottom: 0.75rem;
+}

@@ -281,9 +281,11 @@ npm run build             # Clean build
 npm run release           # Build + publish
 npm run release:dry       # Test release
 
-# Documentation
-npm run docs:generate     # Generate API docs
-npm run docs:serve        # Serve docs locally
+# Documentation (Docusaurus site in website/)
+npm run docs:install      # Install docs site dependencies
+npm run docs:dev          # Local preview with hot reload
+npm run docs:build        # Build static site (also generates API reference via TypeDoc)
+npm run docs:serve        # Serve the built site locally
 ```
 
 ### **Testing Patterns**
