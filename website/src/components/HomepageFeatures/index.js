@@ -33,6 +33,11 @@ const FeatureList = [
     title: 'Production Grade',
     description: 'Connection pooling, multi-worker support, graceful shutdown, and TLS for Temporal Cloud.',
   },
+  {
+    emoji: '🤖',
+    title: 'MCP Server',
+    description: 'Expose workflow and schedule operations to MCP-aware clients like Claude Code and Claude Desktop over stdio.',
+  },
 ];
 
 function Feature({ emoji, title, description }) {

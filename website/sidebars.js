@@ -9,6 +9,7 @@ const sidebars = {
     'advanced-usage',
     'best-practices',
     'health-monitoring',
+    'mcp-server',
     'troubleshooting',
     'migration-guide',
     {
