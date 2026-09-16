@@ -51,6 +51,7 @@ describe('TemporalWorkerManagerService', () => {
             getAllActivities: jest.fn().mockReturnValue({}),
             getActivityNames: jest.fn().mockReturnValue([]),
             getDiscoveredActivities: jest.fn().mockReturnValue(new Map()),
+            getDiscoveredWorkerControllers: jest.fn().mockReturnValue(new Map()),
         };
 
         (Worker.create as jest.Mock).mockResolvedValue(mockWorker);

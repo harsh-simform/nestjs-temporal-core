@@ -6,6 +6,7 @@ import {
     TEMPORAL_QUERY_METHOD,
     TEMPORAL_UPDATE_METHOD,
     TEMPORAL_CHILD_WORKFLOW,
+    TEMPORAL_WORKER_CONTROLLER,
 } from '../../src/constants';
 import 'reflect-metadata';
 
@@ -1685,6 +1686,139 @@ describe('TemporalMetadataAccessor', () => {
             const instance = new CollectionFallbackClass();
             const result = service.extractActivityMethods(instance);
             expect(result.methods.has('collectionMethod')).toBe(true);
+        });
+    });
+
+    describe('isWorkerController', () => {
+        it('should return true for a class with worker controller metadata on the constructor', () => {
+            class OrdersWorker {}
+            Reflect.defineMetadata(
+                TEMPORAL_WORKER_CONTROLLER,
+                { options: { taskQueue: 'orders' }, className: 'OrdersWorker' },
+                OrdersWorker,
+            );
+
+            expect(service.isWorkerController(OrdersWorker)).toBe(true);
+        });
+
+        it('should return true for a class with worker controller metadata only on the prototype', () => {
+            class ProtoWorker {}
+            Reflect.defineMetadata(
+                TEMPORAL_WORKER_CONTROLLER,
+                { options: { taskQueue: 'proto' }, className: 'ProtoWorker' },
+                ProtoWorker.prototype,
+            );
+
+            expect(service.isWorkerController(ProtoWorker)).toBe(true);
+        });
+
+        it('should return false for a class without worker controller metadata', () => {
+            class PlainClass {}
+            expect(service.isWorkerController(PlainClass)).toBe(false);
+        });
+
+        it('should handle errors gracefully', () => {
+            const invalidTarget = null as any;
+            expect(service.isWorkerController(invalidTarget)).toBe(false);
+        });
+    });
+
+    describe('isLocalActivity', () => {
+        it('should return true when the method was marked local: true', () => {
+            class TestClass {
+                quickLookup() {}
+            }
+            Reflect.defineMetadata(
+                TEMPORAL_ACTIVITY_METHOD,
+                { quickLookup: { name: 'quickLookup', local: true } },
+                TestClass.prototype,
+            );
+
+            expect(service.isLocalActivity(TestClass, 'quickLookup')).toBe(true);
+        });
+
+        it('should return false when the method is not marked local', () => {
+            class TestClass {
+                regularMethod() {}
+            }
+            Reflect.defineMetadata(
+                TEMPORAL_ACTIVITY_METHOD,
+                { regularMethod: { name: 'regularMethod' } },
+                TestClass.prototype,
+            );
+
+            expect(service.isLocalActivity(TestClass, 'regularMethod')).toBe(false);
+        });
+
+        it('should return false for a class without activity method metadata', () => {
+            class TestClass {
+                plainMethod() {}
+            }
+
+            expect(service.isLocalActivity(TestClass, 'plainMethod')).toBe(false);
+        });
+
+        it('should handle errors gracefully', () => {
+            expect(service.isLocalActivity(null as any, 'method')).toBe(false);
+        });
+    });
+
+    describe('getWorkerControllerOptions', () => {
+        it('should return the options stored by the decorator', () => {
+            class OrdersWorker {}
+            const options = { taskQueue: 'orders', workflowsPath: './dist/workflows/orders' };
+            Reflect.defineMetadata(
+                TEMPORAL_WORKER_CONTROLLER,
+                { options, className: 'OrdersWorker' },
+                OrdersWorker,
+            );
+
+            expect(service.getWorkerControllerOptions(OrdersWorker)).toEqual(options);
+        });
+
+        it('should return null for a class without worker controller metadata', () => {
+            class PlainClass {}
+            expect(service.getWorkerControllerOptions(PlainClass)).toBeNull();
+        });
+
+        it('should handle errors gracefully', () => {
+            const invalidTarget = null as any;
+            expect(service.getWorkerControllerOptions(invalidTarget)).toBeNull();
+        });
+    });
+
+    describe('getLocalActivityOptions', () => {
+        it('should return the localActivityOptions recorded on the method', () => {
+            class TestClass {
+                quickLookup() {}
+            }
+            const localActivityOptions = { scheduleToCloseTimeout: '2s' };
+            Reflect.defineMetadata(
+                TEMPORAL_ACTIVITY_METHOD,
+                { quickLookup: { name: 'quickLookup', local: true, localActivityOptions } },
+                TestClass.prototype,
+            );
+
+            expect(service.getLocalActivityOptions(TestClass, 'quickLookup')).toEqual(
+                localActivityOptions,
+            );
+        });
+
+        it('should return null when no options were recorded', () => {
+            class TestClass {
+                quickLookup() {}
+            }
+            Reflect.defineMetadata(
+                TEMPORAL_ACTIVITY_METHOD,
+                { quickLookup: { name: 'quickLookup', local: true } },
+                TestClass.prototype,
+            );
+
+            expect(service.getLocalActivityOptions(TestClass, 'quickLookup')).toBeNull();
+        });
+
+        it('should handle errors gracefully', () => {
+            expect(service.getLocalActivityOptions(null as any, 'method')).toBeNull();
         });
     });
 });

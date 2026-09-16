@@ -57,6 +57,16 @@ describe('Utils Index Module', () => {
             expect(Utils.isActivityMethod).toBeDefined();
             expect(typeof Utils.isActivityMethod).toBe('function');
         });
+
+        it('should export isLocalActivity function', () => {
+            expect(Utils.isLocalActivity).toBeDefined();
+            expect(typeof Utils.isLocalActivity).toBe('function');
+        });
+
+        it('should export getLocalActivityOptions function', () => {
+            expect(Utils.getLocalActivityOptions).toBeDefined();
+            expect(typeof Utils.getLocalActivityOptions).toBe('function');
+        });
     });
 
     describe('Integration Tests', () => {

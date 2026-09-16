@@ -245,6 +245,23 @@ describe('Activity Decorator', () => {
             expect(result).toBe(descriptor);
         });
 
+        it('should pass through local activity options unchanged', () => {
+            const descriptor = Object.getOwnPropertyDescriptor(
+                TestActivity.prototype,
+                'testMethod',
+            )!;
+            const options = {
+                local: true,
+                localActivityOptions: { scheduleToCloseTimeout: '2s' },
+            };
+
+            ActivityMethod(options)(TestActivity.prototype, 'testMethod', descriptor);
+
+            const metadata = Reflect.getMetadata(TEMPORAL_ACTIVITY_METHOD, descriptor.value);
+            expect(metadata.local).toBe(true);
+            expect(metadata.localActivityOptions).toEqual({ scheduleToCloseTimeout: '2s' });
+        });
+
         it('should handle options with valid name but trimmed', () => {
             const descriptor = Object.getOwnPropertyDescriptor(
                 TestActivity.prototype,

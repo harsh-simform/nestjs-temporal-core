@@ -42,6 +42,7 @@ describe('TemporalDiscoveryService - Additional Branch Coverage', () => {
 
         const mockMetadataAccessor = {
             isActivity: jest.fn().mockReturnValue(false),
+            isWorkerController: jest.fn().mockReturnValue(false),
             validateActivityClass: jest.fn().mockReturnValue({ isValid: true, issues: [] }),
             extractActivityMethods: jest.fn().mockReturnValue({ methods: new Map(), errors: [] }),
         };

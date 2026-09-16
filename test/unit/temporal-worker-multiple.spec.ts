@@ -19,6 +19,7 @@ describe('TemporalWorkerManagerService - Multiple Workers', () => {
             }),
             getAllActivities: jest.fn().mockReturnValue({}),
             getHealthStatus: jest.fn().mockReturnValue({ isComplete: true }),
+            getDiscoveredWorkerControllers: jest.fn().mockReturnValue(new Map()),
         };
 
         mockConnection = {
@@ -410,6 +411,7 @@ describe('TemporalWorkerManagerService - Multiple Workers', () => {
                     },
                 ],
             ]);
+            (service as any).workerDefinitions = new Map([['queue-1', workerDefinitions[0]]]);
 
             const startWorkerSpy = jest
                 .spyOn(service, 'startWorkerByTaskQueue')

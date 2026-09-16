@@ -22,6 +22,7 @@ describe('TemporalWorkerManagerService - Edge Cases', () => {
                 activity2: jest.fn(),
             }),
             getHealthStatus: jest.fn().mockReturnValue({ isComplete: true }),
+            getDiscoveredWorkerControllers: jest.fn().mockReturnValue(new Map()),
         };
 
         mockConnection = {

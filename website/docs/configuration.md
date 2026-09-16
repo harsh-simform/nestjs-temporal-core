@@ -115,6 +115,40 @@ export class WorkerManagementService {
 }
 ```
 
+## Declarative Worker Registration with @TemporalWorkerController
+
+Instead of centralizing every task queue's config in `TemporalModule.register()`, you can declare a worker next to the code it configures with `@TemporalWorkerController` — the same idea as `@Controller` declaring a route group. It's discovered automatically the same way `@Activity` classes are, and produces an entry equivalent to one item in `TemporalOptions.workers`.
+
+```typescript
+import { TemporalWorkerController } from 'nestjs-temporal-core';
+import { OrderActivities } from './order.activities';
+
+@TemporalWorkerController({
+  taskQueue: 'orders',
+  workflowsPath: require.resolve('./workflows/orders'),
+  activityClasses: [OrderActivities],
+  autoStart: true,
+})
+export class OrdersWorker {}
+```
+
+The decorated class must still be registered as a NestJS provider — `DiscoveryModule` only sees registered providers/controllers:
+
+```typescript
+@Module({
+  imports: [TemporalModule.register({ connection: { address: 'localhost:7233' } })],
+  providers: [OrdersWorker, OrderActivities],
+})
+export class OrdersModule {}
+```
+
+Notes:
+
+- `TemporalOptions.workers` and `@TemporalWorkerController` can be combined freely — workers from both sources are merged by task queue.
+- If a task queue appears in both an explicit `workers` entry and a `@TemporalWorkerController`, the explicit entry wins (a warning is logged).
+- Two `@TemporalWorkerController` classes declaring the **same** task queue is a startup error, since that's always a configuration mistake.
+- Omitting `activityClasses` uses all discovered activities, same as `WorkerDefinition`.
+
 ## Manual Worker Creation (Advanced)
 
 For users who need full control, you can access the native Temporal connection to create custom workers:

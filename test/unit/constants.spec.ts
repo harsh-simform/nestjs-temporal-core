@@ -24,6 +24,8 @@ import {
     TIMEOUTS,
     // Retry Policy Presets
     RETRY_POLICIES,
+    // Local Activity Presets
+    LOCAL_ACTIVITY_PRESETS,
     // Enums
     WorkflowIdConflictPolicy,
     WorkflowIdReusePolicy,
@@ -165,6 +167,33 @@ describe('Constants', () => {
         it('should be readonly', () => {
             expect(() => {
                 (RETRY_POLICIES as any).AGGRESSIVE = {};
+            }).toThrow();
+        });
+    });
+
+    describe('LOCAL_ACTIVITY_PRESETS', () => {
+        it('should export all local activity presets', () => {
+            expect(LOCAL_ACTIVITY_PRESETS.QUICK).toBeDefined();
+            expect(LOCAL_ACTIVITY_PRESETS.STANDARD).toBeDefined();
+            expect(LOCAL_ACTIVITY_PRESETS.CONSERVATIVE).toBeDefined();
+        });
+
+        it('should have a scheduleToCloseTimeout and a retry policy on every preset', () => {
+            Object.values(LOCAL_ACTIVITY_PRESETS).forEach((preset) => {
+                expect(typeof preset.scheduleToCloseTimeout).toBe('string');
+                expect(preset.retry).toBeDefined();
+            });
+        });
+
+        it('should reuse RETRY_POLICIES entries rather than duplicating them', () => {
+            expect(LOCAL_ACTIVITY_PRESETS.QUICK.retry).toBe(RETRY_POLICIES.QUICK);
+            expect(LOCAL_ACTIVITY_PRESETS.STANDARD.retry).toBe(RETRY_POLICIES.STANDARD);
+            expect(LOCAL_ACTIVITY_PRESETS.CONSERVATIVE.retry).toBe(RETRY_POLICIES.CONSERVATIVE);
+        });
+
+        it('should be readonly', () => {
+            expect(() => {
+                (LOCAL_ACTIVITY_PRESETS as any).QUICK = {};
             }).toThrow();
         });
     });

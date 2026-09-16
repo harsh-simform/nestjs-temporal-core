@@ -52,6 +52,7 @@ describe('TemporalWorkerManagerService - Additional Branch Coverage', () => {
             getHealthStatus: jest.fn().mockReturnValue({ isComplete: true, status: 'healthy' }),
             getAllActivities: jest.fn().mockReturnValue({}),
             getActivityNames: jest.fn().mockReturnValue([]),
+            getDiscoveredWorkerControllers: jest.fn().mockReturnValue(new Map()),
         };
 
         (Worker.create as jest.Mock).mockResolvedValue(mockWorker);

@@ -12,6 +12,7 @@ import {
     ActivityExecutionResult,
     ComponentDiscoveryResult,
     WrapperProcessingResult,
+    TemporalWorkerControllerOptions,
 } from '../interfaces';
 import { createLogger, TemporalLogger } from '../utils/logger';
 import { TemporalMetadataAccessor } from './temporal-metadata.service';
@@ -31,6 +32,10 @@ import { TemporalMetadataAccessor } from './temporal-metadata.service';
 export class TemporalDiscoveryService implements OnModuleInit {
     private readonly logger: TemporalLogger;
     private readonly discoveredActivities = new Map<string, DiscoveredActivity>();
+    private readonly discoveredWorkerControllers = new Map<
+        string,
+        TemporalWorkerControllerOptions
+    >();
     private isDiscoveryComplete = false;
     private discoveryStartTime: Date | null = null;
     private lastDiscoveryTime: Date | null = null;
@@ -71,6 +76,13 @@ export class TemporalDiscoveryService implements OnModuleInit {
      */
     getDiscoveredActivities(): Map<string, DiscoveredActivity> {
         return new Map(this.discoveredActivities);
+    }
+
+    /**
+     * Get all discovered `@TemporalWorkerController` definitions, keyed by task queue
+     */
+    getDiscoveredWorkerControllers(): Map<string, TemporalWorkerControllerOptions> {
+        return new Map(this.discoveredWorkerControllers);
     }
 
     /**
@@ -211,7 +223,11 @@ export class TemporalDiscoveryService implements OnModuleInit {
             `Scanning ${providers.length} providers and ${controllers.length} controllers`,
         );
 
-        const allWrappers = [...providers, ...controllers];
+        const allWrappers = [...providers, ...controllers] as NestJSWrapper[];
+
+        // Worker controllers are validated strictly (unlike activities below) -
+        // a duplicate or invalid taskQueue is a startup error, not a per-item warning.
+        this.discoverWorkerControllers(allWrappers);
 
         for (const wrapper of allWrappers) {
             try {
@@ -236,6 +252,41 @@ export class TemporalDiscoveryService implements OnModuleInit {
             errors,
             duration,
         };
+    }
+
+    /**
+     * Scan wrappers for `@TemporalWorkerController` classes and register them by
+     * task queue. Throws on a missing/empty taskQueue or a taskQueue declared by
+     * more than one controller class - these are startup errors, not warnings.
+     */
+    private discoverWorkerControllers(wrappers: NestJSWrapper[]): void {
+        for (const wrapper of wrappers) {
+            const instance = wrapper.instance;
+            const metatype = wrapper.metatype;
+
+            if (!instance || !metatype || !this.metadataAccessor.isWorkerController(metatype)) {
+                continue;
+            }
+
+            const options = this.metadataAccessor.getWorkerControllerOptions(metatype);
+            if (!options || !options.taskQueue || options.taskQueue.trim().length === 0) {
+                throw new Error(
+                    `@TemporalWorkerController on ${metatype.name} is missing a valid taskQueue`,
+                );
+            }
+
+            if (this.discoveredWorkerControllers.has(options.taskQueue)) {
+                throw new Error(
+                    `Duplicate task queue '${options.taskQueue}' declared by multiple ` +
+                        '@TemporalWorkerController classes',
+                );
+            }
+
+            this.discoveredWorkerControllers.set(options.taskQueue, options);
+            this.logger.debug(
+                `Discovered worker controller '${metatype.name}' for task queue '${options.taskQueue}'`,
+            );
+        }
     }
 
     private async processWrapper(wrapper: NestJSWrapper): Promise<WrapperProcessingResult> {
@@ -393,6 +444,7 @@ export class TemporalDiscoveryService implements OnModuleInit {
 
     private clearDiscoveredComponents(): void {
         this.discoveredActivities.clear();
+        this.discoveredWorkerControllers.clear();
         this.isDiscoveryComplete = false;
         this.discoveryStartTime = null;
         this.lastDiscoveryTime = null;
