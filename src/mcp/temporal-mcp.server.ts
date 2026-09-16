@@ -24,6 +24,7 @@ function serialize(value: unknown): string {
 @Injectable()
 export class TemporalMcpServer implements OnModuleInit {
     private readonly logger: TemporalLogger;
+    private readonly options: TemporalMcpModuleOptions;
     readonly server: McpServer;
     private connected = false;
 
@@ -31,8 +32,9 @@ export class TemporalMcpServer implements OnModuleInit {
         private readonly temporalService: TemporalService,
         @Optional()
         @Inject(TEMPORAL_MCP_MODULE_OPTIONS)
-        private readonly options: TemporalMcpModuleOptions = {},
+        options?: TemporalMcpModuleOptions,
     ) {
+        this.options = options ?? {};
         this.logger = createLogger(TemporalMcpServer.name);
         this.server = new McpServer({
             name: this.options.name || 'nestjs-temporal-core',

@@ -181,6 +181,41 @@ describe('TemporalMcpServer', () => {
         expect(result.content[0].text).toBe('no client');
     });
 
+    it('list_schedules falls back to a generic error when none is provided', async () => {
+        scheduleService.listSchedules.mockReturnValue({ success: false });
+
+        const result = await registeredTools.get('list_schedules')!({});
+
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toBe('Schedule client unavailable');
+    });
+
+    it('surfaces non-Error rejections as their string form', async () => {
+        (temporalService.startWorkflow as jest.Mock).mockRejectedValue('boom-string');
+
+        const result = await registeredTools.get('start_workflow')!({ workflowType: 'x' });
+
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toBe('boom-string');
+    });
+
+    it('serializes Error values nested in a successful result', async () => {
+        (temporalService.terminateWorkflow as jest.Mock).mockResolvedValue({
+            success: false,
+            workflowId: 'wf-1',
+            error: new Error('not found'),
+        });
+
+        const result = await registeredTools.get('terminate_workflow')!({ workflowId: 'wf-1' });
+
+        expect(result.isError).toBeUndefined();
+        expect(JSON.parse(result.content[0].text)).toEqual({
+            success: false,
+            workflowId: 'wf-1',
+            error: { name: 'Error', message: 'not found' },
+        });
+    });
+
     it('describe_schedule forwards to the schedule service', async () => {
         scheduleService.describeSchedule.mockResolvedValue({
             success: true,
