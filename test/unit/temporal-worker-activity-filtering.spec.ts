@@ -101,6 +101,7 @@ describe('TemporalWorkerManagerService - Activity Filtering Bug Fix', () => {
                 sendSms: mockActivitiesMap.get('sendSms')!.handler,
             }),
             getDiscoveredActivities: jest.fn().mockReturnValue(mockActivitiesMap),
+            getDiscoveredWorkerControllers: jest.fn().mockReturnValue(new Map()),
             getActivityNames: jest
                 .fn()
                 .mockReturnValue([

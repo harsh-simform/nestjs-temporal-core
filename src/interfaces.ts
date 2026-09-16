@@ -194,6 +194,27 @@ export interface WorkerDefinition {
 }
 
 /**
+ * Declarative, class-based worker registration — the decorator-driven
+ * equivalent of one entry in `TemporalOptions.workers`. Applied via
+ * `@TemporalWorkerController`, discovered the same way `@Activity` classes
+ * are (the decorated class must still be registered as a NestJS provider),
+ * and converted into a `WorkerDefinition` at worker-assembly time. An
+ * explicit entry for the same `taskQueue` in `TemporalOptions.workers` takes
+ * precedence over a controller-derived one.
+ *
+ * @example
+ * ```typescript
+ * @TemporalWorkerController({
+ *   taskQueue: 'orders',
+ *   workflowsPath: './dist/workflows/orders',
+ *   activityClasses: [OrderActivities],
+ * })
+ * export class OrdersWorker {}
+ * ```
+ */
+export interface TemporalWorkerControllerOptions extends WorkerDefinition {}
+
+/**
  * Main configuration options for Temporal module initialization.
  * Supports both client-only and worker configurations.
  * Now supports multiple workers via the `workers` array property.
@@ -485,6 +506,35 @@ export interface ActivityMethodMetadata {
 }
 
 /**
+ * Library-owned mirror of the Temporal SDK's `LocalActivityOptions`
+ * (`@temporalio/workflow`), used to configure a `proxyLocalActivities()`
+ * call from *inside* a workflow file. Kept as a separate interface rather
+ * than a re-export so an SDK type change doesn't silently ripple into this
+ * package's public API across a Temporal SDK bump.
+ *
+ * One of `scheduleToCloseTimeout` or `startToCloseTimeout` is required by
+ * the SDK at runtime — not enforced at the type level here, since this is a
+ * plain options bag consumers may build up incrementally (e.g. starting
+ * from a `LOCAL_ACTIVITY_PRESETS` entry).
+ */
+export interface LocalActivityOptions {
+    /** Total time from schedule to completion, including retries. */
+    scheduleToCloseTimeout?: Duration;
+    /** Time allowed for a single attempt. */
+    startToCloseTimeout?: Duration;
+    /** Time allowed for the activity to be scheduled onto a worker. */
+    scheduleToStartTimeout?: Duration;
+    retry?: RetryPolicy;
+    /**
+     * Retries whose backoff would exceed this threshold fall back to a
+     * server-side timer instead of an in-memory one.
+     * @default '1m'
+     */
+    localRetryThreshold?: Duration;
+    cancellationType?: 'TRY_CANCEL' | 'WAIT_CANCELLATION_COMPLETED' | 'ABANDON';
+}
+
+/**
  * Options for configuring activity methods via @ActivityMethod decorator.
  *
  * @example
@@ -503,6 +553,17 @@ export interface ActivityMethodOptions {
     name?: string;
     timeout?: string | number;
     maxRetries?: number;
+    /**
+     * Marks this activity as a candidate for `proxyLocalActivities()` in
+     * workflow code. Purely informational — this library never calls
+     * `proxyLocalActivities` itself (that happens inside the v8-isolated
+     * workflow sandbox); it only keeps the activity's name/options as a
+     * single source of truth so the workflow-side call and the worker-side
+     * registration never drift.
+     */
+    local?: boolean;
+    /** Options to pass into `proxyLocalActivities()` for this activity. */
+    localActivityOptions?: Partial<LocalActivityOptions>;
 }
 
 /**

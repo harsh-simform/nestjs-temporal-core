@@ -39,6 +39,66 @@ export class OrderActivity {
 }
 ```
 
+## Local Activities
+
+Temporal's SDK also supports **local activities** (`proxyLocalActivities`) — in-process execution with no per-attempt server round-trip, called from *inside* a workflow file. Because workflow files run in a v8-isolated sandbox with no DI and no NestJS imports, this library never calls `proxyLocalActivities()` on your behalf; the call is always written by hand in your workflow file. What it *does* give you is a single source of truth for the activity's name and options, so the workflow-side call and the worker-side registration never drift.
+
+A workflow file can never value-import an `@Injectable()` activity class — that would pull the class's whole NestJS/DI graph into the workflow bundle. So instead of decorator metadata, define the options once as a plain, NestJS-free constant and import that same constant on both sides:
+
+```typescript
+// activities/pricing.local-activity-options.ts (plain object, no NestJS imports — shared by both sides)
+export const QUICK_PRICE_LOOKUP_OPTIONS = { scheduleToCloseTimeout: '2s' };
+```
+
+```typescript
+// activities/pricing.activity.ts
+import { Activity, ActivityMethod } from 'nestjs-temporal-core';
+import { QUICK_PRICE_LOOKUP_OPTIONS } from './pricing.local-activity-options';
+
+@Injectable()
+@Activity({ name: 'pricing-activities' })
+export class PricingActivity {
+  @ActivityMethod({
+    name: 'quickPriceLookup',
+    local: true,
+    localActivityOptions: QUICK_PRICE_LOOKUP_OPTIONS,
+  })
+  quickPriceLookup(sku: string): number {
+    return this.cache.get(sku); // in-memory, no I/O — a good local-activity fit
+  }
+}
+```
+
+Then, in your workflow file, call `proxyLocalActivities` with `buildLocalActivityProxyOptions`, passing that same constant:
+
+```typescript
+// workflows/pricing.workflow.ts (runs in the sandbox — no NestJS imports here)
+import { proxyLocalActivities } from '@temporalio/workflow';
+import { buildLocalActivityProxyOptions } from 'nestjs-temporal-core/workflow-utils';
+import { QUICK_PRICE_LOOKUP_OPTIONS } from '../activities/pricing.local-activity-options';
+import type { PricingActivity } from '../activities/pricing.activity';
+
+const { quickPriceLookup } = proxyLocalActivities<{ quickPriceLookup: PricingActivity['quickPriceLookup'] }>(
+  buildLocalActivityProxyOptions(QUICK_PRICE_LOOKUP_OPTIONS),
+);
+```
+
+`buildLocalActivityProxyOptions` is exported from the `nestjs-temporal-core/workflow-utils` subpath rather than the main package entry, and is a pure function with zero NestJS/DI imports anywhere in its own module graph — safe for the sandbox. It just merges the options you pass in over a preset baseline (`LOCAL_ACTIVITY_PRESETS.STANDARD` by default, or pass a specific preset as the second argument).
+
+If you don't need per-activity options at all, skip the shared constant and reference a preset directly:
+
+```typescript
+import { LOCAL_ACTIVITY_PRESETS } from 'nestjs-temporal-core';
+
+const { quickPriceLookup } = proxyLocalActivities<{ quickPriceLookup: PricingActivity['quickPriceLookup'] }>(
+  LOCAL_ACTIVITY_PRESETS.QUICK,
+);
+```
+
+`LOCAL_ACTIVITY_PRESETS` (`QUICK`, `STANDARD`, `CONSERVATIVE`) are frozen option bags — the same convention as `TIMEOUTS`/`RETRY_POLICIES` — so you don't have to repeat literals across the activity and workflow files. `LocalActivityOptions` (the type behind `localActivityOptions`) is a library-owned mirror of the SDK's shape, so a Temporal SDK bump can't silently change this package's public API.
+
+**When to use local activities:** short (sub-second to a few seconds), same-binary, no-heartbeat-needed, idempotent work only — a cache lookup, a small computation. They have no heartbeating (a stuck one delays signal/update processing instead), and a worker crash mid-Workflow-Task re-runs the **entire chain** of local activities in that task, not just the failed one. For most production workloads, regular `@ActivityMethod` activities remain the recommended default — reach for local activities only when the round-trip overhead is the actual bottleneck.
+
 ## Workflows
 
 Workflows are **pure Temporal functions** (NOT NestJS services) that orchestrate activities. They must be deterministic and use Temporal's workflow APIs.

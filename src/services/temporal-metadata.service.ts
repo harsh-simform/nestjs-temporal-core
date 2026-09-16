@@ -6,6 +6,7 @@ import {
     TEMPORAL_QUERY_METHOD,
     TEMPORAL_UPDATE_METHOD,
     TEMPORAL_CHILD_WORKFLOW,
+    TEMPORAL_WORKER_CONTROLLER,
 } from '../constants';
 import { createLogger, TemporalLogger } from '../utils/logger';
 import {
@@ -19,6 +20,8 @@ import {
     QueryMethodExtractionResult,
     UpdateMethodExtractionResult,
     ChildWorkflowExtractionResult,
+    TemporalWorkerControllerOptions,
+    LocalActivityOptions,
 } from '../interfaces';
 
 /**
@@ -481,6 +484,67 @@ export class TemporalMetadataAccessor {
                 workflows: {},
                 errors: [{ workflow: 'child', error: errorMessage }],
             };
+        }
+    }
+
+    /**
+     * Check if a class is marked with `@TemporalWorkerController`
+     */
+    isWorkerController(target: Function): boolean {
+        try {
+            return (
+                Reflect.hasMetadata(TEMPORAL_WORKER_CONTROLLER, target) ||
+                Reflect.hasMetadata(TEMPORAL_WORKER_CONTROLLER, target.prototype)
+            );
+        } catch {
+            return false;
+        }
+    }
+
+    /**
+     * Get the `@TemporalWorkerController` options from a class
+     */
+    getWorkerControllerOptions(target: Function): TemporalWorkerControllerOptions | null {
+        try {
+            const metadata =
+                Reflect.getMetadata(TEMPORAL_WORKER_CONTROLLER, target) ||
+                Reflect.getMetadata(TEMPORAL_WORKER_CONTROLLER, target.prototype);
+            return (metadata?.options as TemporalWorkerControllerOptions) ?? null;
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * Check whether an `@ActivityMethod` was marked `local: true` for
+     * `proxyLocalActivities()` use in workflow code. Reads the same
+     * collection metadata `extractActivityMethods` populates, so it works
+     * for methods declared with the real `@ActivityMethod()` decorator.
+     */
+    isLocalActivity(target: Function, methodName: string): boolean {
+        try {
+            const activityMethods = Reflect.getMetadata(TEMPORAL_ACTIVITY_METHOD, target.prototype);
+            return Boolean(activityMethods?.[methodName]?.local);
+        } catch {
+            return false;
+        }
+    }
+
+    /**
+     * Get the `localActivityOptions` recorded on an `@ActivityMethod`
+     */
+    getLocalActivityOptions(
+        target: Function,
+        methodName: string,
+    ): Partial<LocalActivityOptions> | null {
+        try {
+            const activityMethods = Reflect.getMetadata(TEMPORAL_ACTIVITY_METHOD, target.prototype);
+            return (
+                (activityMethods?.[methodName]
+                    ?.localActivityOptions as Partial<LocalActivityOptions>) ?? null
+            );
+        } catch {
+            return null;
         }
     }
 

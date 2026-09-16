@@ -4,6 +4,8 @@ import {
     getActivityMetadata,
     isActivityMethod,
     getActivityMethodMetadata,
+    isLocalActivity,
+    getLocalActivityOptions,
 } from '../../src/utils/metadata';
 import { TEMPORAL_ACTIVITY, TEMPORAL_ACTIVITY_METHOD } from '../../src/constants';
 import { ActivityOptions, ActivityMethodOptions } from '../../src/interfaces';
@@ -118,6 +120,86 @@ describe('Metadata Utilities', () => {
             it('should return undefined for null/undefined input', () => {
                 expect(getActivityMethodMetadata(null as any)).toBeUndefined();
                 expect(getActivityMethodMetadata(undefined as any)).toBeUndefined();
+            });
+        });
+    });
+
+    describe('Local Activity Metadata', () => {
+        function defineActivityMethod(
+            target: Function,
+            methodName: string,
+            options: ActivityMethodOptions,
+        ): void {
+            Reflect.defineMetadata(
+                TEMPORAL_ACTIVITY_METHOD,
+                { [methodName]: { name: methodName, ...options } },
+                target.prototype,
+            );
+        }
+
+        describe('isLocalActivity', () => {
+            it('should return true when the method was marked local: true', () => {
+                class TestClass {
+                    quickLookup() {}
+                }
+                defineActivityMethod(TestClass, 'quickLookup', { local: true });
+
+                expect(isLocalActivity(TestClass, 'quickLookup')).toBe(true);
+            });
+
+            it('should return false when the method has metadata but is not local', () => {
+                class TestClass {
+                    regularMethod() {}
+                }
+                defineActivityMethod(TestClass, 'regularMethod', {});
+
+                expect(isLocalActivity(TestClass, 'regularMethod')).toBe(false);
+            });
+
+            it('should return false when the class has no activity method metadata', () => {
+                class TestClass {
+                    plainMethod() {}
+                }
+
+                expect(isLocalActivity(TestClass, 'plainMethod')).toBe(false);
+            });
+
+            it('should return false for null/undefined target or methodName', () => {
+                class TestClass {}
+                expect(isLocalActivity(null as any, 'method')).toBe(false);
+                expect(isLocalActivity(TestClass, undefined as any)).toBe(false);
+            });
+        });
+
+        describe('getLocalActivityOptions', () => {
+            it('should return the recorded localActivityOptions', () => {
+                class TestClass {
+                    quickLookup() {}
+                }
+                const localActivityOptions = { scheduleToCloseTimeout: '2s' };
+                defineActivityMethod(TestClass, 'quickLookup', {
+                    local: true,
+                    localActivityOptions,
+                });
+
+                expect(getLocalActivityOptions(TestClass, 'quickLookup')).toEqual(
+                    localActivityOptions,
+                );
+            });
+
+            it('should return undefined when no options were recorded', () => {
+                class TestClass {
+                    quickLookup() {}
+                }
+                defineActivityMethod(TestClass, 'quickLookup', { local: true });
+
+                expect(getLocalActivityOptions(TestClass, 'quickLookup')).toBeUndefined();
+            });
+
+            it('should return undefined for null/undefined target or methodName', () => {
+                class TestClass {}
+                expect(getLocalActivityOptions(null as any, 'method')).toBeUndefined();
+                expect(getLocalActivityOptions(TestClass, undefined as any)).toBeUndefined();
             });
         });
     });

@@ -4,10 +4,10 @@
 
 Enterprise-ready [Temporal.io](https://temporal.io/) workflow orchestration for NestJS — auto-discovery, declarative decorators, typed workflow proxies, and built-in monitoring.
 
-![Statements](https://img.shields.io/badge/statements-99.57%25-brightgreen.svg?style=flat)
-![Branches](https://img.shields.io/badge/branches-93.45%25-brightgreen.svg?style=flat)
-![Functions](https://img.shields.io/badge/functions-97.91%25-brightgreen.svg?style=flat)
-![Lines](https://img.shields.io/badge/lines-99.68%25-brightgreen.svg?style=flat)
+![Statements](https://img.shields.io/badge/statements-99.6%25-brightgreen.svg?style=flat)
+![Branches](https://img.shields.io/badge/branches-93.57%25-brightgreen.svg?style=flat)
+![Functions](https://img.shields.io/badge/functions-97.21%25-brightgreen.svg?style=flat)
+![Lines](https://img.shields.io/badge/lines-99.7%25-brightgreen.svg?style=flat)
 [![codecov](https://codecov.io/gh/harsh-simform/nestjs-temporal-core/branch/main/graph/badge.svg?token=BYSE45L6DI)](https://codecov.io/gh/harsh-simform/nestjs-temporal-core)
 
 [**📖 Full Documentation**](https://harsh-simform.github.io/nestjs-temporal-core/) • [NPM](https://www.npmjs.com/package/nestjs-temporal-core) • [GitHub](https://github.com/harsh-simform/nestjs-temporal-core) • [Example Project](https://github.com/harsh-simform/nestjs-temporal-core-example)

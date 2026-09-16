@@ -11,5 +11,8 @@
 // Activity decorators
 export { Activity, ActivityMethod } from './activity.decorator';
 
+// Worker decorators
+export { TemporalWorkerController } from './worker-controller.decorator';
+
 // Workflow decorators
 export { SignalMethod, QueryMethod, UpdateMethod, ChildWorkflow } from './workflow.decorator';

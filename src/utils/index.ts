@@ -20,6 +20,8 @@ export {
     getActivityMethodMetadata,
     isActivity,
     isActivityMethod,
+    isLocalActivity,
+    getLocalActivityOptions,
 } from './metadata';
 
 // Workflow proxy token helpers

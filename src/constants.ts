@@ -29,6 +29,7 @@ export const TEMPORAL_QUERY_METHOD = 'TEMPORAL_QUERY_METHOD';
 export const TEMPORAL_SIGNAL_METHOD = 'TEMPORAL_SIGNAL_METHOD';
 export const TEMPORAL_UPDATE_METHOD = 'TEMPORAL_UPDATE_METHOD';
 export const TEMPORAL_CHILD_WORKFLOW = 'TEMPORAL_CHILD_WORKFLOW';
+export const TEMPORAL_WORKER_CONTROLLER = 'TEMPORAL_WORKER_CONTROLLER';
 export const WORKFLOW_CONTEXT_METADATA = 'workflow:context';
 export const WORKFLOW_ID_METADATA = 'workflow:id';
 export const WORKFLOW_PARAMS_METADATA = 'workflow:params';
@@ -84,6 +85,28 @@ export const RETRY_POLICIES = Object.freeze({
         initialInterval: '5s',
         maximumInterval: '60s',
         backoffCoefficient: 2.0,
+    },
+});
+
+// ==========================================
+// Local Activity Presets
+// ==========================================
+// For `proxyLocalActivities()` calls in workflow files - see `LocalActivityOptions`.
+// Local activities suit short (~seconds), same-binary, no-heartbeat-needed,
+// idempotent work only; regular activities remain the default for everything else.
+export const LOCAL_ACTIVITY_PRESETS = Object.freeze({
+    QUICK: {
+        scheduleToCloseTimeout: '2s',
+        retry: RETRY_POLICIES.QUICK,
+    },
+    STANDARD: {
+        scheduleToCloseTimeout: '10s',
+        retry: RETRY_POLICIES.STANDARD,
+    },
+    CONSERVATIVE: {
+        scheduleToCloseTimeout: '30s',
+        retry: RETRY_POLICIES.CONSERVATIVE,
+        localRetryThreshold: '1m',
     },
 });
 

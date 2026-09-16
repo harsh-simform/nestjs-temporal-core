@@ -55,6 +55,10 @@ export class TemporalWorkerManagerService
 
     // Multiple workers support
     private readonly workers = new Map<string, WorkerInstance>();
+    // Definitions behind every created worker instance (explicit `options.workers`,
+    // `@TemporalWorkerController`-derived, or dynamically `registerWorker()`-ed) -
+    // the single lookup source for autoStart/autoRestart/maxRestarts and recreation.
+    private readonly workerDefinitions = new Map<string, WorkerDefinition>();
 
     // Shared resources
     private connection: NativeConnection | null = null;
@@ -97,8 +101,15 @@ export class TemporalWorkerManagerService
         try {
             this.logger.verbose('Initializing Temporal worker manager...');
 
+            // Worker controllers are discovered by TemporalDiscoveryService's own
+            // onModuleInit; wait for it so we know whether any exist before deciding
+            // which init path to take.
+            await this.waitForDiscoveryCompletion();
+            const hasWorkerControllers =
+                this.discoveryService.getDiscoveredWorkerControllers().size > 0;
+
             // Check if we should use multiple workers mode
-            if (this.options.workers && this.options.workers.length > 0) {
+            if ((this.options.workers && this.options.workers.length > 0) || hasWorkerControllers) {
                 await this.initializeMultipleWorkers();
                 return;
             }
@@ -142,13 +153,14 @@ export class TemporalWorkerManagerService
 
     async onApplicationBootstrap(): Promise<void> {
         try {
-            // Start multiple workers if configured
-            if (this.options.workers && this.options.workers.length > 0) {
+            // Start multiple workers if configured (explicit `options.workers` and/or
+            // `@TemporalWorkerController`-derived)
+            if (this.workers.size > 0) {
                 this.logger.info('Starting configured workers...');
                 const startPromises: Promise<void>[] = [];
 
                 for (const [taskQueue] of this.workers.entries()) {
-                    const workerDef = this.options.workers.find((w) => w.taskQueue === taskQueue);
+                    const workerDef = this.workerDefinitions.get(taskQueue);
                     if (workerDef?.autoStart !== false) {
                         startPromises.push(
                             this.startWorkerByTaskQueue(taskQueue).catch((error) => {
@@ -223,7 +235,29 @@ export class TemporalWorkerManagerService
      * Initialize multiple workers from configuration
      */
     private async initializeMultipleWorkers(): Promise<void> {
-        this.logger.info(`Initializing ${this.options.workers!.length} workers...`);
+        const explicitDefinitions = this.options.workers ?? [];
+        const explicitTaskQueues = new Set(explicitDefinitions.map((w) => w.taskQueue));
+
+        // An explicit `options.workers` entry wins over a same-taskQueue
+        // `@TemporalWorkerController`-derived one - warn rather than error, since
+        // this is a deliberate override, not a genuine conflict.
+        const controllerDefinitions: WorkerDefinition[] = [];
+        for (const [
+            taskQueue,
+            controllerOptions,
+        ] of this.discoveryService.getDiscoveredWorkerControllers()) {
+            if (explicitTaskQueues.has(taskQueue)) {
+                this.logger.warn(
+                    `Explicit worker definition for task queue '${taskQueue}' overrides the ` +
+                        '@TemporalWorkerController-derived definition',
+                );
+                continue;
+            }
+            controllerDefinitions.push({ ...controllerOptions });
+        }
+
+        const allDefinitions = [...explicitDefinitions, ...controllerDefinitions];
+        this.logger.info(`Initializing ${allDefinitions.length} workers...`);
 
         // Ensure connection is established first
         await this.createConnection();
@@ -233,7 +267,7 @@ export class TemporalWorkerManagerService
             return;
         }
 
-        for (const workerDef of this.options.workers!) {
+        for (const workerDef of allDefinitions) {
             try {
                 await this.createWorkerFromDefinition(workerDef);
             } catch (error) {
@@ -314,6 +348,7 @@ export class TemporalWorkerManagerService
 
         // Store worker instance
         this.workers.set(workerDef.taskQueue, workerInstance);
+        this.workerDefinitions.set(workerDef.taskQueue, workerDef);
 
         this.logger.info(`Created worker '${workerDef.taskQueue}' (${activities.size} activities)`);
 
@@ -465,7 +500,7 @@ export class TemporalWorkerManagerService
         const workerInstance = this.workers.get(taskQueue);
         if (!workerInstance) return;
 
-        const workerDef = this.options.workers?.find((w) => w.taskQueue === taskQueue);
+        const workerDef = this.workerDefinitions.get(taskQueue);
         const maxRestarts = workerDef?.maxRestarts ?? this.options.maxRestarts ?? 3;
 
         workerInstance.worker.run().catch((error) => {
@@ -507,7 +542,7 @@ export class TemporalWorkerManagerService
         this.logger.info(`Auto-restarting worker '${taskQueue}'...`);
 
         try {
-            const workerDef = this.options.workers?.find((w) => w.taskQueue === taskQueue);
+            const workerDef = this.workerDefinitions.get(taskQueue);
             if (!workerDef) {
                 throw new Error(`Worker definition for '${taskQueue}' not found`);
             }
@@ -1249,6 +1284,7 @@ export class TemporalWorkerManagerService
                 // Wait for all workers to shutdown in parallel
                 await Promise.allSettled(shutdownPromises);
                 this.workers.clear();
+                this.workerDefinitions.clear();
                 this.logger.info('All workers shut down successfully');
             }
 

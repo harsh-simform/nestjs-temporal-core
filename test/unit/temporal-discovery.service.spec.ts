@@ -50,6 +50,8 @@ describe('TemporalDiscoveryService', () => {
 
         const mockMetadataAccessor = {
             isActivity: jest.fn().mockReturnValue(false),
+            isWorkerController: jest.fn().mockReturnValue(false),
+            getWorkerControllerOptions: jest.fn().mockReturnValue(null),
             validateActivityClass: jest.fn().mockReturnValue({ isValid: true, issues: [] }),
             extractActivityMethods: jest.fn().mockReturnValue({ methods: new Map(), issues: [] }),
         };
@@ -1781,6 +1783,134 @@ describe('TemporalDiscoveryService', () => {
 
             // Should check typeof info and return undefined since it's not a function
             expect(activity).toBeUndefined();
+        });
+    });
+
+    describe('worker controller discovery', () => {
+        class OrdersWorker {}
+        class PaymentsWorker {}
+
+        it('should discover a worker controller and expose it by task queue', async () => {
+            const mockWrapper = {
+                instance: new OrdersWorker(),
+                metatype: OrdersWorker,
+            };
+
+            discoveryService.getProviders.mockReturnValue([mockWrapper as any]);
+            metadataAccessor.isWorkerController.mockReturnValue(true);
+            metadataAccessor.getWorkerControllerOptions.mockReturnValue({
+                taskQueue: 'orders',
+                workflowsPath: './dist/workflows/orders',
+            });
+
+            await service.onModuleInit();
+
+            const controllers = service.getDiscoveredWorkerControllers();
+            expect(controllers.size).toBe(1);
+            expect(controllers.get('orders')).toEqual({
+                taskQueue: 'orders',
+                workflowsPath: './dist/workflows/orders',
+            });
+        });
+
+        it('should return a copy, not the live map', async () => {
+            const mockWrapper = {
+                instance: new OrdersWorker(),
+                metatype: OrdersWorker,
+            };
+
+            discoveryService.getProviders.mockReturnValue([mockWrapper as any]);
+            metadataAccessor.isWorkerController.mockReturnValue(true);
+            metadataAccessor.getWorkerControllerOptions.mockReturnValue({ taskQueue: 'orders' });
+
+            await service.onModuleInit();
+
+            const controllers = service.getDiscoveredWorkerControllers();
+            controllers.delete('orders');
+
+            expect(service.getDiscoveredWorkerControllers().has('orders')).toBe(true);
+        });
+
+        it('should throw a startup error when taskQueue is missing', async () => {
+            const mockWrapper = {
+                instance: new OrdersWorker(),
+                metatype: OrdersWorker,
+            };
+
+            discoveryService.getProviders.mockReturnValue([mockWrapper as any]);
+            metadataAccessor.isWorkerController.mockReturnValue(true);
+            metadataAccessor.getWorkerControllerOptions.mockReturnValue({} as any);
+
+            await expect(service.onModuleInit()).rejects.toThrow(/missing a valid taskQueue/);
+        });
+
+        it('should throw a startup error when taskQueue is an empty string', async () => {
+            const mockWrapper = {
+                instance: new OrdersWorker(),
+                metatype: OrdersWorker,
+            };
+
+            discoveryService.getProviders.mockReturnValue([mockWrapper as any]);
+            metadataAccessor.isWorkerController.mockReturnValue(true);
+            metadataAccessor.getWorkerControllerOptions.mockReturnValue({ taskQueue: '  ' } as any);
+
+            await expect(service.onModuleInit()).rejects.toThrow(/missing a valid taskQueue/);
+        });
+
+        it('should throw a startup error when two controllers declare the same task queue', async () => {
+            const ordersWrapper = {
+                instance: new OrdersWorker(),
+                metatype: OrdersWorker,
+            };
+            const paymentsWrapper = {
+                instance: new PaymentsWorker(),
+                metatype: PaymentsWorker,
+            };
+
+            discoveryService.getProviders.mockReturnValue([
+                ordersWrapper as any,
+                paymentsWrapper as any,
+            ]);
+            metadataAccessor.isWorkerController.mockReturnValue(true);
+            metadataAccessor.getWorkerControllerOptions.mockReturnValue({ taskQueue: 'shared' });
+
+            await expect(service.onModuleInit()).rejects.toThrow(
+                /Duplicate task queue 'shared'/,
+            );
+        });
+
+        it('should not discover anything when no class is a worker controller', async () => {
+            const mockWrapper = {
+                instance: new RegularService(),
+                metatype: RegularService,
+            };
+
+            discoveryService.getProviders.mockReturnValue([mockWrapper as any]);
+            metadataAccessor.isWorkerController.mockReturnValue(false);
+
+            await service.onModuleInit();
+
+            expect(service.getDiscoveredWorkerControllers().size).toBe(0);
+        });
+
+        it('should clear discovered worker controllers on rediscover', async () => {
+            const mockWrapper = {
+                instance: new OrdersWorker(),
+                metatype: OrdersWorker,
+            };
+
+            discoveryService.getProviders.mockReturnValue([mockWrapper as any]);
+            metadataAccessor.isWorkerController.mockReturnValue(true);
+            metadataAccessor.getWorkerControllerOptions.mockReturnValue({ taskQueue: 'orders' });
+
+            await service.onModuleInit();
+            expect(service.getDiscoveredWorkerControllers().size).toBe(1);
+
+            discoveryService.getProviders.mockReturnValue([]);
+            metadataAccessor.isWorkerController.mockReturnValue(false);
+
+            await service.rediscover();
+            expect(service.getDiscoveredWorkerControllers().size).toBe(0);
         });
     });
 });
