@@ -405,6 +405,31 @@ describe('TemporalConnectionFactory', () => {
             const callArgs = (Client as jest.MockedClass<typeof Client>).mock.calls[0][0];
             expect(callArgs).not.toHaveProperty('interceptors');
         });
+
+        it('should thread a custom dataConverter into the Client constructor', async () => {
+            const dataConverter = { payloadConverterPath: './my-converter' };
+            const optionsWithDataConverter: TemporalOptions = {
+                connection: {
+                    address: 'localhost:7233',
+                    namespace: 'test-namespace',
+                    tls: false,
+                    dataConverter: dataConverter as any,
+                },
+                allowConnectionFailure: false,
+            };
+
+            const result = await factory.createClient(optionsWithDataConverter);
+            expect(result).toBe(mockClient);
+
+            expect(Client).toHaveBeenCalledWith(expect.objectContaining({ dataConverter }));
+        });
+
+        it('should not set dataConverter on the Client constructor when not provided', async () => {
+            await factory.createClient(mockTemporalOptions);
+
+            const callArgs = (Client as jest.MockedClass<typeof Client>).mock.calls[0][0];
+            expect(callArgs).not.toHaveProperty('dataConverter');
+        });
     });
 
     describe('createWorkerConnection', () => {

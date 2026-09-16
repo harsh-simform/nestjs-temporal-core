@@ -39,7 +39,7 @@ import {
     WorkflowBundleOption,
     GrpcCompressionConfig,
 } from '@temporalio/worker';
-import { Duration, RetryPolicy, TypedSearchAttributes } from '@temporalio/common';
+import { DataConverter, Duration, RetryPolicy, TypedSearchAttributes } from '@temporalio/common';
 import { TLSConfig } from '@temporalio/common/lib/internal-non-workflow';
 import type { Workflow } from '@temporalio/workflow';
 
@@ -93,6 +93,13 @@ export interface ClientConnectionOptions {
      * which does not compress by default.
      */
     grpcCompression?: GrpcCompressionConfig;
+    /**
+     * Custom client-side `DataConverter`. Threaded into `new Client({ dataConverter })`.
+     * Required alongside the worker's own `workerOptions.dataConverter` for Temporal's
+     * codec server payload encryption pattern — the two are independent SDK options and
+     * both must be set for encrypted payloads to round-trip correctly.
+     */
+    dataConverter?: DataConverter;
 }
 
 /**

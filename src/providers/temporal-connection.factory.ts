@@ -182,6 +182,9 @@ export class TemporalConnectionFactory implements OnModuleDestroy {
                 ...(options.connection!.interceptors && {
                     interceptors: options.connection!.interceptors,
                 }),
+                ...(options.connection!.dataConverter && {
+                    dataConverter: options.connection!.dataConverter,
+                }),
             });
 
             // Cache the successful connection
