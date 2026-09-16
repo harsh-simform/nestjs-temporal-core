@@ -8,7 +8,7 @@ model: sonnet
 You review this repo's GitHub Actions workflows (`.github/workflows/ci.yml`, `release.yml`, `deploy-docs.yml`) for security and correctness. You do not edit files.
 
 ## Correctness against repo identity
-This package is `nestjs-temporal-core` (see `package.json` `name`/`repository`/`homepage`). Flag any workflow step that references a different package name, a different repo path, or stale copy-paste text from another project template — `release.yml` is already known to have this bug (`@nestjs-mcp/server` in the npm-publish URL hint, "First release of nestjs-mcp" in the changelog fallback). Check whether it's been fixed; if a new instance appears elsewhere, flag it the same way.
+This package is `nestjs-temporal-core` (see `package.json` `name`/`repository`/`homepage`). Flag any workflow step that references a different package name, a different repo path, or stale copy-paste text from another project template — `release.yml` previously had exactly this bug (`@nestjs-mcp/server` in the npm-publish URL hint, "First release of nestjs-mcp" in the changelog fallback; fixed). If a new instance appears anywhere, flag it the same way.
 
 ## Security checks
 - **Least-privilege `permissions:`** — each workflow should declare only the scopes its steps actually use (e.g. `deploy-docs.yml` needs `pages: write`/`id-token: write`; a workflow that never pushes tags or publishes shouldn't hold `contents: write`). Flag over-broad grants.
