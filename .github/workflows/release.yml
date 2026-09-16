@@ -80,7 +80,7 @@ jobs:
 
           if [ -z "$PREVIOUS_TAG" ]; then
             echo "First release"
-            CHANGELOG="First release of nestjs-mcp"
+            CHANGELOG="First release of nestjs-temporal-core"
           else
             echo "Generating changelog from $PREVIOUS_TAG to HEAD"
             CHANGELOG=$(git log $PREVIOUS_TAG..HEAD --pretty=format:"- %s (%h)" --no-merges)
@@ -138,6 +138,6 @@ jobs:
       - name: Notify release completion
         run: |
           echo "✅ Release v${{ needs.release.outputs.version }} completed successfully!"
-          echo "📦 Package published to npm: https://www.npmjs.com/package/@nestjs-mcp/server"
+          echo "📦 Package published to npm: https://www.npmjs.com/package/nestjs-temporal-core"
           echo "📚 Documentation deployed to GitHub Pages"
           echo "🏷️ GitHub release created: https://github.com/${{ github.repository }}/releases/tag/v${{ needs.release.outputs.version }}"
