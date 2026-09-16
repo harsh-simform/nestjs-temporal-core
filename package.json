@@ -6,12 +6,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/harsh-simform/nestjs-temporal-core.git"
+    "url": "git+https://github.com/hmake98/nestjs-temporal-core.git"
   },
   "bugs": {
-    "url": "https://github.com/harsh-simform/nestjs-temporal-core/issues"
+    "url": "https://github.com/hmake98/nestjs-temporal-core/issues"
   },
-  "homepage": "https://github.com/harsh-simform/nestjs-temporal-core#readme",
+  "homepage": "https://github.com/hmake98/nestjs-temporal-core#readme",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {

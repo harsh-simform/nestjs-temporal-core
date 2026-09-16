@@ -8,9 +8,9 @@ Enterprise-ready [Temporal.io](https://temporal.io/) workflow orchestration for 
 ![Branches](https://img.shields.io/badge/branches-93.45%25-brightgreen.svg?style=flat)
 ![Functions](https://img.shields.io/badge/functions-97.91%25-brightgreen.svg?style=flat)
 ![Lines](https://img.shields.io/badge/lines-99.68%25-brightgreen.svg?style=flat)
-[![codecov](https://codecov.io/gh/harsh-simform/nestjs-temporal-core/branch/main/graph/badge.svg?token=BYSE45L6DI)](https://codecov.io/gh/harsh-simform/nestjs-temporal-core)
+[![codecov](https://codecov.io/gh/hmake98/nestjs-temporal-core/branch/main/graph/badge.svg?token=BYSE45L6DI)](https://codecov.io/gh/hmake98/nestjs-temporal-core)
 
-[**📖 Full Documentation**](https://harsh-simform.github.io/nestjs-temporal-core/) • [NPM](https://www.npmjs.com/package/nestjs-temporal-core) • [GitHub](https://github.com/harsh-simform/nestjs-temporal-core) • [Example Project](https://github.com/harsh-simform/nestjs-temporal-core-example)
+[**📖 Full Documentation**](https://hmake98.github.io/nestjs-temporal-core/) • [NPM](https://www.npmjs.com/package/nestjs-temporal-core) • [GitHub](https://github.com/hmake98/nestjs-temporal-core) • [Example Project](https://github.com/hmake98/nestjs-temporal-core-example)
 
 </div>
 
@@ -62,25 +62,25 @@ export class AppModule {}
 
 Inject `TemporalService` anywhere to start/signal/query workflows. Don't forget `app.enableShutdownHooks()` in `main.ts` for graceful cleanup.
 
-👉 Activities, workflows, and full service examples: [Getting Started guide](https://harsh-simform.github.io/nestjs-temporal-core/docs/getting-started).
+👉 Activities, workflows, and full service examples: [Getting Started guide](https://hmake98.github.io/nestjs-temporal-core/docs/getting-started).
 
 ## Documentation
 
-This README covers only the basics. The [**documentation site**](https://harsh-simform.github.io/nestjs-temporal-core/) has everything else — a landing page, guides, config reference, and a generated API reference (source in [`website/docs`](website/docs)):
+This README covers only the basics. The [**documentation site**](https://hmake98.github.io/nestjs-temporal-core/) has everything else — a landing page, guides, config reference, and a generated API reference (source in [`website/docs`](website/docs)):
 
 | Guide | Covers |
 |---|---|
-| [Getting Started](https://harsh-simform.github.io/nestjs-temporal-core/docs/getting-started) | Installation, quick start, module variants |
-| [Configuration](https://harsh-simform.github.io/nestjs-temporal-core/docs/configuration) | Basic/multi-worker/async/TLS setup, full options reference |
-| [Core Concepts](https://harsh-simform.github.io/nestjs-temporal-core/docs/core-concepts) | Activities, workflows, signals/queries, updates, typed workflow proxy |
-| [Advanced Configuration](https://harsh-simform.github.io/nestjs-temporal-core/docs/advanced-configuration) | Interceptors, gRPC compression, worker versioning, standalone activities, schedule lifecycle |
-| [Advanced Usage](https://harsh-simform.github.io/nestjs-temporal-core/docs/advanced-usage) | Activity retry policies, workflow testing |
-| [Best Practices](https://harsh-simform.github.io/nestjs-temporal-core/docs/best-practices) | Do's and don'ts for workflows, activities, config, error handling, testing |
-| [Health Monitoring](https://harsh-simform.github.io/nestjs-temporal-core/docs/health-monitoring) | Built-in health module, custom health checks |
-| [MCP Server](https://harsh-simform.github.io/nestjs-temporal-core/docs/mcp-server) | Expose Temporal operations to MCP-aware clients, embedded or standalone CLI |
-| [Troubleshooting](https://harsh-simform.github.io/nestjs-temporal-core/docs/troubleshooting) | Common issues, debug mode, getting help |
-| [Migration Guide](https://harsh-simform.github.io/nestjs-temporal-core/docs/migration-guide) | Upgrading across versions and SDK bumps |
-| [API Reference](https://harsh-simform.github.io/nestjs-temporal-core/docs/api) | Generated from source (TSDoc) |
+| [Getting Started](https://hmake98.github.io/nestjs-temporal-core/docs/getting-started) | Installation, quick start, module variants |
+| [Configuration](https://hmake98.github.io/nestjs-temporal-core/docs/configuration) | Basic/multi-worker/async/TLS setup, full options reference |
+| [Core Concepts](https://hmake98.github.io/nestjs-temporal-core/docs/core-concepts) | Activities, workflows, signals/queries, updates, typed workflow proxy |
+| [Advanced Configuration](https://hmake98.github.io/nestjs-temporal-core/docs/advanced-configuration) | Interceptors, gRPC compression, worker versioning, standalone activities, schedule lifecycle |
+| [Advanced Usage](https://hmake98.github.io/nestjs-temporal-core/docs/advanced-usage) | Activity retry policies, workflow testing |
+| [Best Practices](https://hmake98.github.io/nestjs-temporal-core/docs/best-practices) | Do's and don'ts for workflows, activities, config, error handling, testing |
+| [Health Monitoring](https://hmake98.github.io/nestjs-temporal-core/docs/health-monitoring) | Built-in health module, custom health checks |
+| [MCP Server](https://hmake98.github.io/nestjs-temporal-core/docs/mcp-server) | Expose Temporal operations to MCP-aware clients, embedded or standalone CLI |
+| [Troubleshooting](https://hmake98.github.io/nestjs-temporal-core/docs/troubleshooting) | Common issues, debug mode, getting help |
+| [Migration Guide](https://hmake98.github.io/nestjs-temporal-core/docs/migration-guide) | Upgrading across versions and SDK bumps |
+| [API Reference](https://hmake98.github.io/nestjs-temporal-core/docs/api) | Generated from source (TSDoc) |
 
 ## Requirements
 
@@ -89,7 +89,7 @@ Node.js >= 20.3.0 • NestJS >= 9.0.0 • Temporal Server >= 1.20.0
 
 ## Contributing & Support
 
-Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). Questions or bugs: [GitHub Issues](https://github.com/harsh-simform/nestjs-temporal-core/issues) • [Discussions](https://github.com/harsh-simform/nestjs-temporal-core/discussions) • [Changelog](https://github.com/harsh-simform/nestjs-temporal-core/releases).
+Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). Questions or bugs: [GitHub Issues](https://github.com/hmake98/nestjs-temporal-core/issues) • [Discussions](https://github.com/hmake98/nestjs-temporal-core/discussions) • [Changelog](https://github.com/hmake98/nestjs-temporal-core/releases).
 
 MIT © — see [LICENSE](LICENSE).
 
@@ -97,6 +97,6 @@ MIT © — see [LICENSE](LICENSE).
 
 <div align="center">
 
-**[⭐ Star us on GitHub](https://github.com/harsh-simform/nestjs-temporal-core)** if you find this project helpful!
+**[⭐ Star us on GitHub](https://github.com/hmake98/nestjs-temporal-core)** if you find this project helpful!
 
 </div>

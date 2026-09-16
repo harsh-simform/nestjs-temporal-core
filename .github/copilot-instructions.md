@@ -298,4 +298,4 @@ npm run docs:serve        # Serve the built site locally
 
 *Last Updated: September 24, 2025*
 *Current Branch: feat/improvements*
-*Project: nestjs-temporal-core by harsh-simform*
+*Project: nestjs-temporal-core by hmake98*
